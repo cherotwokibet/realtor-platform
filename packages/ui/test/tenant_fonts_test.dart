@@ -29,7 +29,7 @@ void main() {
         {'family': family, 'weight': w, 'asset': 'assets/tenant/fonts/$family-$name.ttf'},
     ];
     final bundle = _MapBundle({
-      tenantFontsManifestPath: utf8.encode(jsonEncode(manifest)),
+      'assets/tenant/fonts.json': utf8.encode(jsonEncode(manifest)),
       for (final (family, _, name) in files)
         'assets/tenant/fonts/$family-$name.ttf': File('../../fonts/$family/$family-$name.ttf').readAsBytesSync(),
     });
@@ -39,5 +39,12 @@ void main() {
   test('no manifest means platform fonts, not a crash', () async {
     expect(await readTenantFonts(_MapBundle({})), isEmpty);
     expect(await loadTenantFonts(_MapBundle({})), isEmpty);
+  });
+
+  test('a flavor build reads its own folder', () async {
+    expect(tenantAssetDir(null), 'assets/tenant');
+    expect(tenantAssetDir('demoHomes'), 'assets/flavors/demoHomes');
+    final bundle = _MapBundle({'assets/flavors/demoHomes/fonts.json': utf8.encode('[]')});
+    expect(await readTenantFonts(bundle, tenantAssetDir('demoHomes')), isEmpty);
   });
 }
