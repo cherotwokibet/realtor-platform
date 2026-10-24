@@ -148,6 +148,9 @@ class Brand {
   }
 }
 
+/// One switch in the tenant file's `features` block. Names match the JSON keys.
+enum Feature { sale, rent, shortStay, offPlan, mpesa, ads, aiSearch, chat }
+
 /// Feature switches. A realtor is upgraded by flipping one and redeploying.
 class Features {
   const Features({
@@ -161,6 +164,32 @@ class Features {
     required this.chat,
   });
   final bool sale, rent, shortStay, offPlan, mpesa, ads, aiSearch, chat;
+
+  bool isOn(Feature f) => switch (f) {
+        Feature.sale => sale,
+        Feature.rent => rent,
+        Feature.shortStay => shortStay,
+        Feature.offPlan => offPlan,
+        Feature.mpesa => mpesa,
+        Feature.ads => ads,
+        Feature.aiSearch => aiSearch,
+        Feature.chat => chat,
+      };
+
+  /// A copy with some switches changed (tests, admin previews).
+  Features copyWith(Map<Feature, bool> changes) {
+    bool v(Feature f) => changes[f] ?? isOn(f);
+    return Features(
+      sale: v(Feature.sale),
+      rent: v(Feature.rent),
+      shortStay: v(Feature.shortStay),
+      offPlan: v(Feature.offPlan),
+      mpesa: v(Feature.mpesa),
+      ads: v(Feature.ads),
+      aiSearch: v(Feature.aiSearch),
+      chat: v(Feature.chat),
+    );
+  }
 
   factory Features.fromJson(Json j) {
     bool b(String k) => _req<bool>(j, k, 'features');
@@ -218,6 +247,29 @@ class TenantConfig {
   final Features features;
 
   bool get hasContactNumbers => phone != 'TBC' && whatsapp != 'TBC';
+
+  /// The same tenant with other feature switches.
+  TenantConfig withFeatures(Features f) => TenantConfig(
+        id: id,
+        name: name,
+        tagline: tagline,
+        earbNo: earbNo,
+        brand: brand,
+        shareDomain: shareDomain,
+        appDomain: appDomain,
+        adminDomain: adminDomain,
+        androidId: androidId,
+        iosId: iosId,
+        firebaseProjects: firebaseProjects,
+        firebaseRegion: firebaseRegion,
+        phone: phone,
+        whatsapp: whatsapp,
+        email: email,
+        defaultLocale: defaultLocale,
+        extraLocales: extraLocales,
+        currency: currency,
+        features: f,
+      );
 
   /// WhatsApp deep link with a prefilled message, or null until a number exists.
   Uri? whatsappLink(String message) => whatsapp == 'TBC'
