@@ -60,7 +60,13 @@ export const listing = z
     verifiedAt: timestamp.nullable(),
     expiresAt: timestamp.nullable(),
     featuredUntil: timestamp.nullable(),
-    stats: z.object({ views: z.number().int().min(0), leads: z.number().int().min(0) }),
+    stats: z.object({
+      views: z.number().int().min(0),
+      leads: z.number().int().min(0),
+      /** Call and WhatsApp taps (D13): counted, no personal data. */
+      calls: z.number().int().min(0).optional(),
+      whatsapps: z.number().int().min(0).optional(),
+    }),
     createdAt: timestamp,
     updatedAt: timestamp,
   })

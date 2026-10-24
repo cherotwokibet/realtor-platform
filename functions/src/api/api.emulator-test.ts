@@ -8,7 +8,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
-import { createLead, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
+import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
 import { moderateListing, submitListing } from './listings';
 
 let db: Firestore;
@@ -51,6 +51,24 @@ const newListing = {
   lng: 36.786,
   area: 'kilimani',
 };
+
+describe('logContactTap', () => {
+  test('counts call and WhatsApp taps on the listing and stores no lead', async () => {
+    const leadsBefore = (await db.collection('leads').count().get()).data().count;
+    await logContactTap(db, { listingId: 'listing-001', channel: 'whatsapp' });
+    await logContactTap(db, { listingId: 'listing-001', channel: 'whatsapp' });
+    await logContactTap(db, { listingId: 'listing-001', channel: 'call' });
+    const stats = (await db.collection('listings').doc('listing-001').get()).get('stats');
+    assert.equal(stats.whatsapps, 2);
+    assert.equal(stats.calls, 1);
+    assert.equal((await db.collection('leads').count().get()).data().count, leadsBefore);
+  });
+
+  test('refuses unknown listings and channels', async () => {
+    await rejectsWith(logContactTap(db, { listingId: 'no-such-listing', channel: 'call' }), 'not-found');
+    await rejectsWith(logContactTap(db, { listingId: 'listing-001', channel: 'sms' }), 'invalid-argument');
+  });
+});
 
 describe('createLead', () => {
   test('stores consent, retention and the listing agent; counts the lead', async () => {

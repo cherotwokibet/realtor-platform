@@ -14,6 +14,12 @@ Live now:
 - `/area/<slug>`: the area guide, typical rent, live homes (newest first, linking to their pages) and a button into the app search (`/rent/<area>`); JSON-LD `Place` with an `ItemList` of the listings
 - `/agent/<id>`: an active agent's name, photo, EARB number, languages, typical reply time, **Chat on WhatsApp** and **Call** buttons, and their live homes; JSON-LD `RealEstateAgent` under the realtor. Inactive or unknown agents are 404s. Listing pages say "Listed by <agent>" with a link.
 - `/`: the realtor's 12 newest live homes and every area, with **Search homes** into the app and the realtor's WhatsApp
+- **Lead capture (P3-s06):**
+  - Listing pages carry an **Ask about this home** form: phone (any Kenyan mobile format, normalised to +254), optional name and message, a consent tick quoting the 24-month retention (D12), and a hidden honeypot field.
+  - The form posts to `/listing/<slug>/enquire`, which checks it, calls the `createLead` Function and redirects back with a thank-you (`?sent=1`). Errors re-show the form with what was typed.
+  - Pages showing a visitor's own input are `private, no-store`, so the CDN never keeps them.
+  - **Ask on WhatsApp** goes through `/go/whatsapp/<slug>`, which calls `logContactTap` (a counter, no personal data, D13) and redirects to `wa.me`. A failed count never blocks WhatsApp. `/go/` is disallowed in robots.txt.
+  - The server never writes Firestore and never logs form contents; Functions do the storing (D7). `FUNCTIONS_BASE` overrides the default `https://europe-west1-<project>.cloudfunctions.net`.
 - `/sitemap.xml` (home, every area, every active agent, every live listing with `lastmod`) and `/robots.txt` pointing at it
 
 Listing text is HTML-escaped by Jaspr. Inside the JSON-LD script, every `<` is written as `\u003c`, so a title can't close the script. A test covers this.

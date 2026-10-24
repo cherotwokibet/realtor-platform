@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { seedDocs } from '../seed/data';
 import { collectionName, listingsSchema, toSearchDoc, toSearchParams } from './schema';
+import { searchRelevantChange } from './sync';
 
 const now = new Date('2026-10-24T09:00:00Z');
 const seedListing = (id: string) => seedDocs(now).find((d) => d.id === id)!.data as Record<string, any>;
@@ -46,4 +47,14 @@ test('geo radius, sorting by distance and safe paging', () => {
 test('backticks in user input cannot break out of a filter value', () => {
   const p = toSearchParams({ purpose: 'rent', areas: ['kilimani` || purpose:=`sale'] });
   assert.equal(p.filter_by, 'purpose:=[`rent`] && area:=[`kilimani || purpose:=sale`]');
+});
+
+test('counter-only writes (views, leads, taps) do not re-sync search', () => {
+  const l = seedListing('listing-001');
+  assert.equal(searchRelevantChange(l, { ...l, stats: { ...l.stats, whatsapps: 3 } }), false);
+  assert.equal(searchRelevantChange(l, { ...l, priceKES: 70000 }), true);
+  assert.equal(searchRelevantChange(l, { ...l, geo: { ...l.geo, lat: -1.3 } }), true);
+  assert.equal(searchRelevantChange(l, Object.fromEntries(Object.entries(l).reverse())), false, 'key order');
+  assert.equal(searchRelevantChange(undefined, l), true, 'created');
+  assert.equal(searchRelevantChange(l, undefined), true, 'deleted');
 });
