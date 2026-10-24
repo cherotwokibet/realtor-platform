@@ -4,6 +4,9 @@ A small Dart server that renders plain HTML for Google and WhatsApp, built with 
 
 Live now:
 
+- `/area/<slug>`: the area guide, typical rent, live homes (newest first, linking to their pages) and a button into the app search (`/rent/<area>`); JSON-LD `Place` with an `ItemList` of the listings
+- `/sitemap.xml` (home, every area, every live listing with `lastmod`) and `/robots.txt` pointing at it
+
 - `/listing/<slug>`: title, price with its period, facts, up to 6 lazy photos (media-pipeline `card` variants) and amenities
 - **Open in app** and **Ask on WhatsApp** buttons (the WhatsApp button appears only when the tenant has a number)
 - `<link rel="canonical">`, Open Graph and Twitter tags (`og:image` is the first `full` photo, else `https://app.<domain>/og.png`)
@@ -26,4 +29,4 @@ mkdir -p build && dart compile exe bin/server.dart -o build/server
 TENANT_FILE=../../tenants/demo-homes.json PORT=8080 ./build/server
 ```
 
-Next: area, agent and home pages, sitemaps, and the Cloud Run deploy.
+Next: agent and home pages, and the Cloud Run deploy.

@@ -5,12 +5,14 @@ import 'package:realtor_core/realtor_core.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
+import 'area_page.dart';
 import 'listing.dart';
 import 'listing_page.dart';
 
 final _slug = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
 
-/// Routes: `/listing/<slug>` (P3-s03 slice 1). Area, agent and home pages follow.
+/// Routes: `/listing/<slug>`, `/area/<slug>`, `/sitemap.xml`, `/robots.txt`.
+/// Agent and home pages follow.
 shelf.Handler shareHandler(TenantConfig tenant, ListingSource source) {
   final router = Router()
     ..get('/healthz', (shelf.Request _) => shelf.Response.ok('ok'))
@@ -18,15 +20,46 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source) {
       if (!_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);
       final listing = await source.bySlug(slug);
       if (listing == null) return _notFound(tenant);
-      final r = await renderComponent(ListingPage(tenant: tenant, listing: listing), request: req);
-      return shelf.Response(r.statusCode, body: r.body, headers: {
-        ...r.headers,
-        'content-type': 'text/html; charset=utf-8',
-        // Hosting CDN keeps it for 10 min; browsers re-check after 5.
-        'cache-control': 'public, max-age=300, s-maxage=600',
+      return _html(await renderComponent(ListingPage(tenant: tenant, listing: listing), request: req));
+    })
+    ..get('/area/<slug>', (shelf.Request req, String slug) async {
+      if (!_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);
+      final (area, listings) = await (source.area(slug), source.liveInArea(slug)).wait;
+      if (area == null) return _notFound(tenant);
+      return _html(await renderComponent(AreaPage(tenant: tenant, area: area, listings: listings), request: req));
+    })
+    ..get('/sitemap.xml', (shelf.Request _) async {
+      final entries = await source.sitemapEntries();
+      return shelf.Response.ok(sitemapXml(tenant, entries), headers: {
+        'content-type': 'application/xml; charset=utf-8',
+        'cache-control': 'public, max-age=3600',
       });
-    });
+    })
+    ..get('/robots.txt', (shelf.Request _) => shelf.Response.ok(
+          'User-agent: *\nAllow: /\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n',
+          headers: {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400'},
+        ));
   return router.call;
+}
+
+shelf.Response _html(ResponseLike r) => shelf.Response(r.statusCode, body: r.body, headers: {
+      ...r.headers,
+      'content-type': 'text/html; charset=utf-8',
+      // Hosting CDN keeps it for 10 min; browsers re-check after 5.
+      'cache-control': 'public, max-age=300, s-maxage=600',
+    });
+
+/// sitemaps.org XML for the home page, every area and every live listing.
+String sitemapXml(TenantConfig tenant, List<SitemapEntry> entries) {
+  final esc = const HtmlEscape(HtmlEscapeMode.attribute);
+  final base = 'https://${tenant.shareDomain}';
+  final urls = [
+    '  <url><loc>$base/</loc></url>',
+    for (final e in entries)
+      '  <url><loc>${esc.convert('$base${e.path}')}</loc>'
+          '${e.lastModified == null ? '' : '<lastmod>${e.lastModified!.toUtc().toIso8601String().split('.').first}Z</lastmod>'}</url>',
+  ];
+  return '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n';
 }
 
 shelf.Response _notFound(TenantConfig tenant) => shelf.Response.notFound(

@@ -25,36 +25,75 @@ class FirestoreListingSource implements ListingSource {
       ? Uri.parse('http://$_emulatorHost/v1/projects/$projectId/databases/(default)/documents')
       : Uri.parse('https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents');
 
-  @override
-  Future<ShareListing?> bySlug(String slug) async {
-    final body = jsonEncode({
-      'structuredQuery': {
-        'from': [
-          {'collectionId': 'listings'}
-        ],
-        'where': {
-          'compositeFilter': {
-            'op': 'AND',
-            'filters': [
-              {'fieldFilter': {'field': {'fieldPath': 'slug'}, 'op': 'EQUAL', 'value': {'stringValue': slug}}},
-              {'fieldFilter': {'field': {'fieldPath': 'status'}, 'op': 'EQUAL', 'value': {'stringValue': 'live'}}},
-            ],
-          },
-        },
-        'limit': 1,
-      },
-    });
+  static Map<String, Object?> _eq(String field, String value) =>
+      {'fieldFilter': {'field': {'fieldPath': field}, 'op': 'EQUAL', 'value': {'stringValue': value}}};
+
+  Future<List<Map<String, Object?>>> _query(Map<String, Object?> structuredQuery) async {
     final res = await _client.post(
       Uri.parse('$_base:runQuery'),
       headers: {'content-type': 'application/json', 'authorization': 'Bearer ${await _accessToken()}'},
-      body: body,
+      body: jsonEncode({'structuredQuery': structuredQuery}),
     );
     if (res.statusCode != 200) throw StateError('Firestore query failed: ${res.statusCode} ${res.body}');
-    for (final row in jsonDecode(res.body) as List<Object?>) {
-      final doc = (row! as Map<String, Object?>)['document'] as Map<String, Object?>?;
-      if (doc != null) return listingFromDocument(doc, _now());
-    }
-    return null;
+    return [
+      for (final row in jsonDecode(res.body) as List<Object?>)
+        if (_map(row)['document'] != null) _map(_map(row)['document']),
+    ];
+  }
+
+  Map<String, Object?> _liveWhere(List<Map<String, Object?>> more) => {
+        'compositeFilter': {'op': 'AND', 'filters': [_eq('status', 'live'), ...more]},
+      };
+
+  @override
+  Future<ShareListing?> bySlug(String slug) async {
+    final docs = await _query({
+      'from': [{'collectionId': 'listings'}],
+      'where': _liveWhere([_eq('slug', slug)]),
+      'limit': 1,
+    });
+    return docs.isEmpty ? null : listingFromDocument(docs.single, _now());
+  }
+
+  @override
+  Future<List<ShareListing>> liveInArea(String slug, {int limit = 24}) async {
+    // Equality filters only (no index needed); newest first is done here.
+    final docs = await _query({
+      'from': [{'collectionId': 'listings'}],
+      'where': _liveWhere([_eq('area', slug)]),
+      'limit': 200,
+    });
+    final listings = [for (final d in docs) listingFromDocument(d, _now())]
+      ..sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
+    return listings.take(limit).toList();
+  }
+
+  @override
+  Future<ShareArea?> area(String slug) async {
+    final res = await _client.get(Uri.parse('$_base/areas/$slug'), headers: {'authorization': 'Bearer ${await _accessToken()}'});
+    if (res.statusCode == 404) return null;
+    if (res.statusCode != 200) throw StateError('Firestore get failed: ${res.statusCode}');
+    return areaFromDocument(_map(jsonDecode(res.body)));
+  }
+
+  @override
+  Future<List<SitemapEntry>> sitemapEntries() async {
+    final listings = await _query({
+      'select': {'fields': [{'fieldPath': 'slug'}, {'fieldPath': 'updatedAt'}]},
+      'from': [{'collectionId': 'listings'}],
+      'where': _liveWhere([]),
+      'limit': 10000,
+    });
+    final areas = await _query({
+      'select': {'fields': [{'fieldPath': '__name__'}]},
+      'from': [{'collectionId': 'areas'}],
+      'limit': 1000,
+    });
+    return [
+      for (final a in areas) (path: '/area/${(a['name']! as String).split('/').last}', lastModified: null),
+      for (final l in listings)
+        (path: '/listing/${_decodeFields(_map(l['fields']))['slug']}', lastModified: _decodeFields(_map(l['fields']))['updatedAt'] as DateTime?),
+    ];
   }
 
   Future<String> _accessToken() async {
@@ -70,6 +109,22 @@ class FirestoreListingSource implements ListingSource {
     _tokenExpires = _now().add(Duration(seconds: (t['expires_in']! as num).toInt() - 60));
     return _token!;
   }
+}
+
+/// Firestore REST document (areas/{slug}) -> ShareArea.
+ShareArea areaFromDocument(Map<String, Object?> doc) {
+  final f = _decodeFields(_map(doc['fields']));
+  final centre = _map(f['centre']);
+  final stats = f['stats'] == null ? const <String, Object?>{} : _map(f['stats']);
+  return ShareArea(
+    slug: (doc['name']! as String).split('/').last,
+    name: f['name']! as String,
+    county: f['county']! as String,
+    guide: (f['guide'] as String?) ?? '',
+    lat: (centre['lat']! as num).toDouble(),
+    lng: (centre['lng']! as num).toDouble(),
+    medianRentKES: stats['medianRentKES'] as int?,
+  );
 }
 
 /// Firestore REST document -> ShareListing. Pure, so it is unit-tested.

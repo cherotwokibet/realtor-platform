@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:realtor_core/realtor_core.dart';
 
 import 'listing.dart';
@@ -62,10 +60,6 @@ class ListingSeo {
         },
       };
 
-  /// JSON-LD safe to embed in a `<script>` tag: every `<` is written as the
-  /// JSON escape `\u003c`, so listing text can never close the script.
-  String get jsonLdScript =>
-      '<script type="application/ld+json">${jsonEncode(jsonLd).replaceAll('<', '\\u003c')}</script>';
 
   static String _type(String t) => '${t[0].toUpperCase()}${t.substring(1).replaceAll('-', ' ')}';
   /// "south-b" -> "South B".
