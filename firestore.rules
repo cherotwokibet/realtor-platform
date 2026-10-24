@@ -1,9 +1,75 @@
 rules_version = '2';
-// Deny-all baseline. Every collection is opened deliberately, with tests,
-// in Phase 2. Writes to status, verification, payments and commissions stay
-// Functions-only (Admin SDK bypasses these rules).
+// Data model v2 (docs/data-model.md). Clients read public data; staff read
+// what their role allows. The only client writes are a signed-in user's own
+// saved searches. Everything else (listing status, verification, leads,
+// viewings, payments, commissions) is written by Cloud Functions with the
+// Admin SDK, which bypasses these rules (D7). Tests: functions/src/rules/.
+//
+// Staff roles are custom claims set by a Function:
+//   role: 'owner' | 'manager' | 'agent', and agentId for agents.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function role() { return signedIn() ? request.auth.token.get('role', '') : ''; }
+    function isManager() { return role() in ['owner', 'manager']; }
+    function isStaff() { return isManager() || role() == 'agent'; }
+    function isOwnAgent(agentId) {
+      return role() == 'agent' && request.auth.token.get('agentId', '') == agentId;
+    }
+
+    match /listings/{id} {
+      allow read: if resource.data.status == 'live' || isManager() || isOwnAgent(resource.data.agentId);
+      allow write: if false;
+    }
+
+    match /agents/{id} {
+      allow read: if resource.data.active == true || isStaff();
+      allow write: if false;
+    }
+
+    match /areas/{slug} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /config/tenant {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Personal data (Data Protection Act 2019): staff only, agents their own.
+    match /leads/{id} {
+      allow read: if isManager() || isOwnAgent(resource.data.agentId);
+      allow write: if false;
+    }
+
+    match /viewings/{id} {
+      allow read: if isManager() || isOwnAgent(resource.data.agentId);
+      allow write: if false;
+    }
+
+    match /payments/{id} {
+      allow read: if isManager();
+      allow write: if false;
+    }
+
+    match /savedSearches/{id} {
+      function valid(d) {
+        return d.keys().hasOnly(['userId', 'filters', 'channels', 'lastNotifiedAt', 'createdAt'])
+          && d.userId == request.auth.uid
+          && d.filters is map
+          && d.channels is list && d.channels.size() > 0 && d.channels.size() <= 3;
+      }
+      allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && valid(request.resource.data)
+        && request.resource.data.lastNotifiedAt == null
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn() && resource.data.userId == request.auth.uid
+        && valid(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['filters', 'channels']);
+    }
+
+    // Anything not listed above stays closed.
     match /{document=**} {
       allow read, write: if false;
     }
