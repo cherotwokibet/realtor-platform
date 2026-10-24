@@ -188,7 +188,7 @@ jobs:
         working-directory: infra/terraform/tenant
 
   emulator:
-    name: Firestore emulator (seed, rules, callable API)
+    name: Emulators (seed, rules, callable API, media)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -206,6 +206,6 @@ jobs:
       - name: Seed the emulator and read it back
         run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed"
       - name: Security rules tests
-        run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run test:rules"
-      - name: Callable API tests
-        run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run test:emulator"
+        run: npx --yes firebase-tools@15 emulators:exec --only firestore,storage --project demo-realtor "npm --prefix functions run test:rules"
+      - name: Callable API + media pipeline tests
+        run: npx --yes firebase-tools@15 emulators:exec --only firestore,storage --project demo-realtor "npm --prefix functions run test:emulator"
