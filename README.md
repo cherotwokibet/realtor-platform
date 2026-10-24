@@ -23,6 +23,7 @@ packages/ui          Flutter theme + shared widgets
 functions/           Cloud Functions, TypeScript, 2nd gen
 tenants/             one JSON per realtor + JSON Schema
 brand/               logos and icons per realtor
+fonts/               bundled font families (OFL), copied per tenant by prepare
 tools/tenant-cli     validate / css / prepare (create, deploy, build later)
 infra/terraform      per-tenant Firebase projects: module + root config (never applied by CI)
 ```
