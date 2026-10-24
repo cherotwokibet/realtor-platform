@@ -6,9 +6,11 @@ import { tenantCss } from './css.ts';
 import { generateIcons } from './icons.ts';
 import { flutterConfigs } from './flutter-config.ts';
 import { createTenant } from './create.ts';
+import { patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
 import { tenantFontFiles } from './fonts.ts';
 import {
   flavorName,
+  appName,
   flavorAssetDir,
   pubspecWithFlavors,
   androidFlavorsGradle,
@@ -28,6 +30,8 @@ function usage(): never {
   flavors [id...]    One Android flavor per tenant (default: all): assets/flavors/<flavor>/, flavor-only
                      pubspec assets, per-flavor icon + splash configs, productFlavors in android/app
 
+  web <id>           Rewrite apps/realtor_app/web/index.html and manifest.json for the tenant
+                     (title, description, theme colour, Open Graph); run after flutter create
   create <id> <name>  Scaffold tenants/<id>.json and placeholder brand/<id>/ art for a new realtor
                      (provisioning: infra/terraform/README.md)
 
@@ -113,6 +117,23 @@ next:
   1. replace TBC / example.com values, colours, fonts and the SVGs in brand/${id}/
   2. node tools/tenant-cli/src/cli.ts validate ${id}
   3. provision (Boniface, with billing): see infra/terraform/README.md`);
+    break;
+  }
+  case 'web': {
+    const id = args[0];
+    if (!id) usage();
+    const t = loadValid(id);
+    const root = repoRoot();
+    const web = join(root, 'apps', 'realtor_app', 'web');
+    if (!existsSync(join(web, 'index.html'))) {
+      console.error('✗ no apps/realtor_app/web: run `flutter create . --platforms=web` first');
+      process.exit(1);
+    }
+    writeFileSync(join(web, 'index.html'), patchIndexHtml(readFileSync(join(web, 'index.html'), 'utf8'), t));
+    writeFileSync(join(web, 'manifest.json'), patchWebManifest(readFileSync(join(web, 'manifest.json'), 'utf8'), t, appName(t)));
+    const og = join(root, 'brand', id, 'generated', 'og-default-1200x630.png');
+    if (existsSync(og)) copyFileSync(og, join(web, 'og.png'));
+    console.log(`web shell → ${t.name}`);
     break;
   }
   case 'icons': {
