@@ -5,6 +5,7 @@ import { validateTenants, repoRoot } from './validate.ts';
 import { tenantCss } from './css.ts';
 import { generateIcons } from './icons.ts';
 import { flutterConfigs } from './flutter-config.ts';
+import { tenantFontFiles } from './fonts.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -14,7 +15,7 @@ function usage(): never {
   validate [id...]   Check tenant files against the schema, assets and colour contrast
   css <id>           Write build/tokens/<id>.css for the share pages
   icons <id>         Generate app icons, splash, favicons, PWA and share images into brand/<id>/generated
-  prepare <id>       Generate icons, then copy the tenant file and logos into apps/realtor_app/assets/tenant
+  prepare <id>       Generate icons, then copy the tenant file, logos and fonts into apps/realtor_app/assets/tenant
 
 Coming later: create <id>, deploy <id> <env>, build <id> <platform>`);
   process.exit(cmd ? 1 : 0);
@@ -77,6 +78,14 @@ switch (cmd) {
     for (const f of ['logo-horizontal.png', 'logo-horizontal-reverse.png', 'logo-stacked.png', 'mark.png']) {
       copyFileSync(join(r.outDir, f), join(out, f));
     }
+    // Fonts: the app registers every entry of fonts.json before the first frame.
+    mkdirSync(join(out, 'fonts'), { recursive: true });
+    const fonts = tenantFontFiles(t);
+    for (const f of fonts) copyFileSync(join(root, f.source), join(out, 'fonts', f.file));
+    writeFileSync(
+      join(out, 'fonts.json'),
+      JSON.stringify(fonts.map((f) => ({ family: f.family, weight: f.weight, asset: `assets/tenant/fonts/${f.file}` })), null, 2),
+    );
     // Launcher icon + splash inputs live in a subfolder, which Flutter does not bundle.
     mkdirSync(join(out, 'icons'), { recursive: true });
     for (const f of r.files.filter((f) => f.endsWith('.png'))) copyFileSync(join(r.outDir, f), join(out, 'icons', f));
