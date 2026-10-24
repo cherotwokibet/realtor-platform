@@ -1,0 +1,11 @@
+# Root pubspec for the share-pages image only. The repo's own workspace also
+# lists the Flutter packages, which a plain Dart image can't resolve.
+name: share_pages_image
+publish_to: none
+environment:
+  sdk: ^3.8.0
+
+workspace:
+  - packages/core
+  - packages/tokens
+  - apps/share_pages

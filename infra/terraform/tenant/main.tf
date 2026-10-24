@@ -32,6 +32,12 @@ variable "folder_id" {
   default = null
 }
 
+variable "share_pages_image" {
+  description = "Image for the share pages Cloud Run service; leave unset until one is pushed."
+  type        = string
+  default     = null
+}
+
 locals {
   repo        = "${path.module}/../../.."
   tenant_json = file("${local.repo}/tenants/${var.tenant_id}.json")
@@ -57,6 +63,8 @@ module "env" {
   secret_ids      = local.secret_ids
   firestore_rules = file("${local.repo}/firestore.rules")
   storage_rules   = file("${local.repo}/storage.rules")
+
+  share_pages_image = var.share_pages_image
 }
 
 output "project_id" {
@@ -65,4 +73,8 @@ output "project_id" {
 
 output "app_ids" {
   value = module.env.app_ids
+}
+
+output "share_pages_url" {
+  value = module.env.share_pages_url
 }

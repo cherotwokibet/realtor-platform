@@ -1,0 +1,9 @@
+# Docker build context is the repo root (apps/share_pages/Dockerfile).
+**/.dart_tool
+**/build
+**/node_modules
+.git
+brand/*/generated
+apps/realtor_app
+functions
+tools

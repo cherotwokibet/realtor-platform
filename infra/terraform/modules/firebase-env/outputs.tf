@@ -13,3 +13,7 @@ output "app_ids" {
     web     = google_firebase_web_app.app.app_id
   }
 }
+
+output "share_pages_url" {
+  value = one(google_cloud_run_v2_service.share_pages[*].uri)
+}

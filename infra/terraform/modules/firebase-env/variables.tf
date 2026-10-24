@@ -38,3 +38,9 @@ variable "storage_rules" {
   description = "Contents of storage.rules."
   type        = string
 }
+
+variable "share_pages_image" {
+  description = "Share pages image (apps/share_pages/Dockerfile) in Artifact Registry. Null skips the Cloud Run service."
+  type        = string
+  default     = null
+}

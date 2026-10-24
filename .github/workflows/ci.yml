@@ -196,6 +196,20 @@ jobs:
       - run: terraform validate
         working-directory: infra/terraform/tenant
 
+  share-image:
+    name: Share pages image (docker build + smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build the Cloud Run image for demo-homes
+        run: docker build -f apps/share_pages/Dockerfile --build-arg TENANT=demo-homes -t share-pages .
+      - name: Smoke test the image
+        run: |
+          docker run -d --name sp -p 8080:8080 -e FIRESTORE_EMULATOR_HOST=localhost:1 share-pages
+          for i in $(seq 1 20); do curl -fsS localhost:8080/healthz && break; sleep 1; done
+          curl -fsS localhost:8080/robots.txt | grep -q '^Sitemap: https://'
+          docker logs sp
+
   emulator:
     name: Emulators (seed, rules, callable API, media)
     runs-on: ubuntu-latest
