@@ -1,0 +1,56 @@
+{
+  "$schema": "./schema/tenant.schema.json",
+  "schemaVersion": 1,
+  "id": "realtime-estates",
+  "name": "Realtime Estates Ltd",
+  "tagline": "Live where you love",
+  "earbNo": "TBC",
+  "brand": {
+    "logo": {
+      "source": "brand/realtime-estates/logo.ai",
+      "primary": "brand/realtime-estates/logo-roofline.png",
+      "alt": "brand/realtime-estates/logo-sunset.png"
+    },
+    "appIcon": "brand/realtime-estates/logo-roofline.png",
+    "colors": {
+      "primary": "#5E0202",
+      "onPrimary": "#FFFFFF",
+      "primarySoft": "#EFE6E6",
+      "accent": "#D1992A",
+      "onAccent": "#000000",
+      "accentText": "#8A6418",
+      "ink": "#1A1A1A",
+      "text": "#4D4D4D",
+      "textMuted": "#717171",
+      "border": "#D9D9D9",
+      "borderStrong": "#CECECE",
+      "surface": "#FFFFFF",
+      "background": "#FDFDFF",
+      "surfaceAlt": "#F3F3F3",
+      "info": "#0055FF",
+      "success": "#28622A",
+      "error": "#C62828"
+    },
+    "fonts": { "display": "Poppins", "body": "Inter" },
+    "typeScale": { "caption": 12, "body": 14, "bodyLarge": 16, "title": 20, "headline": 24, "display": 32 },
+    "radius": { "sm": 6, "md": 12, "pill": 999 },
+    "spacingBase": 4
+  },
+  "domains": {
+    "share": "realtimeestates.co.ke",
+    "app": "app.realtimeestates.co.ke",
+    "admin": "admin.realtimeestates.co.ke"
+  },
+  "apps": { "androidId": "ke.co.realtimeestates.app", "iosId": "ke.co.realtimeestates.app" },
+  "firebase": {
+    "projects": { "dev": "rte-realtor-dev", "stage": "rte-realtor-stage", "prod": "rte-realtor-prod" },
+    "region": "europe-west1"
+  },
+  "contact": { "phone": "TBC", "whatsapp": "TBC", "email": "info@realtimeestates.co.ke" },
+  "locale": { "default": "en-KE", "extra": ["sw"], "currency": "KES" },
+  "features": {
+    "sale": true, "rent": true, "shortStay": false, "offPlan": false,
+    "mpesa": false, "ads": false, "aiSearch": false, "chat": false
+  },
+  "mpesa": { "shortcode": "secret://mpesa-shortcode", "type": "paybill" }
+}

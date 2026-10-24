@@ -1,0 +1,38 @@
+name: realtor_platform_workspace
+publish_to: none
+environment:
+  sdk: ^3.6.0
+
+workspace:
+  - packages/core
+  - packages/tokens
+  - packages/ui
+  - apps/realtor_app
+
+dev_dependencies:
+  melos: ^7.0.0
+
+melos:
+  scripts:
+    analyze:
+      run: dart analyze --fatal-infos .
+      description: Analyse every package
+    test:core:
+      run: dart test
+      exec:
+        concurrency: 1
+      packageFilters:
+        flutter: false
+        dirExists: test
+    test:flutter:
+      run: flutter test
+      exec:
+        concurrency: 1
+      packageFilters:
+        flutter: true
+        dirExists: test
+    tenant:validate:
+      run: node tools/tenant-cli/src/cli.ts validate
+    app:prepare:
+      run: node tools/tenant-cli/src/cli.ts prepare
+      description: "Copy a tenant's config and brand assets into the app. Usage: melos run app:prepare -- <tenant-id>"

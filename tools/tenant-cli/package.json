@@ -1,0 +1,22 @@
+{
+  "name": "@realtor-platform/tenant-cli",
+  "private": true,
+  "type": "module",
+  "description": "Validate tenant files and (later) provision, deploy and build per realtor.",
+  "engines": { "node": ">=22.18" },
+  "bin": { "tenant": "./src/cli.ts" },
+  "scripts": {
+    "validate": "node src/cli.ts validate",
+    "css": "node src/cli.ts css",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

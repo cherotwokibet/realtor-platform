@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tenants:
+    name: Tenant files + tooling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/tenant-cli/package-lock.json
+      - run: npm ci
+        working-directory: tools/tenant-cli
+      - run: npx tsc --noEmit
+        working-directory: tools/tenant-cli
+      - name: Validate every tenant (schema, assets, contrast)
+        run: node tools/tenant-cli/src/cli.ts validate
+      - run: npm test
+        working-directory: tools/tenant-cli
+
+  functions:
+    name: Cloud Functions
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  dart:
+    name: Dart + Flutter packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter --version
+      - name: Resolve workspace
+        run: flutter pub get
+      - name: Prepare app assets for the dummy tenant
+        run: node tools/tenant-cli/src/cli.ts prepare demo-homes
+      - name: Analyse
+        run: dart analyze --fatal-infos packages apps
+      - name: Test core + tokens (pure Dart)
+        run: |
+          (cd packages/core && dart test)
+          (cd packages/tokens && dart test)
+      - name: Test ui (Flutter)
+        run: (cd packages/ui && flutter test)
+      - name: Dart and TS emit identical CSS
+        run: |
+          (cd tools/tenant-cli && npm ci --silent)
+          for t in realtime-estates demo-homes; do
+            node tools/tenant-cli/src/cli.ts css "$t" >/dev/null
+            (cd packages/tokens && dart run realtor_tokens:css "$t") > "/tmp/$t.dart.css"
+            diff -u "build/tokens/$t.css" "/tmp/$t.dart.css"
+          done
+      - name: Test app
+        run: |
+          node tools/tenant-cli/src/cli.ts prepare realtime-estates
+          (cd apps/realtor_app && flutter test)
+      - name: Build web app for both tenants (proves the clone)
+        run: |
+          for t in realtime-estates demo-homes; do
+            node tools/tenant-cli/src/cli.ts prepare "$t"
+            (cd apps/realtor_app && flutter create . --platforms=web --project-name realtor_app >/dev/null && flutter build web --release)
+          done

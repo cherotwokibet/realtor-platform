@@ -1,0 +1,20 @@
+name: realtor_ui
+description: Flutter theme and widgets shared by the customer app and admin. Reads tokens only; no hex values.
+publish_to: none
+resolution: workspace
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  realtor_core:
+    path: ../core
+  realtor_tokens:
+    path: ../tokens
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0

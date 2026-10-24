@@ -1,0 +1,11 @@
+rules_version = '2';
+// Deny-all baseline. Every collection is opened deliberately, with tests,
+// in Phase 2. Writes to status, verification, payments and commissions stay
+// Functions-only (Admin SDK bypasses these rules).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

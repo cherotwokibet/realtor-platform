@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "rte-realtor-dev",
+    "realtime-estates-dev": "rte-realtor-dev",
+    "realtime-estates-stage": "rte-realtor-stage",
+    "realtime-estates-prod": "rte-realtor-prod"
+  }
+}

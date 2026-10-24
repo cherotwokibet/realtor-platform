@@ -1,0 +1,3 @@
+# Generated per tenant by `melos run app:prepare`; never commit a tenant's files here.
+assets/tenant/*
+!assets/tenant/.gitkeep
