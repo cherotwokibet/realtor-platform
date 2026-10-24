@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
+import 'package:realtor_core/realtor_core.dart';
+
 import 'home_screen.dart';
 import 'providers.dart';
+import 'search/purpose.dart';
+import 'search/results_screen.dart';
 import 'sections.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -21,6 +25,18 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: s.path,
               builder: (context, state) => s.path == '/' ? const HomeScreen() : PlaceholderScreen(title: s.label),
             ),
+          // Search results: /rent, /buy/apartments, /rent/apartments/kilimani?beds=2 ...
+          for (final p in Purpose.values)
+            if (features.isOn(p.feature))
+              GoRoute(
+                path: '/${p.pathSegment}',
+                redirect: _resultsOrHome,
+                builder: _results,
+                routes: [
+                  GoRoute(path: ':a', redirect: _resultsOrHome, builder: _results),
+                  GoRoute(path: ':a/:b', redirect: _resultsOrHome, builder: _results),
+                ],
+              ),
         ],
       ),
       // Share pages hand visitors to these paths (P3): keep them stable.
@@ -35,6 +51,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+String? _resultsOrHome(BuildContext context, GoRouterState state) =>
+    ListingFilters.fromUri(state.uri) == null ? '/' : null;
+
+Widget _results(BuildContext context, GoRouterState state) =>
+    ResultsScreen(filters: ListingFilters.fromUri(state.uri)!);
 
 class RealtorApp extends ConsumerWidget {
   const RealtorApp({super.key});

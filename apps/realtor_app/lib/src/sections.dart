@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:realtor_core/realtor_core.dart';
 
+import 'search/purpose.dart';
+
 /// A top-level part of the app: one route and one navigation destination.
 /// Sections with a [feature] exist only when the tenant has it on: no route,
 /// no menu entry, and deep links to them go home.
@@ -25,6 +27,9 @@ List<AppSection> enabledSections(Features f) => [for (final s in appSections) if
 
 /// Where a location should go instead, or null if it may open as is.
 String? redirectForDisabled(Features f, String location) {
+  final first = location.split('/').where((s) => s.isNotEmpty).firstOrNull;
+  final purpose = first == null ? null : Purpose.fromPath(first);
+  if (purpose != null && !f.isOn(purpose.feature)) return '/';
   for (final s in appSections) {
     if (s.path == '/' || s.enabledFor(f)) continue;
     if (location == s.path || location.startsWith('${s.path}/')) return '/';
