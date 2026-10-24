@@ -77,7 +77,7 @@ jobs:
       - name: Share pages (Jaspr SSR) tests + server binary
         working-directory: apps/share_pages
         run: |
-          dart test
+          dart test -x emulator
           mkdir -p build && dart compile exe bin/server.dart -o build/server
       - name: Test ui + app (Flutter)
         run: |
@@ -212,8 +212,13 @@ jobs:
           java-version: 21
       - run: npm ci
         working-directory: functions
-      - name: Seed the emulator and read it back
-        run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Seed the emulator, read it back, and serve share pages from it
+        run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed && cd apps/share_pages && dart test -t emulator"
       - name: Security rules tests
         run: npx --yes firebase-tools@15 emulators:exec --only firestore,storage --project demo-realtor "npm --prefix functions run test:rules"
       - name: Callable API + media pipeline tests

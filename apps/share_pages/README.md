@@ -14,11 +14,16 @@ Live now:
 
 Listing text is HTML-escaped by Jaspr. Inside the JSON-LD script, every `<` is written as `<`, so a title can't close the script. A test covers this.
 
+Listings come from Firestore over REST (`FirestoreListingSource`): a `runQuery` for `slug == <slug> AND status == live`. On Cloud Run the token comes from the metadata server (the service account needs Firestore read). Against the emulator, set `FIRESTORE_EMULATOR_HOST`. `FIRESTORE_PROJECT` overrides the tenant's prod project.
+
 ```sh
 cd apps/share_pages
-dart test
+dart test -x emulator                       # unit tests
+# against the seeded emulator (CI does this):
+firebase emulators:exec --only firestore --project demo-realtor \
+  "npm --prefix functions run seed && cd apps/share_pages && dart test -t emulator"
 mkdir -p build && dart compile exe bin/server.dart -o build/server
 TENANT_FILE=../../tenants/demo-homes.json PORT=8080 ./build/server
 ```
 
-Next: read listings from Firestore (the `ListingSource` interface; tests use `InMemoryListingSource`), area, agent and home pages, sitemaps, and the Cloud Run deploy.
+Next: area, agent and home pages, sitemaps, and the Cloud Run deploy.
