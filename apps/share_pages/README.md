@@ -12,7 +12,9 @@ Live now:
 - `Cache-Control: public, max-age=300, s-maxage=600`
 - Unknown slugs get a small HTML 404
 - `/area/<slug>`: the area guide, typical rent, live homes (newest first, linking to their pages) and a button into the app search (`/rent/<area>`); JSON-LD `Place` with an `ItemList` of the listings
-- `/sitemap.xml` (home, every area, every live listing with `lastmod`) and `/robots.txt` pointing at it
+- `/agent/<id>`: an active agent's name, photo, EARB number, languages, typical reply time, **Chat on WhatsApp** and **Call** buttons, and their live homes; JSON-LD `RealEstateAgent` under the realtor. Inactive or unknown agents are 404s. Listing pages say "Listed by <agent>" with a link.
+- `/`: the realtor's 12 newest live homes and every area, with **Search homes** into the app and the realtor's WhatsApp
+- `/sitemap.xml` (home, every area, every active agent, every live listing with `lastmod`) and `/robots.txt` pointing at it
 
 Listing text is HTML-escaped by Jaspr. Inside the JSON-LD script, every `<` is written as `\u003c`, so a title can't close the script. A test covers this.
 
@@ -38,4 +40,4 @@ docker build -f apps/share_pages/Dockerfile --build-arg TENANT=<id> -t share-pag
 
 Terraform (`infra/terraform/modules/firebase-env`) creates a `share-pages` service account with `roles/datastore.viewer` only, and, once `share_pages_image` is set, a Cloud Run service (scale 0 to 3, 1 CPU, 256 MiB, `/healthz` startup probe, `FIRESTORE_PROJECT` set to the environment's project) that `allUsers` may invoke. Pushing the image to Artifact Registry, and the Hosting rewrite from the share domain, happen at deploy time, which Boniface runs.
 
-Next: agent and home pages.
+The home page's "newest first" query needs the `(status, updatedAt desc)` index in `firestore.indexes.json`. Every other query is equality-only, sorted in Dart.

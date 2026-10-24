@@ -68,12 +68,58 @@ class FirestoreListingSource implements ListingSource {
     return listings.take(limit).toList();
   }
 
-  @override
-  Future<ShareArea?> area(String slug) async {
-    final res = await _client.get(Uri.parse('$_base/areas/$slug'), headers: {'authorization': 'Bearer ${await _accessToken()}'});
+  Future<Map<String, Object?>?> _get(String path) async {
+    final res = await _client.get(Uri.parse('$_base/$path'), headers: {'authorization': 'Bearer ${await _accessToken()}'});
     if (res.statusCode == 404) return null;
     if (res.statusCode != 200) throw StateError('Firestore get failed: ${res.statusCode}');
-    return areaFromDocument(_map(jsonDecode(res.body)));
+    return _map(jsonDecode(res.body));
+  }
+
+  @override
+  Future<ShareArea?> area(String slug) async {
+    final doc = await _get('areas/$slug');
+    return doc == null ? null : areaFromDocument(doc);
+  }
+
+  @override
+  Future<ShareAgent?> agent(String id) async {
+    final doc = await _get('agents/${Uri.encodeComponent(id)}');
+    if (doc == null) return null;
+    final agent = agentFromDocument(doc);
+    return _decodeFields(_map(doc['fields']))['active'] == true ? agent : null;
+  }
+
+  @override
+  Future<List<ShareListing>> liveByAgent(String agentId, {int limit = 24}) async {
+    final docs = await _query({
+      'from': [{'collectionId': 'listings'}],
+      'where': _liveWhere([_eq('agentId', agentId)]),
+      'limit': 200,
+    });
+    final listings = [for (final d in docs) listingFromDocument(d, _now())]
+      ..sort((a, b) => (b.updatedAt ?? DateTime(0)).compareTo(a.updatedAt ?? DateTime(0)));
+    return listings.take(limit).toList();
+  }
+
+  @override
+  Future<List<ShareListing>> latestLive({int limit = 12}) async {
+    // Uses the (status, updatedAt desc) index in firestore.indexes.json.
+    final docs = await _query({
+      'from': [{'collectionId': 'listings'}],
+      'where': _eq('status', 'live'),
+      'orderBy': [{'field': {'fieldPath': 'updatedAt'}, 'direction': 'DESCENDING'}],
+      'limit': limit,
+    });
+    return [for (final d in docs) listingFromDocument(d, _now())];
+  }
+
+  @override
+  Future<List<ShareArea>> areas() async {
+    final docs = await _query({
+      'from': [{'collectionId': 'areas'}],
+      'limit': 1000,
+    });
+    return [for (final d in docs) areaFromDocument(d)]..sort((a, b) => a.name.compareTo(b.name));
   }
 
   @override
@@ -89,8 +135,16 @@ class FirestoreListingSource implements ListingSource {
       'from': [{'collectionId': 'areas'}],
       'limit': 1000,
     });
+    final agents = await _query({
+      'select': {'fields': [{'fieldPath': '__name__'}]},
+      'from': [{'collectionId': 'agents'}],
+      'where': {'fieldFilter': {'field': {'fieldPath': 'active'}, 'op': 'EQUAL', 'value': {'booleanValue': true}}},
+      'limit': 1000,
+    });
+    String id(Map<String, Object?> doc) => (doc['name']! as String).split('/').last;
     return [
-      for (final a in areas) (path: '/area/${(a['name']! as String).split('/').last}', lastModified: null),
+      for (final a in areas) (path: '/area/${id(a)}', lastModified: null),
+      for (final a in agents) (path: '/agent/${id(a)}', lastModified: null),
       for (final l in listings)
         (path: '/listing/${_decodeFields(_map(l['fields']))['slug']}', lastModified: _decodeFields(_map(l['fields']))['updatedAt'] as DateTime?),
     ];
@@ -127,6 +181,23 @@ ShareArea areaFromDocument(Map<String, Object?> doc) {
   );
 }
 
+/// Firestore REST document (agents/{id}) -> ShareAgent. Whether it is
+/// active is checked by the caller.
+ShareAgent agentFromDocument(Map<String, Object?> doc) {
+  final f = _decodeFields(_map(doc['fields']));
+  return ShareAgent(
+    id: (doc['name']! as String).split('/').last,
+    name: f['name']! as String,
+    earbNo: f['earbNo']! as String,
+    phone: f['phone']! as String,
+    whatsapp: f['whatsapp']! as String,
+    languages: [for (final l in (f['languages'] as List<Object?>?) ?? const ['en']) l! as String],
+    photo: f['photo'] as String?,
+    rating: (f['rating'] as num?)?.toDouble(),
+    responseMins: f['responseMins'] as int?,
+  );
+}
+
 /// Firestore REST document -> ShareListing. Pure, so it is unit-tested.
 ShareListing listingFromDocument(Map<String, Object?> doc, DateTime now) {
   final f = _decodeFields(_map(doc['fields']));
@@ -156,6 +227,7 @@ ShareListing listingFromDocument(Map<String, Object?> doc, DateTime now) {
     ],
     verified: verifiedAt != null && expiresAt != null && expiresAt.isAfter(now),
     updatedAt: time(f['updatedAt']),
+    agentId: f['agentId'] as String?,
   );
 }
 

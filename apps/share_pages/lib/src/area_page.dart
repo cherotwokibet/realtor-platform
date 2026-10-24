@@ -50,18 +50,7 @@ class AreaPage extends StatelessComponent {
         if (area.guide.isNotEmpty) p([Component.text(area.guide)]),
         if (listings.isNotEmpty) ...[
           const h2([Component.text('Available now')]),
-          ul(classes: 'cards', [
-            for (final l in listings)
-              li([
-                a(href: '/listing/${l.slug}', [
-                  Component.text(l.title),
-                  p(classes: 'price', [
-                    Component.text(formatKes(l.priceKES)),
-                    if (l.purpose != Purpose.sale) Component.text(l.purpose == Purpose.rent ? ' /month' : ' /night'),
-                  ]),
-                ]),
-              ]),
-          ]),
+          listingCards(listings),
         ],
         div(classes: 'cta', [
           a(href: 'https://${tenant.appDomain}/rent/${area.slug}', classes: 'open', [Component.text('Search ${area.name} in the app')]),

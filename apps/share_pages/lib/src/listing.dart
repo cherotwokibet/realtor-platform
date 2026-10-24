@@ -20,9 +20,11 @@ class ShareListing {
     this.photos = const [],
     this.verified = false,
     this.updatedAt,
+    this.agentId,
   });
 
   final String id, slug, title, type, area;
+  final String? agentId;
   final Purpose purpose;
   final int beds, baths, priceKES;
   final int? depositMonths;
@@ -52,6 +54,27 @@ class ShareArea {
   final int? medianRentKES;
 }
 
+/// An active agent's public profile (agents/{id}). Phone numbers here are
+/// the agent's business lines, which the app shows on every listing.
+class ShareAgent {
+  const ShareAgent({
+    required this.id,
+    required this.name,
+    required this.earbNo,
+    required this.phone,
+    required this.whatsapp,
+    this.languages = const ['en'],
+    this.photo,
+    this.rating,
+    this.responseMins,
+  });
+  final String id, name, earbNo, phone, whatsapp;
+  final List<String> languages;
+  final String? photo;
+  final double? rating;
+  final int? responseMins;
+}
+
 /// One URL in sitemap.xml.
 typedef SitemapEntry = ({String path, DateTime? lastModified});
 
@@ -64,14 +87,27 @@ abstract interface class ListingSource {
   /// Live listings in an area, newest first, at most [limit].
   Future<List<ShareListing>> liveInArea(String slug, {int limit = 24});
 
-  /// Every live listing and every area.
+  /// An active agent, else null.
+  Future<ShareAgent?> agent(String id);
+
+  /// An agent's live listings, newest first, at most [limit].
+  Future<List<ShareListing>> liveByAgent(String agentId, {int limit = 24});
+
+  /// The newest live listings, for the home page.
+  Future<List<ShareListing>> latestLive({int limit = 12});
+
+  /// Every area, by name.
+  Future<List<ShareArea>> areas();
+
+  /// Every live listing, area and active agent.
   Future<List<SitemapEntry>> sitemapEntries();
 }
 
 class InMemoryListingSource implements ListingSource {
-  InMemoryListingSource(this.listings, {this.areas = const []});
+  InMemoryListingSource(this.listings, {List<ShareArea> areas = const [], this.agents = const []}) : _areas = areas;
   final List<ShareListing> listings;
-  final List<ShareArea> areas;
+  final List<ShareArea> _areas;
+  final List<ShareAgent> agents;
 
   @override
   Future<ShareListing?> bySlug(String slug) async {
@@ -83,11 +119,29 @@ class InMemoryListingSource implements ListingSource {
 
   @override
   Future<ShareArea?> area(String slug) async {
-    for (final a in areas) {
+    for (final a in _areas) {
       if (a.slug == slug) return a;
     }
     return null;
   }
+
+  @override
+  Future<ShareAgent?> agent(String id) async {
+    for (final a in agents) {
+      if (a.id == id) return a;
+    }
+    return null;
+  }
+
+  @override
+  Future<List<ShareListing>> liveByAgent(String agentId, {int limit = 24}) async =>
+      listings.where((l) => l.agentId == agentId).take(limit).toList();
+
+  @override
+  Future<List<ShareListing>> latestLive({int limit = 12}) async => listings.take(limit).toList();
+
+  @override
+  Future<List<ShareArea>> areas() async => [..._areas]..sort((a, b) => a.name.compareTo(b.name));
 
   @override
   Future<List<ShareListing>> liveInArea(String slug, {int limit = 24}) async =>
@@ -95,7 +149,8 @@ class InMemoryListingSource implements ListingSource {
 
   @override
   Future<List<SitemapEntry>> sitemapEntries() async => [
-        for (final a in areas) (path: '/area/${a.slug}', lastModified: null),
+        for (final a in _areas) (path: '/area/${a.slug}', lastModified: null),
+        for (final a in agents) (path: '/agent/${a.id}', lastModified: null),
         for (final l in listings) (path: '/listing/${l.slug}', lastModified: l.updatedAt),
       ];
 }

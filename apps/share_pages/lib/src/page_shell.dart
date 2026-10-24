@@ -5,6 +5,8 @@ import 'package:jaspr/server.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_tokens/realtor_tokens.dart';
 
+import 'listing.dart';
+
 /// Layout only; every colour, font and radius comes from the tenant's CSS
 /// variables (packages/tokens), so a re-brand needs no change here.
 const pageCss = '''
@@ -27,6 +29,10 @@ h2{font-family:var(--font-display);font-size:var(--text-title);color:var(--color
 .cards{list-style:none;padding:0;display:grid;gap:8px}
 .cards a{display:block;padding:12px 16px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);text-decoration:none;color:var(--color-ink)}
 .cards .price{font-size:var(--text-body-large);margin:4px 0 0}
+.agent{display:flex;gap:12px;align-items:center}
+.agent img{width:72px;height:72px;border-radius:50%;object-fit:cover;background:var(--color-surface-alt)}
+.areas{list-style:none;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.areas a{display:inline-block;padding:6px 12px;border:1px solid var(--color-border);border-radius:var(--radius-sm);text-decoration:none;color:var(--color-ink)}
 ul{padding-left:20px}
 ''';
 
@@ -75,3 +81,20 @@ Component sharePage({
     ]),
   );
 }
+
+/// Price with its period, as cards and listing pages show it.
+List<Component> priceText(ShareListing l) => [
+      Component.text(formatKes(l.priceKES)),
+      if (l.purpose != Purpose.sale) Component.text(l.purpose == Purpose.rent ? ' /month' : ' /night'),
+    ];
+
+/// A list of listing cards linking to their share pages.
+Component listingCards(List<ShareListing> listings) => ul(classes: 'cards', [
+      for (final l in listings)
+        li([
+          a(href: '/listing/${l.slug}', [
+            Component.text(l.title),
+            p(classes: 'price', priceText(l)),
+          ]),
+        ]),
+    ]);

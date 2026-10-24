@@ -26,11 +26,7 @@ class ListingSeo {
     return '$rooms ${_purposeWords(l.purpose)} in $where for ${formatKes(l.priceKES)}$_period.$deposit$verified';
   }
 
-  /// Public URL of a Storage object in the tenant's prod media bucket.
-  String mediaUrl(String path) {
-    final bucket = '${tenant.firebaseProjects[FirebaseEnv.prod]}-media';
-    return 'https://firebasestorage.googleapis.com/v0/b/$bucket/o/${Uri.encodeComponent(path)}?alt=media';
-  }
+  String mediaUrl(String path) => tenantMediaUrl(tenant, path);
 
   /// First photo (full variant) or the tenant's default share image.
   String get ogImage => listing.photos.isEmpty ? 'https://${tenant.appDomain}/og.png' : mediaUrl(listing.photos.first.full);
@@ -66,4 +62,10 @@ class ListingSeo {
   static String placeName(String slug) =>
       slug.split('-').map((w) => w.length <= 1 ? w.toUpperCase() : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
   static String _purposeWords(Purpose p) => switch (p) { Purpose.rent => 'to rent', Purpose.sale => 'for sale', Purpose.shortStay => 'for short stays' };
+}
+
+/// Public URL of a Storage object in the tenant's prod media bucket.
+String tenantMediaUrl(TenantConfig tenant, String path) {
+  final bucket = '${tenant.firebaseProjects[FirebaseEnv.prod]}-media';
+  return 'https://firebasestorage.googleapis.com/v0/b/$bucket/o/${Uri.encodeComponent(path)}?alt=media';
 }
