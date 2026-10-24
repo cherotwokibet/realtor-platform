@@ -3,6 +3,7 @@ import { join, basename } from 'node:path';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import addFormatsModule from 'ajv-formats';
 import { contrastProblems } from './contrast.ts';
+import { fontProblems } from './fonts.ts';
 
 // ajv-formats ships CJS; under NodeNext the callable is on .default.
 const addFormats = ((addFormatsModule as any).default ?? addFormatsModule) as (ajv: Ajv2020) => Ajv2020;
@@ -53,6 +54,7 @@ export function validateTenants(root = repoRoot(), only?: string[]): Result[] {
         errors.push(`${p} uses <text>: convert the lettering to paths`);
     }
     errors.push(...contrastProblems(data.brand.colors));
+    errors.push(...fontProblems(root, data));
     return { file: f, errors };
   });
 }
