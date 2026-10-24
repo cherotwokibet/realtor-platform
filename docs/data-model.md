@@ -28,6 +28,19 @@ One Firestore database per tenant project (D1), so documents carry no tenant id.
 
 **Data Protection Act 2019:** every lead records when consent was given (`consentAt`) and when the record is to be deleted (`retainUntil`, after `consentAt`). A lead needs a phone or an email. Export and delete requests are P6 "Data protection compliance".
 
+## Callable API (P2-s03)
+
+Inputs are validated with zod in `functions/src/api/`, and the stored document is checked against the collection schema before it is written.
+
+| Callable | Who | What it does |
+|---|---|---|
+| `createLead` | anyone, with the consent tick | Lead on a **live** listing, assigned to that listing's agent; sets `consentAt` and `retainUntil` (24 months, D12) and adds 1 to the listing's `stats.leads` |
+| `updateLeadStage` | the lead's agent, or a manager | new → contacted → viewing → offer → won, any stage → lost, and lost → contacted |
+| `submitListing` | agents (as themselves), managers (for any agent) | Create or edit → `pending`; sets slug (unique), geohash, stats and timestamps; the area must exist |
+| `moderateListing` | managers | approve (live, verified for 30 days), reject (needs a reason), expire, let, sold; status moves from `listing-rules.ts` |
+
+Still to come in P2-s03: `bookViewing`, plus rate limits on `createLead` (P6 fraud controls).
+
 ## Indexes
 
 `firestore.indexes.json` covers the first queries: live listings in an area by price, all listings in an area by price, and an agent's leads newest first. Search with facets moves to Typesense (P2-s05, D4).

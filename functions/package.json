@@ -12,7 +12,8 @@
     "serve": "npm run build && firebase emulators:start --only functions,firestore,storage",
     "deploy": "firebase deploy --only functions",
     "seed": "npm run build && node lib/seed/run.js",
-    "test:rules": "npm run build && node --test 'lib/**/*.rules-test.js'"
+    "test:rules": "npm run build && node --test 'lib/**/*.rules-test.js'",
+    "test:emulator": "npm run build && node --test --test-concurrency=1 'lib/**/*.emulator-test.js'"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",

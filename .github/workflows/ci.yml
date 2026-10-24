@@ -125,7 +125,7 @@ jobs:
           retention-days: 7
 
   emulator:
-    name: Firestore emulator (seed + security rules)
+    name: Firestore emulator (seed, rules, callable API)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -144,3 +144,5 @@ jobs:
         run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed"
       - name: Security rules tests
         run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run test:rules"
+      - name: Callable API tests
+        run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run test:emulator"
