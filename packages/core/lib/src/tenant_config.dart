@@ -118,7 +118,7 @@ class Brand {
     required this.spacingBase,
   });
 
-  /// Repo-relative asset paths, e.g. brand/realtime-estates/logo-roofline.png.
+  /// Repo-relative asset paths, e.g. `brand/<id>/logo-stacked.svg`.
   final String logo;
   final String? logoOnDark;
   final String appIcon;

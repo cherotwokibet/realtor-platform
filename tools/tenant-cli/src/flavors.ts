@@ -3,7 +3,7 @@
 // The app reads `appFlavor` at start-up and loads assets/flavors/<flavor>/.
 // iOS schemes and firebase_options follow once the Firebase projects exist.
 
-/** realtime-estates -> realtimeEstates (a valid Gradle/Xcode flavor name). */
+/** acme-realty -> acmeRealty (a valid Gradle/Xcode flavor name). */
 export function flavorName(id: string): string {
   return id.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
