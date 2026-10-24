@@ -5,6 +5,7 @@ import { validateTenants, repoRoot } from './validate.ts';
 import { tenantCss } from './css.ts';
 import { generateIcons } from './icons.ts';
 import { flutterConfigs } from './flutter-config.ts';
+import { createTenant } from './create.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -16,7 +17,10 @@ function usage(): never {
   icons <id>         Generate app icons, splash, favicons, PWA and share images into brand/<id>/generated
   prepare <id>       Generate icons, then copy the tenant file and logos into apps/realtor_app/assets/tenant
 
-Coming later: create <id>, deploy <id> <env>, build <id> <platform>`);
+  create <id> <name>  Scaffold tenants/<id>.json and placeholder brand/<id>/ art for a new realtor
+                     (provisioning: infra/terraform/README.md)
+
+Coming later: deploy <id> <env>, build <id> <platform>`);
   process.exit(cmd ? 1 : 0);
 }
 
@@ -52,6 +56,23 @@ switch (cmd) {
     mkdirSync(out, { recursive: true });
     writeFileSync(join(out, `${id}.css`), tenantCss(t));
     console.log(`wrote build/tokens/${id}.css`);
+    break;
+  }
+  case 'create': {
+    const [id, ...nameParts] = args;
+    if (!id || !nameParts.length) usage();
+    try {
+      createTenant(repoRoot(), id, nameParts.join(' '));
+    } catch (e) {
+      console.error(`✗ ${(e as Error).message}`);
+      process.exit(1);
+    }
+    loadValid(id);
+    console.log(`created tenants/${id}.json and brand/${id}/ (placeholder art)
+next:
+  1. replace TBC / example.com values, colours, fonts and the SVGs in brand/${id}/
+  2. node tools/tenant-cli/src/cli.ts validate ${id}
+  3. provision (Boniface, with billing): see infra/terraform/README.md`);
     break;
   }
   case 'icons': {

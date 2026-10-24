@@ -24,7 +24,7 @@ functions/           Cloud Functions, TypeScript, 2nd gen
 tenants/             one JSON per realtor + JSON Schema
 brand/               logos and icons per realtor
 tools/tenant-cli     validate / css / prepare (create, deploy, build later)
-infra/terraform      per-tenant Firebase + Typesense            (P1)
+infra/terraform      per-tenant Firebase projects: module + root config (never applied by CI)
 ```
 
 ## First-time setup (Windows)
@@ -66,7 +66,7 @@ CI runs all of these on every push, checks that the Dart and TypeScript CSS outp
 
 ## Adding a realtor
 
-See the onboarding steps in the tracker's White-label kit tab. In short: add `tenants/<id>.json` and `brand/<id>/`, run `validate`, provision the Firebase projects, prepare and build.
+See the onboarding steps in the tracker's White-label kit tab. In short: `node tools/tenant-cli/src/cli.ts create <id> "<Name Ltd>"` scaffolds a valid `tenants/<id>.json` and placeholder `brand/<id>/` art; replace the TBC / example.com values and the art, run `validate`, provision the Firebase projects with `infra/terraform` (see its README), then prepare and build.
 
 ## Brand assets
 

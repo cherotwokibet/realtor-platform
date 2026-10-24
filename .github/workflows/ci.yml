@@ -123,3 +123,18 @@ jobs:
           name: web-${{ matrix.tenant }}
           path: apps/realtor_app/build/web
           retention-days: 7
+
+  terraform:
+    name: Terraform (format + validate, never applied)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+        working-directory: infra/terraform/tenant
+      - run: terraform validate
+        working-directory: infra/terraform/tenant
