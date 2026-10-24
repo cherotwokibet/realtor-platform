@@ -1,0 +1,20 @@
+name: share_pages
+description: Server-rendered listing, area and agent pages for Google and WhatsApp (D2). Hands visitors to the Flutter app.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  jaspr: ^0.23.5
+  realtor_core:
+    path: ../../packages/core
+  realtor_tokens:
+    path: ../../packages/tokens
+  shelf: ^1.4.3
+  shelf_router: ^1.1.4
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0

@@ -74,6 +74,11 @@ jobs:
         run: |
           (cd packages/core && dart test)
           (cd packages/tokens && dart test)
+      - name: Share pages (Jaspr SSR) tests + server binary
+        working-directory: apps/share_pages
+        run: |
+          dart test
+          mkdir -p build && dart compile exe bin/server.dart -o build/server
       - name: Test ui + app (Flutter)
         run: |
           (cd packages/ui && flutter test)
