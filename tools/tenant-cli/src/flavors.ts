@@ -31,7 +31,7 @@ export function androidFlavorsGradle(tenants: any[]): string {
       (t) => `        create("${flavorName(t.id)}") {
             dimension = "tenant"
             applicationId = "${t.apps.androidId}"
-            resValue("string", "app_name", "${kotlinString(appName(t))}")
+            manifestPlaceholders["appName"] = "${kotlinString(appName(t))}"
         }`,
     )
     .join('\n');
@@ -67,7 +67,8 @@ export function patchBuildGradle(src: string): string {
   return src.slice(0, at) + '\n' + APPLY + '\n' + src.slice(at);
 }
 
-/** The launcher label comes from each flavor's app_name resource. */
+/** The launcher label comes from each flavor's appName placeholder
+ * (resValue is off by default from AGP 9). */
 export function patchManifest(src: string): string {
-  return src.replace(/android:label="[^"]*"/, 'android:label="@string/app_name"');
+  return src.replace(/android:label="[^"]*"/, 'android:label="${appName}"');
 }

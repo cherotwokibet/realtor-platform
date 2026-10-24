@@ -37,7 +37,7 @@ test('each tenant gets its own application id', () => {
   const g = androidFlavorsGradle([tenant('realtime-estates'), tenant('demo-homes')]);
   assert.match(g, /create\("realtimeEstates"\) \{\n\s+dimension = "tenant"\n\s+applicationId = "ke\.co\.realtimeestates\.app"/);
   assert.match(g, /create\("demoHomes"\)[\s\S]*applicationId = "com\.example\.demohomes"/);
-  assert.match(g, /resValue\("string", "app_name", "Realtime Estates"\)/);
+  assert.match(g, /manifestPlaceholders\["appName"\] = "Realtime Estates"/);
 });
 
 test('gradle and manifest patches apply once', () => {
@@ -47,6 +47,6 @@ test('gradle and manifest patches apply once', () => {
   assert.equal(patchBuildGradle(once), once);
   assert.equal(
     patchManifest('<application\n        android:label="realtor_app"\n        android:name="${applicationName}"'),
-    '<application\n        android:label="@string/app_name"\n        android:name="${applicationName}"',
+    '<application\n        android:label="${appName}"\n        android:name="${applicationName}"',
   );
 });
