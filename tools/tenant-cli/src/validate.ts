@@ -49,6 +49,9 @@ export function validateTenants(root = repoRoot(), only?: string[]): Result[] {
     if (data.id !== basename(f, '.json')) errors.push(`id "${data.id}" must match the file name`);
     for (const p of collectAssetPaths(data.brand)) {
       if (!existsSync(join(root, p))) errors.push(`missing asset ${p}`);
+      // <text> renders with whatever fonts the build machine has; logos must be outlined.
+      else if (p.endsWith('.svg') && /<text[\s>]/.test(readFileSync(join(root, p), 'utf8')))
+        errors.push(`${p} uses <text>: convert the lettering to paths`);
     }
     errors.push(...contrastProblems(data.brand.colors));
     errors.push(...fontProblems(root, data));
