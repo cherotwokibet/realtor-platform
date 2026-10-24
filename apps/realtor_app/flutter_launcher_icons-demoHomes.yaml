@@ -1,0 +1,19 @@
+# Generated from tenants/demo-homes.json by tenant-cli. Do not edit.
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: false
+  min_sdk_android: 21
+  image_path: "assets/flavors/demoHomes/icons/app-icon-1024.png"
+  remove_alpha_ios: true
+  background_color_ios: "#0F5257"
+  image_path_ios_dark_transparent: "assets/flavors/demoHomes/icons/ios-dark-1024.png"
+  image_path_ios_tinted_grayscale: "assets/flavors/demoHomes/icons/ios-tinted-1024.png"
+  adaptive_icon_background: "#0F5257"
+  adaptive_icon_foreground: "assets/flavors/demoHomes/icons/android-foreground-432.png"
+  adaptive_icon_foreground_inset: 0 # art already sits inside the 66 dp safe zone
+  adaptive_icon_monochrome: "assets/flavors/demoHomes/icons/android-monochrome-432.png"
+  web:
+    generate: false
+    image_path: "assets/flavors/demoHomes/icons/pwa-512.png"
+    background_color: "#0F5257"
+    theme_color: "#0F5257"

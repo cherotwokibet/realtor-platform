@@ -52,6 +52,10 @@ flutter run -d chrome
 
 Swap to the dummy tenant to see the clone: `node tools\tenant-cli\src\cli.ts prepare demo-homes`, then hot-restart.
 
+## Feature flags
+
+`features` in the tenant file switches parts of the product on or off. In code, every feature-specific widget sits inside `FeatureGate(feature: Feature.x, ...)` (packages/ui), and every top-level section is an `AppSection` in `apps/realtor_app/lib/src/sections.dart`. A section whose feature is off has no route or menu entry, and deep links to it go home. To add a feature, add the key to the schema, `Feature` and `Features` in packages/core, then gate its UI. Tests in `apps/realtor_app/test/feature_flags_test.dart` switch each one off and check it disappears.
+
 ## Tests
 
 ```powershell

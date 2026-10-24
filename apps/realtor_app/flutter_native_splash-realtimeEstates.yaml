@@ -1,0 +1,12 @@
+# Generated from tenants/realtime-estates.json by tenant-cli. Do not edit.
+flutter_native_splash:
+  color: "#5E0202"
+  image: "assets/flavors/realtimeEstates/icons/splash-1152.png"
+  branding: "assets/flavors/realtimeEstates/icons/splash-branding-800x320.png"
+  android_12:
+    color: "#5E0202"
+    image: "assets/flavors/realtimeEstates/icons/splash-1152.png"
+    branding: "assets/flavors/realtimeEstates/icons/splash-branding-800x320.png"
+  web: false
+  ios: false
+  fullscreen: false

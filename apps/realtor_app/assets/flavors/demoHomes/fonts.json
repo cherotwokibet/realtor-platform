@@ -1,0 +1,22 @@
+[
+  {
+    "family": "Manrope",
+    "weight": 400,
+    "asset": "assets/flavors/demoHomes/fonts/Manrope-Regular.ttf"
+  },
+  {
+    "family": "Manrope",
+    "weight": 500,
+    "asset": "assets/flavors/demoHomes/fonts/Manrope-Medium.ttf"
+  },
+  {
+    "family": "Manrope",
+    "weight": 600,
+    "asset": "assets/flavors/demoHomes/fonts/Manrope-SemiBold.ttf"
+  },
+  {
+    "family": "Manrope",
+    "weight": 700,
+    "asset": "assets/flavors/demoHomes/fonts/Manrope-Bold.ttf"
+  }
+]

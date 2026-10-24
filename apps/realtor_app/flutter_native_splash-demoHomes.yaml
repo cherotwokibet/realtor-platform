@@ -1,0 +1,12 @@
+# Generated from tenants/demo-homes.json by tenant-cli. Do not edit.
+flutter_native_splash:
+  color: "#0F5257"
+  image: "assets/flavors/demoHomes/icons/splash-1152.png"
+  branding: "assets/flavors/demoHomes/icons/splash-branding-800x320.png"
+  android_12:
+    color: "#0F5257"
+    image: "assets/flavors/demoHomes/icons/splash-1152.png"
+    branding: "assets/flavors/demoHomes/icons/splash-branding-800x320.png"
+  web: false
+  ios: false
+  fullscreen: false
