@@ -4,7 +4,7 @@ ARG DART_VERSION=3.13.7
 
 FROM dart:${DART_VERSION} AS build
 WORKDIR /src
-COPY apps/share_pages/docker/pubspec.yaml pubspec.yaml
+COPY apps/share_pages/docker/workspace.pubspec.yaml pubspec.yaml
 COPY packages/core packages/core
 COPY packages/tokens packages/tokens
 COPY apps/share_pages apps/share_pages

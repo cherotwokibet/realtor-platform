@@ -30,7 +30,7 @@ TENANT_FILE=../../tenants/demo-homes.json PORT=8080 ./build/server
 
 ## Cloud Run
 
-`apps/share_pages/Dockerfile` builds one image per tenant from the repo root. It resolves only `core`, `tokens` and `share_pages` (`docker/pubspec.yaml`), because the repo workspace also lists Flutter packages. The final image is `scratch` plus the Dart runtime files, the AOT binary and `tenants/<id>.json`, and it runs as a non-root user. CI builds it for `demo-homes` and smoke-tests `/healthz` and `/robots.txt`.
+`apps/share_pages/Dockerfile` builds one image per tenant from the repo root. It resolves only `core`, `tokens` and `share_pages` (`docker/workspace.pubspec.yaml`, named so the analyzer does not treat it as a package), because the repo workspace also lists Flutter packages. The final image is `scratch` plus the Dart runtime files, the AOT binary and `tenants/<id>.json`, and it runs as a non-root user. CI builds it for `demo-homes` and smoke-tests `/healthz` and `/robots.txt`.
 
 ```sh
 docker build -f apps/share_pages/Dockerfile --build-arg TENANT=<id> -t share-pages .
