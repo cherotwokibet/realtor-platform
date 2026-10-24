@@ -7,6 +7,7 @@ environment:
   sdk: ^3.8.0
 
 dependencies:
+  http: ^1.6.0
   jaspr: ^0.23.5
   realtor_core:
     path: ../../packages/core
