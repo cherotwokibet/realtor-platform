@@ -65,4 +65,25 @@ void main() {
       expect(formatKes(45000, compact: true), 'KES 45,000');
     });
   });
+
+  group('Features', () {
+    test('every enum value maps to its JSON key', () {
+      final json = {for (final f in Feature.values) f.name: f == Feature.ads};
+      final features = Features.fromJson(json);
+      for (final f in Feature.values) {
+        expect(features.isOn(f), f == Feature.ads, reason: f.name);
+      }
+    });
+
+    test('copyWith flips only what it is given', () {
+      final t = TenantConfig.fromJson(load('demo-homes'));
+      final off = t.features.copyWith({Feature.chat: false});
+      expect(off.chat, isFalse);
+      for (final f in Feature.values.where((f) => f != Feature.chat)) {
+        expect(off.isOn(f), t.features.isOn(f), reason: f.name);
+      }
+      expect(t.withFeatures(off).features.chat, isFalse);
+      expect(t.withFeatures(off).name, t.name);
+    });
+  });
 }

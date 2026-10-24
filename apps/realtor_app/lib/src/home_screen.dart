@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
 import 'providers.dart';
@@ -13,7 +14,16 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-enum Purpose { rent, buy }
+/// Search purposes, each behind its feature switch.
+enum Purpose {
+  rent('Rent', Feature.rent),
+  buy('Buy', Feature.sale),
+  shortStay('Short stay', Feature.shortStay);
+
+  const Purpose(this.label, this.feature);
+  final String label;
+  final Feature feature;
+}
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   Purpose _purpose = Purpose.rent;
@@ -25,8 +35,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final tenant = ref.watch(tenantProvider);
     final b = context.brand;
     final text = Theme.of(context).textTheme;
-    final f = tenant.features;
-    final purposes = [if (f.rent) Purpose.rent, if (f.sale) Purpose.buy];
+    final purposes = [for (final p in Purpose.values) if (tenant.features.isOn(p.feature)) p];
     if (!purposes.contains(_purpose) && purposes.isNotEmpty) _purpose = purposes.first;
 
     return Scaffold(
@@ -41,18 +50,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           SizedBox(height: b.spacing.lg),
           if (purposes.length > 1)
             SegmentedButton<Purpose>(
-              segments: const [
-                ButtonSegment(value: Purpose.rent, label: Text('Rent')),
-                ButtonSegment(value: Purpose.buy, label: Text('Buy')),
-              ],
+              segments: [for (final p in purposes) ButtonSegment(value: p, label: Text(p.label))],
               selected: {_purpose},
               onSelectionChanged: (s) => setState(() => _purpose = s.first),
             ),
           SizedBox(height: b.spacing.md),
-          const TextField(
-            decoration: InputDecoration(
-              hintText: 'Area or estate, e.g. Kilimani, Ruaka',
-              prefixIcon: Icon(Icons.search),
+          FeatureGate(
+            feature: Feature.aiSearch,
+            orElse: const TextField(
+              decoration: InputDecoration(
+                hintText: 'Area or estate, e.g. Kilimani, Ruaka',
+                prefixIcon: Icon(Icons.search),
+              ),
+            ),
+            child: const TextField(
+              decoration: InputDecoration(
+                hintText: 'Try "2br Kilimani under 60k with parking"',
+                prefixIcon: Icon(Icons.auto_awesome),
+              ),
             ),
           ),
           SizedBox(height: b.spacing.md),
@@ -60,6 +75,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             spacing: b.spacing.sm,
             runSpacing: b.spacing.sm,
             children: [for (final t in _types) FilterChip(label: Text(t), onSelected: (_) {})],
+          ),
+          FeatureGate(
+            feature: Feature.ads,
+            child: Padding(
+              padding: EdgeInsets.only(top: b.spacing.xl),
+              child: Card(
+                color: b.primarySoft,
+                child: ListTile(
+                  leading: const Icon(Icons.campaign_outlined),
+                  title: Text('Featured', style: text.labelSmall),
+                  subtitle: Text('Promoted listings appear here', style: text.bodyMedium),
+                ),
+              ),
+            ),
           ),
           SizedBox(height: b.spacing.xl),
           Text('Sample listing', style: text.titleLarge),
@@ -77,13 +106,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const PriceText(65000, period: 'month'),
                   SizedBox(height: b.spacing.xs),
                   Text('Deposit 2 months · Water and Wi-Fi included', style: text.bodySmall),
+                  FeatureGate(
+                    feature: Feature.mpesa,
+                    child: Padding(
+                      padding: EdgeInsets.only(top: b.spacing.sm),
+                      child: Text('Book a viewing · pay with M-Pesa', style: text.labelLarge),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
         ],
       ),
-      bottomNavigationBar: tenant.hasContactNumbers
+      // In-app chat lives in its own section when on; otherwise WhatsApp handoff.
+      bottomNavigationBar: !tenant.features.chat && tenant.hasContactNumbers
           ? SafeArea(
               child: Padding(
                 padding: EdgeInsets.all(b.spacing.md),
