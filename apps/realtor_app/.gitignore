@@ -1,3 +1,12 @@
 # Generated per tenant by `melos run app:prepare`; never commit a tenant's files here.
 assets/tenant/*
 !assets/tenant/.gitkeep
+assets/tenant/icons/
+
+# Platform folders are generated per tenant (flutter create + launcher icons + splash)
+# until P1 "Flutter flavors generator" makes them tenant-neutral.
+/android/
+/ios/
+/web/
+/.metadata
+/README.md

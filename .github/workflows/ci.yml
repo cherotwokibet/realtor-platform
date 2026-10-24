@@ -14,8 +14,8 @@ jobs:
     name: Tenant files + tooling
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -26,7 +26,8 @@ jobs:
         working-directory: tools/tenant-cli
       - name: Validate every tenant (schema, assets, contrast)
         run: node tools/tenant-cli/src/cli.ts validate
-      - run: npm test
+      - name: Tests (incl. icon sizes and safe zones)
+        run: npm test
         working-directory: tools/tenant-cli
 
   functions:
@@ -36,8 +37,8 @@ jobs:
       run:
         working-directory: functions
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -49,10 +50,15 @@ jobs:
     name: Dart + Flutter packages
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: tools/tenant-cli/package-lock.json
+      - name: Install tenant-cli
+        run: npm ci
+        working-directory: tools/tenant-cli
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -60,31 +66,60 @@ jobs:
       - run: flutter --version
       - name: Resolve workspace
         run: flutter pub get
-      - name: Prepare app assets for the dummy tenant
-        run: node tools/tenant-cli/src/cli.ts prepare demo-homes
+      - name: Prepare app assets (Realtime Estates)
+        run: node tools/tenant-cli/src/cli.ts prepare realtime-estates
       - name: Analyse
         run: dart analyze --fatal-infos packages apps
       - name: Test core + tokens (pure Dart)
         run: |
           (cd packages/core && dart test)
           (cd packages/tokens && dart test)
-      - name: Test ui (Flutter)
-        run: (cd packages/ui && flutter test)
+      - name: Test ui + app (Flutter)
+        run: |
+          (cd packages/ui && flutter test)
+          (cd apps/realtor_app && flutter test)
       - name: Dart and TS emit identical CSS
         run: |
-          (cd tools/tenant-cli && npm ci --silent)
           for t in realtime-estates demo-homes; do
             node tools/tenant-cli/src/cli.ts css "$t" >/dev/null
             (cd packages/tokens && dart run realtor_tokens:css "$t") > "/tmp/$t.dart.css"
             diff -u "build/tokens/$t.css" "/tmp/$t.dart.css"
           done
-      - name: Test app
+
+  web:
+    name: Web build per tenant (proves the clone)
+    runs-on: ubuntu-latest
+    needs: dart
+    strategy:
+      matrix:
+        tenant: [realtime-estates, demo-homes]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/tenant-cli/package-lock.json
+      - run: npm ci
+        working-directory: tools/tenant-cli
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Prepare ${{ matrix.tenant }}
+        run: node tools/tenant-cli/src/cli.ts prepare ${{ matrix.tenant }}
+      - name: Platform folders, launcher icons, splash
+        working-directory: apps/realtor_app
         run: |
-          node tools/tenant-cli/src/cli.ts prepare realtime-estates
-          (cd apps/realtor_app && flutter test)
-      - name: Build web app for both tenants (proves the clone)
-        run: |
-          for t in realtime-estates demo-homes; do
-            node tools/tenant-cli/src/cli.ts prepare "$t"
-            (cd apps/realtor_app && flutter create . --platforms=web --project-name realtor_app >/dev/null && flutter build web --release)
-          done
+          flutter create . --platforms=android,ios,web --project-name realtor_app >/dev/null
+          dart run flutter_launcher_icons
+          dart run flutter_native_splash:create
+      - name: Build web
+        working-directory: apps/realtor_app
+        run: flutter build web --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-${{ matrix.tenant }}
+          path: apps/realtor_app/build/web
+          retention-days: 7

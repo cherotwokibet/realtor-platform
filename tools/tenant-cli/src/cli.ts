@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join } from 'node:path';
 import { validateTenants, repoRoot } from './validate.ts';
 import { tenantCss } from './css.ts';
+import { generateIcons } from './icons.ts';
+import { flutterConfigs } from './flutter-config.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -11,10 +13,21 @@ function usage(): never {
 
   validate [id...]   Check tenant files against the schema, assets and colour contrast
   css <id>           Write build/tokens/<id>.css for the share pages
-  prepare <id>       Copy the tenant file and brand assets into apps/realtor_app/assets/tenant
+  icons <id>         Generate app icons, splash, favicons, PWA and share images into brand/<id>/generated
+  prepare <id>       Generate icons, then copy the tenant file and logos into apps/realtor_app/assets/tenant
 
 Coming later: create <id>, deploy <id> <env>, build <id> <platform>`);
   process.exit(cmd ? 1 : 0);
+}
+
+function loadValid(id: string): any {
+  const bad = validateTenants(repoRoot(), [id]).find((r) => r.errors.length);
+  if (bad) {
+    console.error(`✗ ${bad.file} is invalid; run "tenant validate ${id}"`);
+    for (const e of bad.errors) console.error(`    ${e}`);
+    process.exit(1);
+  }
+  return JSON.parse(readFileSync(join(repoRoot(), 'tenants', `${id}.json`), 'utf8'));
 }
 
 switch (cmd) {
@@ -41,24 +54,37 @@ switch (cmd) {
     console.log(`wrote build/tokens/${id}.css`);
     break;
   }
+  case 'icons': {
+    const id = args[0];
+    if (!id) usage();
+    const t = loadValid(id);
+    const r = await generateIcons(repoRoot(), t);
+    console.log(`generated ${r.files.length} files → brand/${id}/generated`);
+    break;
+  }
   case 'prepare': {
     const id = args[0];
     if (!id) usage();
-    const bad = validateTenants(repoRoot(), [id]).find((r) => r.errors.length);
-    if (bad) {
-      console.error(`✗ ${bad.file} is invalid; run "tenant validate ${id}"`);
-      process.exit(1);
-    }
     const root = repoRoot();
-    const t = JSON.parse(readFileSync(join(root, 'tenants', `${id}.json`), 'utf8'));
+    const t = loadValid(id);
+    const r = await generateIcons(root, t);
     const out = join(root, 'apps', 'realtor_app', 'assets', 'tenant');
     rmSync(out, { recursive: true, force: true });
     mkdirSync(out, { recursive: true });
     writeFileSync(join(out, '.gitkeep'), '');
     writeFileSync(join(out, 'tenant.json'), JSON.stringify(t, null, 2));
-    const logos = Object.values<string>(t.brand.logo).filter((p) => !p.endsWith('.ai'));
-    for (const p of new Set([...logos, t.brand.appIcon])) copyFileSync(join(root, p), join(out, basename(p)));
-    console.log(`prepared ${id} → apps/realtor_app/assets/tenant (${logos.length} logo file(s))`);
+    // Fixed file names: the app refers to these, never to a realtor's own names.
+    for (const f of ['logo-horizontal.png', 'logo-horizontal-reverse.png', 'logo-stacked.png', 'mark.png']) {
+      copyFileSync(join(r.outDir, f), join(out, f));
+    }
+    // Launcher icon + splash inputs live in a subfolder, which Flutter does not bundle.
+    mkdirSync(join(out, 'icons'), { recursive: true });
+    for (const f of r.files.filter((f) => f.endsWith('.png'))) copyFileSync(join(r.outDir, f), join(out, 'icons', f));
+    const app = join(root, 'apps', 'realtor_app');
+    const cfg = flutterConfigs(t);
+    writeFileSync(join(app, 'flutter_launcher_icons.yaml'), cfg.launcherIcons);
+    writeFileSync(join(app, 'flutter_native_splash.yaml'), cfg.nativeSplash);
+    console.log(`prepared ${id} → apps/realtor_app/assets/tenant (icons in brand/${id}/generated)`);
     break;
   }
   default:
