@@ -209,3 +209,32 @@ jobs:
         run: npx --yes firebase-tools@15 emulators:exec --only firestore,storage --project demo-realtor "npm --prefix functions run test:rules"
       - name: Callable API + media pipeline tests
         run: npx --yes firebase-tools@15 emulators:exec --only firestore,storage --project demo-realtor "npm --prefix functions run test:emulator"
+
+  search:
+    name: Typesense search (integration)
+    runs-on: ubuntu-latest
+    services:
+      typesense:
+        image: typesense/typesense:29.0
+        ports:
+          - 8108:8108
+        env:
+          TYPESENSE_API_KEY: ci-only-not-a-secret
+          TYPESENSE_DATA_DIR: /tmp
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci
+        working-directory: functions
+      - name: Wait for Typesense
+        run: for i in $(seq 1 30); do curl -fs localhost:8108/health && exit 0; sleep 2; done; exit 1
+      - name: Index the seed and search it
+        working-directory: functions
+        env:
+          TYPESENSE_HOST: localhost
+          TYPESENSE_API_KEY: ci-only-not-a-secret
+        run: npm run test:typesense

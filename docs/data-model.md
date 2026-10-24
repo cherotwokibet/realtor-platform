@@ -56,6 +56,14 @@ Agents upload raw photos to `uploads/agents/<agentId>/listings/<listingId>/` (ma
 
 Variants under `media/` are public and cached for a year. Video (ffmpeg → HLS) comes next.
 
+## Search (P2-s05, D4)
+
+Live listings are mirrored into a Typesense collection named `<TENANT_ID>_listings` by the `onListingWrite` trigger. Anything that stops being live (pending, expired, let, sold, deleted) is removed. The search document carries the facet fields (type, beds, area, amenities, verified, priceKES), a geopoint, `featured`, and the thumb and blurhash of the first photo.
+
+`functions/src/search/schema.ts` → `toSearchParams()` turns the shared filter model into a Typesense query: purpose, types, areas, minimum beds, price range, amenities, verified only, radius around a point, sort (newest with featured first, price ascending or descending, nearest) and paging. The share-page URLs and app deep links use the same model. Values are quoted so user input can't widen a filter.
+
+Deploy settings per tenant project: `TENANT_ID` and `TYPESENSE_HOST` (params in `functions/.env.<project>`), and the `TYPESENSE_API_KEY` secret in Secret Manager. CI runs the integration test against a Typesense container: facets, filters, a 2 km radius, typo tolerance, and under 100 ms.
+
 ## Indexes
 
 `firestore.indexes.json` covers the first queries: live listings in an area by price, all listings in an area by price, and an agent's leads newest first. Search with facets moves to Typesense (P2-s05, D4).
