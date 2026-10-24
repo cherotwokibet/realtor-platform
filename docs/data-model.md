@@ -41,6 +41,19 @@ Inputs are validated with zod in `functions/src/api/`, and the stored document i
 
 Still to come in P2-s03: `bookViewing`, plus rate limits on `createLead` (P6 fraud controls).
 
+## Media pipeline (P2-s04, D6)
+
+Agents upload raw photos to `uploads/agents/<agentId>/listings/<listingId>/` (managers to `uploads/staff/<uid>/listings/<listingId>/`). `storage.rules` allows images under 20 MB into your own folder only. The `onListingPhoto` trigger then:
+
+- checks the listing exists and belongs to that agent
+- rejects photos under 1024 px on the long edge, recording `lastMediaError` on the listing
+- applies EXIF rotation and drops all metadata (GPS)
+- writes WebP variants `thumb` 320, `card` 800 and `full` 1600, with the tenant mark (`brand/watermark.png`, if present) on card and full
+- adds `{kind: 'photo', variants, blurhash, width, height}` to `media`
+- deletes the raw upload
+
+Variants under `media/` are public and cached for a year. Video (ffmpeg → HLS) comes next.
+
 ## Indexes
 
 `firestore.indexes.json` covers the first queries: live listings in an area by price, all listings in an area by price, and an agent's leads newest first. Search with facets moves to Typesense (P2-s05, D4).

@@ -1,7 +1,34 @@
 rules_version = '2';
+// Raw listing photos go to uploads/, under the uploader's own folder; the
+// media pipeline (functions/src/media) checks the listing belongs to that
+// agent, writes public WebP variants under media/ and deletes the upload.
+// Clients never write media/ or brand/. Tests: functions/src/rules/.
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
+    function role() { return request.auth == null ? '' : request.auth.token.get('role', ''); }
+    function isManager() { return role() in ['owner', 'manager']; }
+    function isPhoto() {
+      return request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
+    }
+
+    match /uploads/agents/{agentId}/listings/{listingId}/{file} {
+      allow create: if role() == 'agent' && request.auth.token.get('agentId', '') == agentId && isPhoto();
+    }
+
+    match /uploads/staff/{uid}/listings/{listingId}/{file} {
+      allow create: if isManager() && request.auth.uid == uid && isPhoto();
+    }
+
+    match /media/{path=**} {
+      allow read: if true;
+    }
+
+    match /brand/{path=**} {
+      allow read: if true;
+    }
+
+    match /{path=**} {
       allow read, write: if false;
     }
   }
