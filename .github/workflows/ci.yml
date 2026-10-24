@@ -115,9 +115,13 @@ jobs:
           flutter create . --platforms=android,ios,web --project-name realtor_app >/dev/null
           dart run flutter_launcher_icons
           dart run flutter_native_splash:create
-      - name: Build web
+          node ../../tools/tenant-cli/src/cli.ts web ${{ matrix.tenant }}
+      - name: Build web (WebAssembly, JS fallback)
         working-directory: apps/realtor_app
-        run: flutter build web --release
+        run: |
+          flutter build web --release --wasm
+          ! grep -q "A new Flutter project" build/web/index.html
+          test -f build/web/main.dart.wasm
       - uses: actions/upload-artifact@v4
         with:
           name: web-${{ matrix.tenant }}
