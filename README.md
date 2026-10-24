@@ -67,6 +67,10 @@ flutter run --flavor demoHomes
 
 Each tenant becomes a flavor (`realtime-estates` → `realtimeEstates`) with its own application ID, launcher name, icon and splash. Its tenant file, logos and fonts go to `assets/flavors/<flavor>/` and are bundled only into that flavor; the app picks the folder from `appFlavor`. `flavors` also empties `assets/tenant/` so no other realtor's files leak into a flavor build (run `prepare <id>` again for web). It rewrites a marked block in `pubspec.yaml`: don't commit that block (a tenant-cli test fails if you do). iOS schemes and per-flavor `firebase_options` come once the Firebase projects exist.
 
+## Feature flags
+
+`features` in the tenant file switches parts of the product on or off. In code, every feature-specific widget sits inside `FeatureGate(feature: Feature.x, ...)` (packages/ui), and every top-level section is an `AppSection` in `apps/realtor_app/lib/src/sections.dart`. A section whose feature is off has no route or menu entry, and deep links to it go home. To add a feature, add the key to the schema, `Feature` and `Features` in packages/core, then gate its UI. Tests in `apps/realtor_app/test/feature_flags_test.dart` switch each one off and check it disappears.
+
 ## Tests
 
 ```powershell

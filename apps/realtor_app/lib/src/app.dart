@@ -5,11 +5,24 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'home_screen.dart';
 import 'providers.dart';
+import 'sections.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final features = ref.watch(tenantProvider).features;
+  final sections = enabledSections(features);
   return GoRouter(
+    redirect: (context, state) => redirectForDisabled(features, state.uri.path),
     routes: [
-      GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+      ShellRoute(
+        builder: (context, state, child) => _SectionShell(sections: sections, location: state.uri.path, child: child),
+        routes: [
+          for (final s in sections)
+            GoRoute(
+              path: s.path,
+              builder: (context, state) => s.path == '/' ? const HomeScreen() : PlaceholderScreen(title: s.label),
+            ),
+        ],
+      ),
       // Share pages hand visitors to these paths (P3): keep them stable.
       GoRoute(
         path: '/listing/:slug',
@@ -36,6 +49,27 @@ class RealtorApp extends ConsumerWidget {
         debugShowCheckedModeBanner: false,
         theme: buildBrandTheme(tenant),
         routerConfig: ref.watch(routerProvider),
+      ),
+    );
+  }
+}
+
+/// Bottom navigation built from the tenant's enabled sections.
+class _SectionShell extends StatelessWidget {
+  const _SectionShell({required this.sections, required this.location, required this.child});
+  final List<AppSection> sections;
+  final String location;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final i = sections.indexWhere((s) => s.path == location);
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: i < 0 ? 0 : i,
+        onDestinationSelected: (i) => context.go(sections[i].path),
+        destinations: [for (final s in sections) NavigationDestination(icon: Icon(s.icon), label: s.label)],
       ),
     );
   }
