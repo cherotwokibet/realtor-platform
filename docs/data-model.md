@@ -1,5 +1,7 @@
 # Data model v2
 
+Approved by Boniface on 24 Oct 2026.
+
 One Firestore database per tenant project (D1), so documents carry no tenant id. Schemas live in `functions/src/model/schema.ts` (zod). Functions validate every write against them, and the emulator seed (`functions/src/seed/`) must pass them too.
 
 **Who writes:** clients read public data and create only what a visitor can create (a lead, a viewing request). Every field marked *Functions* is set only by Cloud Functions with the Admin SDK (D7). The security rules that enforce this are P2 "Security rules + tests"; until then the rules deny everything.
