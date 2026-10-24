@@ -11,6 +11,7 @@ function scratch(): string {
   const root = mkdtempSync(join(tmpdir(), 'create-'));
   cpSync(join(repoRoot(), 'tenants'), join(root, 'tenants'), { recursive: true });
   cpSync(join(repoRoot(), 'brand'), join(root, 'brand'), { recursive: true });
+  cpSync(join(repoRoot(), 'fonts'), join(root, 'fonts'), { recursive: true });
   return root;
 }
 
