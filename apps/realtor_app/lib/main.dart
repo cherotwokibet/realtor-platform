@@ -7,7 +7,7 @@ import 'src/providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final tenant = await loadTenant();
+  final (tenant, _) = await (loadTenant(), loadTenantFonts()).wait;
   runApp(ProviderScope(
     overrides: [tenantProvider.overrideWithValue(tenant)],
     child: const RealtorApp(),

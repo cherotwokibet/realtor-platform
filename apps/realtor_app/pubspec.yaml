@@ -29,3 +29,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/tenant/
+    - assets/tenant/fonts/
+    # BEGIN tenant flavors (written by `tenant flavors`; keep this block empty in git)
+    # END tenant flavors
