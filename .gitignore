@@ -37,3 +37,9 @@ Thumbs.db
 brand/*/generated/
 apps/realtor_app/flutter_launcher_icons.yaml
 apps/realtor_app/flutter_native_splash.yaml
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan

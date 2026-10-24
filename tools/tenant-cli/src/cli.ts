@@ -5,6 +5,7 @@ import { validateTenants, repoRoot } from './validate.ts';
 import { tenantCss } from './css.ts';
 import { generateIcons } from './icons.ts';
 import { flutterConfigs } from './flutter-config.ts';
+import { createTenant } from './create.ts';
 import { tenantFontFiles } from './fonts.ts';
 import {
   flavorName,
@@ -27,7 +28,10 @@ function usage(): never {
   flavors [id...]    One Android flavor per tenant (default: all): assets/flavors/<flavor>/, flavor-only
                      pubspec assets, per-flavor icon + splash configs, productFlavors in android/app
 
-Coming later: create <id>, deploy <id> <env>, build <id> <platform>, iOS flavors`);
+  create <id> <name>  Scaffold tenants/<id>.json and placeholder brand/<id>/ art for a new realtor
+                     (provisioning: infra/terraform/README.md)
+
+Coming later: deploy <id> <env>, build <id> <platform>, iOS flavors`);
   process.exit(cmd ? 1 : 0);
 }
 
@@ -92,6 +96,23 @@ switch (cmd) {
     mkdirSync(out, { recursive: true });
     writeFileSync(join(out, `${id}.css`), tenantCss(t));
     console.log(`wrote build/tokens/${id}.css`);
+    break;
+  }
+  case 'create': {
+    const [id, ...nameParts] = args;
+    if (!id || !nameParts.length) usage();
+    try {
+      createTenant(repoRoot(), id, nameParts.join(' '));
+    } catch (e) {
+      console.error(`✗ ${(e as Error).message}`);
+      process.exit(1);
+    }
+    loadValid(id);
+    console.log(`created tenants/${id}.json and brand/${id}/ (placeholder art)
+next:
+  1. replace TBC / example.com values, colours, fonts and the SVGs in brand/${id}/
+  2. node tools/tenant-cli/src/cli.ts validate ${id}
+  3. provision (Boniface, with billing): see infra/terraform/README.md`);
     break;
   }
   case 'icons': {
