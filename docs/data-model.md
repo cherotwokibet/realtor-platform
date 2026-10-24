@@ -4,7 +4,7 @@ Approved by Boniface on 24 Oct 2026.
 
 One Firestore database per tenant project (D1), so documents carry no tenant id. Schemas live in `functions/src/model/schema.ts` (zod). Functions validate every write against them, and the emulator seed (`functions/src/seed/`) must pass them too.
 
-**Who writes:** clients read public data and create only what a visitor can create (a lead, a viewing request). Every field marked *Functions* is set only by Cloud Functions with the Admin SDK (D7). The security rules that enforce this are P2 "Security rules + tests"; until then the rules deny everything.
+**Who writes:** clients read public data and create only what a visitor can create (a lead, a viewing request). Every field marked *Functions* is set only by Cloud Functions with the Admin SDK (D7). `firestore.rules` enforces this, and `functions/src/rules/firestore.rules-test.ts` tests every collection in the emulator (`npm --prefix functions run test:rules` inside `firebase emulators:exec`). Staff roles are custom claims (`role`: owner / manager / agent, plus `agentId` for agents) set by a Function. Agents read only their own leads, viewings and draft listings. The only client write is a signed-in user's own saved searches, and even then only `filters` and `channels` can change.
 
 ## Conventions
 

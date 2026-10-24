@@ -188,7 +188,7 @@ jobs:
         working-directory: infra/terraform/tenant
 
   emulator:
-    name: Firestore emulator seed (data model v2)
+    name: Firestore emulator (seed + security rules)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -205,3 +205,5 @@ jobs:
         working-directory: functions
       - name: Seed the emulator and read it back
         run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed"
+      - name: Security rules tests
+        run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run test:rules"
