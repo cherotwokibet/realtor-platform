@@ -139,3 +139,63 @@ resource "google_secret_manager_secret" "refs" {
   }
   depends_on = [google_project_service.apis]
 }
+
+# Share pages (D2): a Cloud Run service that only reads Firestore. Created once
+# an image is given; Firebase Hosting rewrites the share domain to it.
+resource "google_service_account" "share_pages" {
+  project      = google_project.this.project_id
+  account_id   = "share-pages"
+  display_name = "Share pages (read-only Firestore)"
+  depends_on   = [google_project_service.apis]
+}
+
+resource "google_project_iam_member" "share_pages_firestore" {
+  project = google_project.this.project_id
+  role    = "roles/datastore.viewer"
+  member  = "serviceAccount:${google_service_account.share_pages.email}"
+}
+
+resource "google_cloud_run_v2_service" "share_pages" {
+  count               = var.share_pages_image == null ? 0 : 1
+  project             = google_project.this.project_id
+  name                = "share-pages"
+  location            = local.region
+  ingress             = "INGRESS_TRAFFIC_ALL"
+  labels              = local.labels
+  deletion_protection = var.env == "prod"
+
+  template {
+    service_account = google_service_account.share_pages.email
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 3
+    }
+    containers {
+      image = var.share_pages_image
+      env {
+        name  = "FIRESTORE_PROJECT"
+        value = google_project.this.project_id
+      }
+      resources {
+        limits   = { cpu = "1", memory = "256Mi" }
+        cpu_idle = true
+      }
+      startup_probe {
+        http_get {
+          path = "/healthz"
+        }
+      }
+    }
+  }
+  depends_on = [google_project_iam_member.share_pages_firestore]
+}
+
+# Public pages: anyone (and Hosting) may call the service.
+resource "google_cloud_run_v2_service_iam_member" "share_pages_public" {
+  count    = length(google_cloud_run_v2_service.share_pages)
+  project  = google_project.this.project_id
+  location = local.region
+  name     = google_cloud_run_v2_service.share_pages[0].name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
