@@ -19,7 +19,7 @@ One Firestore database per tenant project (D1), so documents carry no tenant id.
 | Collection | Key fields | Written by |
 |---|---|---|
 | `listings/{id}` | title, slug, purpose (rent / sale / short-stay), type (bedsitter … commercial), beds, baths, priceKES, depositMonths (required for rent), serviceChargeKES, geo, area (→ areas slug), estate, amenities[], utilities {water, electricity, wifi}, media[] {kind, variants, blurhash}, agentId | Agents propose via Functions (`submitListing`, P2-s03) |
-| ″ | status (draft → pending → live → expired / let / sold, moves in `listing-rules.ts`), verifiedAt, expiresAt, featuredUntil, stats {views, leads}, createdAt, updatedAt | *Functions* |
+| ″ | status (draft → pending → live → expired / let / sold, moves in `listing-rules.ts`), verifiedAt, expiresAt, featuredUntil, stats {views, leads, calls, whatsapps}, createdAt, updatedAt | *Functions* |
 | `agents/{id}` | name, photo, earbNo, phone, whatsapp, languages (en / sw), rating, responseMins, active | Admin via Functions; rating and responseMins *Functions* |
 | `leads/{id}` | listingId, agentId, channel (call / whatsapp / form / viewing), contact {name, phone, email}, message, stage (new → … → won / lost), **consentAt**, **retainUntil**, createdAt | Created by `createLead`; stage moves by agents via Functions |
 | `viewings/{id}` | listingId, agentId, slot, client {name, phone}, status (requested / confirmed / done / no-show / cancelled), feeKES, paymentId, createdAt | Requested by clients via `bookViewing`; status *Functions* |
@@ -37,6 +37,7 @@ Inputs are validated with zod in `functions/src/api/`, and the stored document i
 | Callable | Who | What it does |
 |---|---|---|
 | `createLead` | anyone, with the consent tick | Lead on a **live** listing, assigned to that listing's agent; sets `consentAt` and `retainUntil` (24 months, D12) and adds 1 to the listing's `stats.leads` |
+| `logContactTap` | anyone | Adds 1 to a **live** listing's `stats.calls` or `stats.whatsapps` (D13). Stores no personal data and no lead. Counter-only writes do not re-sync search |
 | `updateLeadStage` | the lead's agent, or a manager | new → contacted → viewing → offer → won, any stage → lost, and lost → contacted |
 | `submitListing` | agents (as themselves), managers (for any agent) | Create or edit → `pending`; sets slug (unique), geohash, stats and timestamps; the area must exist |
 | `moderateListing` | managers | approve (live, verified for 30 days), reject (needs a reason), expire, let, sold; status moves from `listing-rules.ts` |

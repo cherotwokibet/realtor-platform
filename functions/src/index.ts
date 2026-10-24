@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, updateLeadStage, submitListing, moderateListing.
+ * Callables: createLead, logContactTap, updateLeadStage, submitListing, moderateListing.
  *
  * Planned (see tracker):
  *   P2  onMediaUpload   -> ffmpeg HLS for video (photos done: onListingPhoto)
@@ -18,7 +18,7 @@ import { onObjectFinalized } from 'firebase-functions/v2/storage';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { Client as Typesense } from 'typesense';
-import { syncListing } from './search/sync';
+import { searchRelevantChange, syncListing } from './search/sync';
 import { getStorage } from 'firebase-admin/storage';
 import { handleListingUpload } from './media/upload';
 import { callerFrom } from './api/auth';
@@ -37,6 +37,7 @@ export const health = onRequest((_req, res) => {
 // Callable API (P2-s03). Inputs are zod-validated in ./api; the clients
 // never write these collections directly (see firestore.rules).
 export const createLead = onCall((req) => leads.createLead(getFirestore(), req.data));
+export const logContactTap = onCall((req) => leads.logContactTap(getFirestore(), req.data));
 export const updateLeadStage = onCall((req) => leads.updateLeadStage(getFirestore(), callerFrom(req.auth), req.data));
 export const submitListing = onCall((req) => listings.submitListing(getFirestore(), callerFrom(req.auth), req.data));
 export const moderateListing = onCall((req) => listings.moderateListing(getFirestore(), callerFrom(req.auth), req.data));
@@ -53,6 +54,7 @@ const TYPESENSE_HOST = defineString('TYPESENSE_HOST');
 const TYPESENSE_API_KEY = defineSecret('TYPESENSE_API_KEY');
 
 export const onListingWrite = onDocumentWritten({ document: 'listings/{id}', secrets: [TYPESENSE_API_KEY] }, async (event) => {
+  if (!searchRelevantChange(event.data?.before.data(), event.data?.after.data())) return;
   const client = new Typesense({
     nodes: [{ host: TYPESENSE_HOST.value(), port: 443, protocol: 'https' }],
     apiKey: TYPESENSE_API_KEY.value(),

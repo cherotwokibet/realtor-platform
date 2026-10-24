@@ -43,6 +43,22 @@ export async function createLead(db: Firestore, input: unknown, now = new Date()
   return { leadId: leadRef.id };
 }
 
+export const contactTapInput = z.object({ listingId: docId, channel: z.enum(['call', 'whatsapp']) });
+
+/**
+ * A call or WhatsApp tap (D13). It carries no contact details, so it is
+ * counted on the listing instead of stored as a lead; the conversation
+ * itself happens on the phone or in WhatsApp.
+ */
+export async function logContactTap(db: Firestore, input: unknown): Promise<{ counted: true }> {
+  const req = parseInput(contactTapInput, input);
+  const ref = db.collection('listings').doc(req.listingId);
+  const snap = await ref.get();
+  if (!snap.exists || snap.get('status') !== 'live') throw new HttpsError('not-found', 'listing is not available');
+  await ref.update({ [`stats.${req.channel === 'call' ? 'calls' : 'whatsapps'}`]: FieldValue.increment(1) });
+  return { counted: true };
+}
+
 type Stage = z.infer<typeof leadStage>;
 const NEXT: Record<Stage, Stage[]> = {
   new: ['contacted', 'lost'],
