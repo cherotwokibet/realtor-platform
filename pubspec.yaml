@@ -8,6 +8,7 @@ workspace:
   - packages/tokens
   - packages/ui
   - apps/realtor_app
+  - apps/share_pages
 
 dev_dependencies:
   melos: ^7.0.0

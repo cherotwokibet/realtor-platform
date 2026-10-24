@@ -1,0 +1,103 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:jaspr/server.dart';
+import 'package:realtor_core/realtor_core.dart';
+import 'package:share_pages/share_pages.dart';
+import 'package:shelf/shelf.dart' as shelf;
+import 'package:test/test.dart';
+
+TenantConfig tenant(String id) =>
+    TenantConfig.fromJson(jsonDecode(File('../../tenants/$id.json').readAsStringSync()) as Map<String, Object?>);
+
+const flat = ShareListing(
+  id: 'listing-001',
+  slug: '2-bedroom-apartment-kilimani',
+  title: '2 bedroom apartment, Kilimani',
+  purpose: Purpose.rent,
+  type: 'apartment',
+  beds: 2,
+  baths: 2,
+  priceKES: 65000,
+  depositMonths: 2,
+  area: 'kilimani',
+  estate: 'Argwings Kodhek',
+  lat: -1.2901,
+  lng: 36.7846,
+  amenities: ['parking', 'borehole'],
+  photos: [(card: 'media/listings/listing-001/abc/card.webp', full: 'media/listings/listing-001/abc/full.webp')],
+  verified: true,
+);
+
+Future<shelf.Response> get(String path, {String tenantId = 'realtime-estates', List<ShareListing> listings = const [flat]}) =>
+    Future.value(shareHandler(tenant(tenantId), InMemoryListingSource(listings))(shelf.Request('GET', Uri.parse('https://x$path'))));
+
+String? attr(String html, String property) =>
+    RegExp('<meta property="$property" content="([^"]*)"').firstMatch(html)?.group(1);
+
+void main() {
+  setUpAll(Jaspr.initializeApp);
+
+  test('a listing page is plain HTML with its own title, price and photo', () async {
+    final r = await get('/listing/2-bedroom-apartment-kilimani');
+    expect(r.statusCode, 200);
+    expect(r.headers['cache-control'], contains('s-maxage'));
+    final html = await r.readAsString();
+    expect(html, contains('<h1>2 bedroom apartment, Kilimani</h1>'));
+    expect(html, contains('KES 65,000'));
+    expect(html, contains('<html lang="en">'));
+    expect(html, matches(RegExp(r'<link (?=[^>]*rel="canonical")(?=[^>]*href="https://realtimeestates.co.ke/listing/2-bedroom-apartment-kilimani")')));
+    expect(html, contains('Argwings Kodhek, Kilimani'));
+    expect(html, contains('href="https://app.realtimeestates.co.ke/listing/2-bedroom-apartment-kilimani"'), reason: 'Open in app');
+  });
+
+  test('WhatsApp / Open Graph preview shows the photo and price', () async {
+    final html = await (await get('/listing/2-bedroom-apartment-kilimani')).readAsString();
+    expect(attr(html, 'og:title'), contains('KES 65,000 a month'));
+    expect(attr(html, 'og:image'), 'https://firebasestorage.googleapis.com/v0/b/rte-realtor-prod-media/o/media%2Flistings%2Flisting-001%2Fabc%2Ffull.webp?alt=media');
+    expect(attr(html, 'og:url'), 'https://realtimeestates.co.ke/listing/2-bedroom-apartment-kilimani');
+  });
+
+  test('JSON-LD is a valid RealEstateListing', () async {
+    final html = await (await get('/listing/2-bedroom-apartment-kilimani')).readAsString();
+    final json = RegExp(r'<script type="application/ld\+json">(.*?)</script>', dotAll: true).firstMatch(html)!.group(1)!;
+    final ld = jsonDecode(json) as Map<String, Object?>;
+    expect(ld['@type'], 'RealEstateListing');
+    final offer = ld['offers']! as Map<String, Object?>;
+    expect(offer['price'], 65000);
+    expect(offer['priceCurrency'], 'KES');
+    expect((ld['about']! as Map)['numberOfBedrooms'], 2);
+  });
+
+  test('page stays under the 100 KB doneWhen budget', () async {
+    final r = await get('/listing/2-bedroom-apartment-kilimani');
+    expect((await r.read().expand((c) => c).toList()).length, lessThan(100 * 1024));
+  });
+
+  test('user text is escaped, and cannot break out of the JSON-LD script', () async {
+    const evil = ShareListing(
+      id: 'x', slug: 'evil', title: '<img src=x onerror=alert(1)> </script><script>alert(2)</script>',
+      purpose: Purpose.sale, type: 'land', beds: 0, baths: 0, priceKES: 1, area: 'ruaka', lat: 0, lng: 0,
+    );
+    final html = await (await get('/listing/evil', listings: [evil])).readAsString();
+    expect(html, isNot(contains('<img src=x')));
+    expect(html, isNot(contains('<script>alert(2)')));
+    expect('</script>'.allMatches(html).length, 1, reason: 'only the JSON-LD script closes');
+    final json = RegExp(r'<script type="application/ld\+json">(.*?)</script>', dotAll: true).firstMatch(html)!.group(1)!;
+    expect((jsonDecode(json) as Map)['name'], evil.title, reason: 'escaping keeps the data intact');
+  });
+
+  test('unknown and malformed slugs are 404s', () async {
+    expect((await get('/listing/no-such-home')).statusCode, 404);
+    expect((await get('/listing/Bad%20Slug')).statusCode, 404);
+  });
+
+  test('the same page re-brands per tenant with no code change', () async {
+    final a = await (await get('/listing/2-bedroom-apartment-kilimani')).readAsString();
+    final b = await (await get('/listing/2-bedroom-apartment-kilimani', tenantId: 'demo-homes')).readAsString();
+    expect(a, contains('--color-primary: #5E0202'));
+    expect(b, contains('--color-primary: #0F5257'));
+    expect(b, contains('Demo Homes'));
+    expect(b, isNot(contains('Realtime')));
+  });
+}
