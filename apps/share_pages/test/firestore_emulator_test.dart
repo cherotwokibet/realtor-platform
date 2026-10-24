@@ -41,4 +41,18 @@ void main() {
     expect(r.statusCode, 200);
     expect(await r.readAsString(), contains('Bedsitter near Kasarani stadium'));
   });
+
+  test('area pages and the sitemap come from the emulator too', () async {
+    final tenant = TenantConfig.fromJson(
+      jsonDecode(File('../../tenants/demo-homes.json').readAsStringSync()) as Map<String, Object?>,
+    );
+    final handler = shareHandler(tenant, source);
+    final area = await handler(shelf.Request('GET', Uri.parse('https://x/area/kasarani')));
+    expect(area.statusCode, 200);
+    final html = await area.readAsString();
+    expect(html, contains('Homes in Kasarani'));
+    expect(html, contains('Bedsitter near Kasarani stadium'));
+    final xml = await (await handler(shelf.Request('GET', Uri.parse('https://x/sitemap.xml')))).readAsString();
+    expect('<url>'.allMatches(xml).length, 1 + 8 + 12, reason: 'home + 8 areas + 12 live listings');
+  });
 }

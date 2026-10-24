@@ -36,15 +36,42 @@ class ShareListing {
   final DateTime? updatedAt;
 }
 
-/// Where share pages read listings from: Firestore in production, a fixed
-/// list in tests and local runs.
+/// An area guide (areas/{slug}).
+class ShareArea {
+  const ShareArea({
+    required this.slug,
+    required this.name,
+    required this.county,
+    required this.lat,
+    required this.lng,
+    this.guide = '',
+    this.medianRentKES,
+  });
+  final String slug, name, county, guide;
+  final double lat, lng;
+  final int? medianRentKES;
+}
+
+/// One URL in sitemap.xml.
+typedef SitemapEntry = ({String path, DateTime? lastModified});
+
+/// Where share pages read from: Firestore in production, fixed lists in
+/// tests and local runs.
 abstract interface class ListingSource {
   Future<ShareListing?> bySlug(String slug);
+  Future<ShareArea?> area(String slug);
+
+  /// Live listings in an area, newest first, at most [limit].
+  Future<List<ShareListing>> liveInArea(String slug, {int limit = 24});
+
+  /// Every live listing and every area.
+  Future<List<SitemapEntry>> sitemapEntries();
 }
 
 class InMemoryListingSource implements ListingSource {
-  InMemoryListingSource(this.listings);
+  InMemoryListingSource(this.listings, {this.areas = const []});
   final List<ShareListing> listings;
+  final List<ShareArea> areas;
 
   @override
   Future<ShareListing?> bySlug(String slug) async {
@@ -53,4 +80,22 @@ class InMemoryListingSource implements ListingSource {
     }
     return null;
   }
+
+  @override
+  Future<ShareArea?> area(String slug) async {
+    for (final a in areas) {
+      if (a.slug == slug) return a;
+    }
+    return null;
+  }
+
+  @override
+  Future<List<ShareListing>> liveInArea(String slug, {int limit = 24}) async =>
+      listings.where((l) => l.area == slug).take(limit).toList();
+
+  @override
+  Future<List<SitemapEntry>> sitemapEntries() async => [
+        for (final a in areas) (path: '/area/${a.slug}', lastModified: null),
+        for (final l in listings) (path: '/listing/${l.slug}', lastModified: l.updatedAt),
+      ];
 }
