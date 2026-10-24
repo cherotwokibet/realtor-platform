@@ -35,6 +35,7 @@ class AreaPage extends StatelessComponent {
         'url': canonical,
         'address': {'@type': 'PostalAddress', 'addressLocality': area.name, 'addressRegion': area.county, 'addressCountry': 'KE'},
         'geo': {'@type': 'GeoCoordinates', 'latitude': area.lat, 'longitude': area.lng},
+        if (area.guide.isNotEmpty) 'description': area.guide,
         'subjectOf': {
           '@type': 'ItemList',
           'itemListElement': [
@@ -48,6 +49,10 @@ class AreaPage extends StatelessComponent {
         p(classes: 'facts', [Component.text('${area.county} · ${listings.length} live ${listings.length == 1 ? 'listing' : 'listings'}')]),
         if (area.medianRentKES != null) p([Component.text('Typical rent: ${formatKes(area.medianRentKES!)} a month')]),
         if (area.guide.isNotEmpty) p([Component.text(area.guide)]),
+        if (area.amenities.isNotEmpty) ...[
+          const h2([Component.text('Nearby')]),
+          ul([for (final am in area.amenities) li([Component.text(am)])]),
+        ],
         if (listings.isNotEmpty) ...[
           const h2([Component.text('Available now')]),
           listingCards(listings),

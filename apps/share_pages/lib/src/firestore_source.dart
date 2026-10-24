@@ -175,6 +175,7 @@ ShareArea areaFromDocument(Map<String, Object?> doc) {
     name: f['name']! as String,
     county: f['county']! as String,
     guide: (f['guide'] as String?) ?? '',
+    amenities: [for (final a in (f['amenities'] as List<Object?>?) ?? const []) a! as String],
     lat: (centre['lat']! as num).toDouble(),
     lng: (centre['lng']! as num).toDouble(),
     medianRentKES: stats['medianRentKES'] as int?,

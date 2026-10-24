@@ -20,6 +20,7 @@ const kilimani = ShareArea(
   lat: -1.2921,
   lng: 36.7856,
   guide: 'Leafy, central, close to Yaya Centre.',
+  amenities: ['Yaya Centre', 'Nairobi Hospital nearby'],
   medianRentKES: 75000,
 );
 
@@ -36,6 +37,7 @@ void main() {
     final html = await r.readAsString();
     expect(html, contains('<h1>Homes in Kilimani</h1>'));
     expect(html, contains('Typical rent: KES 75,000 a month'));
+    expect(html, contains('<li>Yaya Centre</li>'));
     expect(html, contains('href="/listing/2-bedroom-apartment-kilimani"'));
     expect(html, contains('href="https://app.realtimeestates.co.ke/rent/kilimani"'));
     final ld = jsonDecode(RegExp(r'<script type="application/ld\+json">(.*?)</script>', dotAll: true).firstMatch(html)!.group(1)!) as Map;
