@@ -186,3 +186,22 @@ jobs:
         working-directory: infra/terraform/tenant
       - run: terraform validate
         working-directory: infra/terraform/tenant
+
+  emulator:
+    name: Firestore emulator seed (data model v2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+        working-directory: functions
+      - name: Seed the emulator and read it back
+        run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed"
