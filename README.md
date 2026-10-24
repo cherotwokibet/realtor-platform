@@ -23,8 +23,9 @@ packages/ui          Flutter theme + shared widgets
 functions/           Cloud Functions, TypeScript, 2nd gen
 tenants/             one JSON per realtor + JSON Schema
 brand/               logos and icons per realtor
+fonts/               bundled font families (OFL), copied per tenant by prepare
 tools/tenant-cli     validate / css / prepare (create, deploy, build later)
-infra/terraform      per-tenant Firebase + Typesense            (P1)
+infra/terraform      per-tenant Firebase projects: module + root config (never applied by CI)
 ```
 
 ## First-time setup (Windows)
@@ -48,9 +49,27 @@ dart run flutter_native_splash:create      # splash from the tenant
 flutter run -d chrome
 ```
 
-`prepare` generates the realtor's icons, splash, favicons, PWA and share images from the SVGs in `brand/<id>/` (output in `brand/<id>/generated/`, not committed) and writes `flutter_launcher_icons.yaml` / `flutter_native_splash.yaml` for that realtor. The platform folders (`android/`, `ios/`, `web/`) are generated per tenant and not committed until P1 "Flutter flavors generator" makes them tenant-neutral.
+`prepare` generates the realtor's icons, splash, favicons, PWA and share images from the SVGs in `brand/<id>/` (output in `brand/<id>/generated/`, not committed) and writes `flutter_launcher_icons.yaml` / `flutter_native_splash.yaml` for that realtor. The platform folders (`android/`, `ios/`, `web/`) are generated and never committed; tenant-cli writes the tenant-specific parts into them.
 
 Swap to the dummy tenant to see the clone: `node tools\tenant-cli\src\cli.ts prepare demo-homes`, then hot-restart.
+
+### Android flavors (several realtors on one phone)
+
+```powershell
+cd apps\realtor_app
+flutter create . --platforms=android --project-name realtor_app
+node ..\..\tools\tenant-cli\src\cli.ts flavors         # every tenant; or: flavors realtime-estates
+flutter pub get
+dart run flutter_launcher_icons
+dart run flutter_native_splash:create --flavors demoHomes,realtimeEstates
+flutter run --flavor demoHomes
+```
+
+Each tenant becomes a flavor (`realtime-estates` → `realtimeEstates`) with its own application ID, launcher name, icon and splash. Its tenant file, logos and fonts go to `assets/flavors/<flavor>/` and are bundled only into that flavor; the app picks the folder from `appFlavor`. `flavors` also empties `assets/tenant/` so no other realtor's files leak into a flavor build (run `prepare <id>` again for web). It rewrites a marked block in `pubspec.yaml`: don't commit that block (a tenant-cli test fails if you do). iOS schemes and per-flavor `firebase_options` come once the Firebase projects exist.
+
+## Feature flags
+
+`features` in the tenant file switches parts of the product on or off. In code, every feature-specific widget sits inside `FeatureGate(feature: Feature.x, ...)` (packages/ui), and every top-level section is an `AppSection` in `apps/realtor_app/lib/src/sections.dart`. A section whose feature is off has no route or menu entry, and deep links to it go home. To add a feature, add the key to the schema, `Feature` and `Features` in packages/core, then gate its UI. Tests in `apps/realtor_app/test/feature_flags_test.dart` switch each one off and check it disappears.
 
 ## Tests
 
@@ -66,7 +85,7 @@ CI runs all of these on every push, checks that the Dart and TypeScript CSS outp
 
 ## Adding a realtor
 
-See the onboarding steps in the tracker's White-label kit tab. In short: add `tenants/<id>.json` and `brand/<id>/`, run `validate`, provision the Firebase projects, prepare and build.
+See the onboarding steps in the tracker's White-label kit tab. In short: `node tools/tenant-cli/src/cli.ts create <id> "<Name Ltd>"` scaffolds a valid `tenants/<id>.json` and placeholder `brand/<id>/` art; replace the TBC / example.com values and the art, run `validate`, provision the Firebase projects with `infra/terraform` (see its README), then prepare and build.
 
 ## Brand assets
 

@@ -124,6 +124,69 @@ jobs:
           path: apps/realtor_app/build/web
           retention-days: 7
 
+  android:
+    name: Android flavors (every tenant, side by side)
+    runs-on: ubuntu-latest
+    needs: dart
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/tenant-cli/package-lock.json
+      - run: npm ci
+        working-directory: tools/tenant-cli
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Android folder + one flavor per tenant
+        working-directory: apps/realtor_app
+        run: |
+          flutter create . --platforms=android --project-name realtor_app >/dev/null
+          node ../../tools/tenant-cli/src/cli.ts flavors
+          flutter pub get
+          dart run flutter_launcher_icons
+          dart run flutter_native_splash:create --flavors "$(ls assets/flavors | paste -sd, -)"
+      - name: Build a debug APK per flavor
+        working-directory: apps/realtor_app
+        run: |
+          for f in $(ls assets/flavors); do flutter build apk --debug --flavor "$f"; done
+      - name: Distinct application ids (install side by side)
+        working-directory: apps/realtor_app
+        run: |
+          aapt2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
+          ids=""
+          for apk in build/app/outputs/flutter-apk/app-*-debug.apk; do
+            id=$("$aapt2" dump packagename "$apk")
+            label=$("$aapt2" dump badging "$apk" | sed -n "s/^application-label:'\(.*\)'/\1/p")
+            echo "$apk → $id ($label)"
+            ids="$ids$id"$'\n'
+          done
+          test "$(printf '%s' "$ids" | sort | uniq -d)" = "" || { echo "duplicate application ids"; exit 1; }
+          test "$(printf '%s' "$ids" | grep -c .)" -ge 2
+
+  terraform:
+    name: Terraform (format + validate, never applied)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+        working-directory: infra/terraform/tenant
+      - run: terraform validate
+        working-directory: infra/terraform/tenant
+
   emulator:
     name: Emulators (seed, rules, callable API, media)
     runs-on: ubuntu-latest

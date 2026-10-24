@@ -2,6 +2,8 @@
 library;
 
 export 'src/brand_theme.dart';
+export 'src/feature_gate.dart';
+export 'src/tenant_fonts.dart';
 export 'src/tenant_scope.dart';
 export 'src/widgets/price_text.dart';
 export 'src/widgets/verified_badge.dart';

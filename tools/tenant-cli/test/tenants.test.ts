@@ -32,3 +32,22 @@ test('unreadable colours are rejected', async () => {
   assert.equal(problems.length, 2);
   assert.match(problems.join(' '), /textMuted on surface/);
 });
+
+test('every tenant font is bundled in all four weights', async () => {
+  const { tenantFontFiles } = await import('../src/fonts.ts');
+  const t = JSON.parse(readFileSync(join(repoRoot(), 'tenants/realtime-estates.json'), 'utf8'));
+  const files = tenantFontFiles(t);
+  assert.deepEqual([...new Set(files.map((f) => f.family))], ['Poppins', 'Inter']);
+  assert.equal(files.length, 8);
+  assert.ok(files.some((f) => f.source === 'fonts/Inter/Inter-SemiBold.ttf' && f.weight === 600));
+});
+
+test('a font that is not bundled fails validation', async () => {
+  const { fontProblems } = await import('../src/fonts.ts');
+  const t = JSON.parse(readFileSync(join(repoRoot(), 'tenants/demo-homes.json'), 'utf8'));
+  assert.deepEqual(fontProblems(repoRoot(), t), []);
+  const bad = { ...t, brand: { ...t.brand, fonts: { display: 'Plus Jakarta Sans', body: 'Manrope' } } };
+  const problems = fontProblems(repoRoot(), bad);
+  assert.equal(problems.length, 4);
+  assert.match(problems[0], /fonts\/PlusJakartaSans\/PlusJakartaSans-Regular\.ttf/);
+});

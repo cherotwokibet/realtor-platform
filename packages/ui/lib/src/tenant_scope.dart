@@ -4,11 +4,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:realtor_core/realtor_core.dart';
 
-/// Asset written by `melos run app:prepare -- <tenant-id>`.
-const tenantAssetPath = 'assets/tenant/tenant.json';
+/// Where `tenant prepare <id>` writes a single tenant (web, plain `flutter run`).
+const singleTenantAssetDir = 'assets/tenant';
 
-Future<TenantConfig> loadTenant([AssetBundle? bundle]) async {
-  final raw = await (bundle ?? rootBundle).loadString(tenantAssetPath);
+/// The tenant's asset folder. A flavor build (`--flavor realtimeEstates`)
+/// reads `assets/flavors/<flavor>/`, written by `tenant flavors`; otherwise
+/// the single prepared tenant.
+String tenantAssetDir([String? flavor = appFlavor]) =>
+    flavor == null || flavor.isEmpty ? singleTenantAssetDir : 'assets/flavors/$flavor';
+
+Future<TenantConfig> loadTenant([AssetBundle? bundle, String? dir]) async {
+  final raw = await (bundle ?? rootBundle).loadString('${dir ?? tenantAssetDir()}/tenant.json');
   return TenantConfig.fromJson(jsonDecode(raw) as Map<String, Object?>);
 }
 
