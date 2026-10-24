@@ -53,6 +53,23 @@ void main() {
     expect(html, contains('Homes in Kasarani'));
     expect(html, contains('Bedsitter near Kasarani stadium'));
     final xml = await (await handler(shelf.Request('GET', Uri.parse('https://x/sitemap.xml')))).readAsString();
-    expect('<url>'.allMatches(xml).length, 1 + 8 + 12, reason: 'home + 8 areas + 12 live listings');
+    expect('<url>'.allMatches(xml).length, 1 + 8 + 3 + 12, reason: 'home + 8 areas + 3 agents + 12 live listings');
+  });
+
+  test('agent and home pages come from the emulator', () async {
+    final tenant = TenantConfig.fromJson(
+      jsonDecode(File('../../tenants/demo-homes.json').readAsStringSync()) as Map<String, Object?>,
+    );
+    final handler = shareHandler(tenant, source);
+    final agent = await handler(shelf.Request('GET', Uri.parse('https://x/agent/agent-wanjiku')));
+    expect(agent.statusCode, 200);
+    final html = await agent.readAsString();
+    expect(html, contains('<h1>Wanjiku Mwangi</h1>'));
+    expect('href="/listing/'.allMatches(html).length, 4, reason: 'every third of the 12 live listings');
+    final listing = await (await handler(shelf.Request('GET', Uri.parse('https://x/listing/2-bedroom-apartment-kilimani')))).readAsString();
+    expect(listing, contains('Listed by <a href="/agent/agent-wanjiku">'));
+    final home = await (await handler(shelf.Request('GET', Uri.parse('https://x/')))).readAsString();
+    expect('href="/listing/'.allMatches(home).length, 12);
+    expect('href="/area/'.allMatches(home).length, 8);
   });
 }

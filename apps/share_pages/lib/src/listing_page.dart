@@ -7,9 +7,12 @@ import 'page_shell.dart';
 import 'seo.dart';
 
 class ListingPage extends StatelessComponent {
-  const ListingPage({required this.tenant, required this.listing, super.key});
+  const ListingPage({required this.tenant, required this.listing, this.agent, super.key});
   final TenantConfig tenant;
   final ShareListing listing;
+
+  /// The listing's agent when still active; links to their page.
+  final ShareAgent? agent;
 
   @override
   Component build(BuildContext context) {
@@ -32,10 +35,7 @@ class ListingPage extends StatelessComponent {
       body: [
         if (l.verified) const span(classes: 'badge', [Component.text('Verified')]),
         h1([Component.text(l.title)]),
-        p(classes: 'price', [
-          Component.text(formatKes(l.priceKES)),
-          if (l.purpose != Purpose.sale) Component.text(l.purpose == Purpose.rent ? ' /month' : ' /night'),
-        ]),
+        p(classes: 'price', priceText(l)),
         p(classes: 'facts', [Component.text(facts)]),
         if (l.photos.isNotEmpty)
           div(classes: 'photos', [
@@ -54,6 +54,7 @@ class ListingPage extends StatelessComponent {
           a(href: seo.appUrl, classes: 'open', const [Component.text('Open in app')]),
           if (wa != null) a(href: wa.toString(), classes: 'wa', const [Component.text('Ask on WhatsApp')]),
         ]),
+        if (agent != null) p([const Component.text('Listed by '), a(href: '/agent/${agent!.id}', [Component.text(agent!.name)])]),
         p([a(href: '/area/${l.area}', [Component.text('More homes in ${ListingSeo.placeName(l.area)}')])]),
       ],
     );
