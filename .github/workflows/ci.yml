@@ -172,6 +172,21 @@ jobs:
           test "$(printf '%s' "$ids" | sort | uniq -d)" = "" || { echo "duplicate application ids"; exit 1; }
           test "$(printf '%s' "$ids" | grep -c .)" -ge 2
 
+  terraform:
+    name: Terraform (format + validate, never applied)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+        working-directory: infra/terraform/tenant
+      - run: terraform validate
+        working-directory: infra/terraform/tenant
+
   emulator:
     name: Firestore emulator seed (data model v2)
     runs-on: ubuntu-latest
