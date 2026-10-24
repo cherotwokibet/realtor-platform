@@ -47,9 +47,13 @@ class ShareArea {
     required this.lat,
     required this.lng,
     this.guide = '',
+    this.amenities = const [],
     this.medianRentKES,
   });
   final String slug, name, county, guide;
+
+  /// Nearby places the realtor lists (malls, hospitals, transport).
+  final List<String> amenities;
   final double lat, lng;
   final int? medianRentKES;
 }

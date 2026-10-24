@@ -52,8 +52,9 @@ void main() {
     final html = await area.readAsString();
     expect(html, contains('Homes in Kasarani'));
     expect(html, contains('Bedsitter near Kasarani stadium'));
+    expect(html, contains('<li>Kasarani stadium</li>'));
     final xml = await (await handler(shelf.Request('GET', Uri.parse('https://x/sitemap.xml')))).readAsString();
-    expect('<url>'.allMatches(xml).length, 1 + 8 + 3 + 12, reason: 'home + 8 areas + 3 agents + 12 live listings');
+    expect('<url>'.allMatches(xml).length, 1 + 16 + 3 + 12, reason: 'home + 16 areas + 3 agents + 12 live listings');
   });
 
   test('agent and home pages come from the emulator', () async {
@@ -70,6 +71,6 @@ void main() {
     expect(listing, contains('Listed by <a href="/agent/agent-wanjiku">'));
     final home = await (await handler(shelf.Request('GET', Uri.parse('https://x/')))).readAsString();
     expect('href="/listing/'.allMatches(home).length, 12);
-    expect('href="/area/'.allMatches(home).length, 8);
+    expect('href="/area/'.allMatches(home).length, 16);
   });
 }

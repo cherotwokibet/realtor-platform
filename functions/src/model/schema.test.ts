@@ -37,6 +37,15 @@ test('seed listings point at real areas and agents, with unique slugs', () => {
   assert.equal(new Set(listings.map((l) => l.slug)).size, listings.length);
 });
 
+test('at least 15 area guides, each with a guide and nearby places (P3 doneWhen)', () => {
+  const areas = seedDocs().filter((d) => d.collection === 'areas').map((d) => d.data as any);
+  assert.ok(areas.length >= 15, `${areas.length} areas`);
+  for (const a of areas) {
+    assert.ok(a.guide.length >= 60, `${a.name}: guide too short`);
+    assert.ok(a.amenities.length >= 2, `${a.name}: needs nearby places`);
+  }
+});
+
 test('schemas reject what Functions must refuse', () => {
   const ok = seedDocs().find((d) => d.collection === 'listings')!.data;
   assert.equal(listing.safeParse({ ...ok, priceKES: 65000.5 }).success, false, 'decimal shillings');

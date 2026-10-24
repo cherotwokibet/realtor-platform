@@ -8,15 +8,62 @@ import type { CollectionName } from '../model/schema';
 
 const DAY = 24 * 60 * 60 * 1000;
 
-const AREAS: [slug: string, name: string, county: string, lat: number, lng: number, medianRent: number | null][] = [
-  ['kilimani', 'Kilimani', 'Nairobi', -1.2921, 36.7856, 75000],
-  ['westlands', 'Westlands', 'Nairobi', -1.2676, 36.8108, 95000],
-  ['kileleshwa', 'Kileleshwa', 'Nairobi', -1.2805, 36.784, 80000],
-  ['lavington', 'Lavington', 'Nairobi', -1.278, 36.768, 120000],
-  ['south-b', 'South B', 'Nairobi', -1.31, 36.835, 35000],
-  ['kasarani', 'Kasarani', 'Nairobi', -1.221, 36.897, 22000],
-  ['ruaka', 'Ruaka', 'Kiambu', -1.205, 36.778, 30000],
-  ['syokimau', 'Syokimau', 'Machakos', -1.36, 36.93, 28000],
+type Area = { slug: string; name: string; county: string; lat: number; lng: number; medianRent: number | null; guide: string; amenities: string[] };
+
+/**
+ * Sixteen areas across Nairobi and its commuter towns (P3 area guides).
+ * Rents are indicative market figures for the demo, not a realtor's data;
+ * each realtor rewrites guides and amenities in admin.
+ */
+const AREAS: Area[] = [
+  { slug: 'kilimani', name: 'Kilimani', county: 'Nairobi', lat: -1.2921, lng: 36.7856, medianRent: 75000,
+    guide: 'Central and leafy, with apartment blocks close to the CBD and Upper Hill. Popular with young professionals; traffic on Argwings Kodhek and Ngong Road builds at peak hours.',
+    amenities: ['Yaya Centre', 'Prestige Plaza', 'Nairobi Hospital nearby', 'Matatus on Ngong Road'] },
+  { slug: 'westlands', name: 'Westlands', county: 'Nairobi', lat: -1.2676, lng: 36.8108, medianRent: 95000,
+    guide: 'Office towers, malls and nightlife a short drive from the CBD. Serviced and short-stay apartments are common, and most buildings have backup power.',
+    amenities: ['Sarit Centre', 'The Mall Westlands', 'Aga Khan Hospital nearby', 'Waiyaki Way expressway access'] },
+  { slug: 'kileleshwa', name: 'Kileleshwa', county: 'Nairobi', lat: -1.2805, lng: 36.784, medianRent: 80000,
+    guide: 'Quieter streets than Kilimani next door, with newer apartment blocks and some older family homes. Good access to Westlands and the CBD.',
+    amenities: ['Kileleshwa shopping centre', 'Arboretum nearby', 'Othaya Road schools'] },
+  { slug: 'lavington', name: 'Lavington', county: 'Nairobi', lat: -1.278, lng: 36.768, medianRent: 120000,
+    guide: 'Large compounds, townhouses and gated estates on quiet roads. Popular with families for its schools and space.',
+    amenities: ['Lavington Mall', 'Valley Arcade', 'International schools nearby'] },
+  { slug: 'karen', name: 'Karen', county: 'Nairobi', lat: -1.3197, lng: 36.7073, medianRent: 150000,
+    guide: 'Big plots, green space and standalone homes on the edge of the city. Most residents drive; expect borehole water and longer commutes to the CBD.',
+    amenities: ['The Hub Karen', 'Karen Hospital', 'Nairobi National Park nearby'] },
+  { slug: 'parklands', name: 'Parklands', county: 'Nairobi', lat: -1.2614, lng: 36.818, medianRent: 70000,
+    guide: 'Established neighbourhood next to Westlands with family apartments, places of worship and good schools. Close to the CBD by matatu or car.',
+    amenities: ['City Park', 'Aga Khan Hospital', 'Highridge shops'] },
+  { slug: 'upper-hill', name: 'Upper Hill', county: 'Nairobi', lat: -1.2988, lng: 36.8143, medianRent: 90000,
+    guide: 'Office district with a growing number of apartments, a walk or short ride from the CBD. Busy on weekdays, calm at weekends.',
+    amenities: ['Nairobi Hospital', 'Kenyatta National Hospital nearby', 'Office towers'] },
+  { slug: 'langata', name: "Lang'ata", county: 'Nairobi', lat: -1.35, lng: 36.757, medianRent: 60000,
+    guide: 'Gated estates and maisonettes beside the national park, with easy access to the Southern Bypass.',
+    amenities: ['Galleria Mall', 'Nairobi National Park', 'Southern Bypass access'] },
+  { slug: 'south-b', name: 'South B', county: 'Nairobi', lat: -1.31, lng: 36.835, medianRent: 35000,
+    guide: 'Busy middle-income estate between the CBD and the airport, with apartments, single rooms and plenty of matatus.',
+    amenities: ['Capital Centre', 'Mombasa Road', 'Matatus to the CBD'] },
+  { slug: 'embakasi', name: 'Embakasi', county: 'Nairobi', lat: -1.315, lng: 36.893, medianRent: 25000,
+    guide: 'Large, affordable area close to JKIA and the industrial area. Expressway access shortens trips to the city.',
+    amenities: ['JKIA nearby', 'Nairobi Expressway', 'Outer Ring Road'] },
+  { slug: 'kasarani', name: 'Kasarani', county: 'Nairobi', lat: -1.221, lng: 36.897, medianRent: 22000,
+    guide: 'Affordable bedsitters, hostels and apartments off Thika Road, popular with students and young families.',
+    amenities: ['Kasarani stadium', 'Thika Road Mall nearby', 'Universities nearby'] },
+  { slug: 'roysambu', name: 'Roysambu', county: 'Nairobi', lat: -1.218, lng: 36.884, medianRent: 20000,
+    guide: 'Dense, lively estate along Thika Road with many new apartment blocks and quick matatu links to town.',
+    amenities: ['Thika Road Mall', 'Garden City Mall', 'Matatus on Thika Road'] },
+  { slug: 'ruaka', name: 'Ruaka', county: 'Kiambu', lat: -1.205, lng: 36.778, medianRent: 30000,
+    guide: 'Fast-growing town just outside the city, with new apartments and good value for money. Limuru Road and the Northern Bypass connect to Westlands.',
+    amenities: ['Two Rivers Mall nearby', 'Limuru Road', 'Northern Bypass'] },
+  { slug: 'syokimau', name: 'Syokimau', county: 'Machakos', lat: -1.36, lng: 36.93, medianRent: 28000,
+    guide: 'Gated estates and maisonettes off Mombasa Road, with a commuter train to the CBD.',
+    amenities: ['Syokimau railway station', 'Gateway Mall', 'JKIA nearby'] },
+  { slug: 'rongai', name: 'Rongai', county: 'Kajiado', lat: -1.396, lng: 36.76, medianRent: 18000,
+    guide: 'Affordable town south of Karen and Langata, popular with students and families. Magadi Road traffic is heavy at peak hours.',
+    amenities: ['Maasai Mall', 'Magadi Road', 'Universities nearby'] },
+  { slug: 'kitengela', name: 'Kitengela', county: 'Kajiado', lat: -1.473, lng: 36.96, medianRent: 15000,
+    guide: 'Growing town on Namanga Road with plots, bungalows and new estates at lower prices than the city.',
+    amenities: ['Namanga Road', 'Kitengela town centre', 'JKIA within reach'] },
 ];
 
 const AGENTS = [
@@ -47,7 +94,7 @@ export function seedDocs(now = new Date()): SeedDoc[] {
   const docs: SeedDoc[] = [];
   const at = (days: number) => new Date(now.getTime() + days * DAY);
 
-  for (const [slug, name, county, lat, lng, medianRent] of AREAS) {
+  for (const { slug, name, county, lat, lng, medianRent, guide, amenities } of AREAS) {
     docs.push({
       collection: 'areas',
       id: slug,
@@ -55,8 +102,8 @@ export function seedDocs(now = new Date()): SeedDoc[] {
         name,
         county,
         centre: { lat, lng, geohash: geohash(lat, lng) },
-        guide: `${name} guide: written by the realtor in admin (P3 area guides).`,
-        amenities: [],
+        guide,
+        amenities,
         stats: { medianRentKES: medianRent, listings: LISTINGS.filter((l) => l[6] === slug).length },
       },
     });
@@ -71,9 +118,9 @@ export function seedDocs(now = new Date()): SeedDoc[] {
   }
 
   LISTINGS.forEach(([title, purpose, type, beds, baths, price, areaSlug, estate, dLat, dLng], i) => {
-    const area = AREAS.find((a) => a[0] === areaSlug)!;
-    const lat = +(area[3] + dLat).toFixed(5);
-    const lng = +(area[4] + dLng).toFixed(5);
+    const area = AREAS.find((a) => a.slug === areaSlug)!;
+    const lat = +(area.lat + dLat).toFixed(5);
+    const lng = +(area.lng + dLng).toFixed(5);
     const verified = i % 3 !== 2; // most live listings verified, some not
     docs.push({
       collection: 'listings',
