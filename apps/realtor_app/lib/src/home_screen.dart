@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
+import 'package:go_router/go_router.dart';
+
 import 'providers.dart';
+import 'search/purpose.dart';
 
 /// First screen: proves brand, features and Kenyan property types all come from data.
 /// Real listings arrive with the P2 data layer.
@@ -14,21 +17,14 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-/// Search purposes, each behind its feature switch.
-enum Purpose {
-  rent('Rent', Feature.rent),
-  buy('Buy', Feature.sale),
-  shortStay('Short stay', Feature.shortStay);
-
-  const Purpose(this.label, this.feature);
-  final String label;
-  final Feature feature;
-}
-
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   Purpose _purpose = Purpose.rent;
 
-  static const _types = ['Bedsitter', 'Single room', 'Apartment', 'Maisonette', 'Townhouse', 'Hostel'];
+  static const _types = ['bedsitter', 'single-room', 'apartment', 'maisonette', 'townhouse', 'hostel'];
+
+  void _search({String? q, String? type}) => context.go(
+        ListingFilters(purpose: _purpose, q: q, types: [if (type != null) type]).toUri().toString(),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -57,14 +53,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           SizedBox(height: b.spacing.md),
           FeatureGate(
             feature: Feature.aiSearch,
-            orElse: const TextField(
-              decoration: InputDecoration(
+            orElse: TextField(
+              textInputAction: TextInputAction.search,
+              onSubmitted: (q) => _search(q: q),
+              decoration: const InputDecoration(
                 hintText: 'Area or estate, e.g. Kilimani, Ruaka',
                 prefixIcon: Icon(Icons.search),
               ),
             ),
-            child: const TextField(
-              decoration: InputDecoration(
+            child: TextField(
+              textInputAction: TextInputAction.search,
+              onSubmitted: (q) => _search(q: q),
+              decoration: const InputDecoration(
                 hintText: 'Try "2br Kilimani under 60k with parking"',
                 prefixIcon: Icon(Icons.auto_awesome),
               ),
@@ -74,7 +74,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Wrap(
             spacing: b.spacing.sm,
             runSpacing: b.spacing.sm,
-            children: [for (final t in _types) FilterChip(label: Text(t), onSelected: (_) {})],
+            children: [for (final t in _types) ActionChip(label: Text(typeName(t)), onPressed: () => _search(type: t))],
           ),
           FeatureGate(
             feature: Feature.ads,

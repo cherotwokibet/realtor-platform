@@ -6,16 +6,17 @@ import '../brand_theme.dart';
 /// Whether a listing is verified is decided server-side (verifiedAt/expiresAt);
 /// this widget only displays it.
 class VerifiedBadge extends StatelessWidget {
-  const VerifiedBadge({super.key, required this.verifiedAt, this.label = 'Verified'});
+  const VerifiedBadge({super.key, this.verifiedAt, this.label = 'Verified'});
 
-  final DateTime verifiedAt;
+  /// When the agent last re-confirmed it; search results only carry the flag.
+  final DateTime? verifiedAt;
   final String label;
 
   @override
   Widget build(BuildContext context) {
     final b = context.brand;
     return Semantics(
-      label: '$label on ${MaterialLocalizations.of(context).formatShortDate(verifiedAt)}',
+      label: verifiedAt == null ? label : '$label on ${MaterialLocalizations.of(context).formatShortDate(verifiedAt!)}',
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: b.spacing.sm, vertical: b.spacing.xs / 2),
         decoration: BoxDecoration(
