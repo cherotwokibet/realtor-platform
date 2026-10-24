@@ -6,8 +6,16 @@
   "tagline": "A home for every budget",
   "earbNo": "TBC",
   "brand": {
-    "logo": { "primary": "brand/demo-homes/logo.png" },
-    "appIcon": "brand/demo-homes/logo.png",
+    "logo": {
+      "primary": "brand/demo-homes/logo-stacked.svg",
+      "onDark": "brand/demo-homes/logo-stacked-reverse.svg",
+      "horizontal": "brand/demo-homes/logo-horizontal.svg",
+      "horizontalOnDark": "brand/demo-homes/logo-horizontal-reverse.svg",
+      "mark": "brand/demo-homes/mark.svg",
+      "markOnDark": "brand/demo-homes/mark-reverse.svg",
+      "favicon": "brand/demo-homes/favicon.svg"
+    },
+    "appIcon": "brand/demo-homes/mark-reverse.svg",
     "colors": {
       "primary": "#0F5257",
       "onPrimary": "#FFFFFF",
@@ -27,22 +35,64 @@
       "success": "#2E7D50",
       "error": "#B3261E"
     },
-    "fonts": { "display": "Manrope", "body": "Manrope" },
-    "typeScale": { "caption": 12, "body": 14, "bodyLarge": 16, "title": 20, "headline": 26, "display": 34 },
-    "radius": { "sm": 4, "md": 8, "pill": 999 },
+    "fonts": {
+      "display": "Manrope",
+      "body": "Manrope"
+    },
+    "typeScale": {
+      "caption": 12,
+      "body": 14,
+      "bodyLarge": 16,
+      "title": 20,
+      "headline": 26,
+      "display": 34
+    },
+    "radius": {
+      "sm": 4,
+      "md": 8,
+      "pill": 999
+    },
     "spacingBase": 4
   },
-  "domains": { "share": "demohomes.example.com", "app": "app.demohomes.example.com", "admin": "admin.demohomes.example.com" },
-  "apps": { "androidId": "com.example.demohomes", "iosId": "com.example.demohomes" },
+  "domains": {
+    "share": "demohomes.example.com",
+    "app": "app.demohomes.example.com",
+    "admin": "admin.demohomes.example.com"
+  },
+  "apps": {
+    "androidId": "com.example.demohomes",
+    "iosId": "com.example.demohomes"
+  },
   "firebase": {
-    "projects": { "dev": "demo-homes-dev", "stage": "demo-homes-stage", "prod": "demo-homes-prod" },
+    "projects": {
+      "dev": "demo-homes-dev",
+      "stage": "demo-homes-stage",
+      "prod": "demo-homes-prod"
+    },
     "region": "europe-west1"
   },
-  "contact": { "phone": "TBC", "whatsapp": "TBC", "email": "hello@demohomes.example.com" },
-  "locale": { "default": "en-KE", "extra": [], "currency": "KES" },
-  "features": {
-    "sale": true, "rent": true, "shortStay": true, "offPlan": true,
-    "mpesa": true, "ads": false, "aiSearch": false, "chat": true
+  "contact": {
+    "phone": "TBC",
+    "whatsapp": "TBC",
+    "email": "hello@demohomes.example.com"
   },
-  "mpesa": { "shortcode": "secret://mpesa-shortcode", "type": "till" }
+  "locale": {
+    "default": "en-KE",
+    "extra": [],
+    "currency": "KES"
+  },
+  "features": {
+    "sale": true,
+    "rent": true,
+    "shortStay": true,
+    "offPlan": true,
+    "mpesa": true,
+    "ads": false,
+    "aiSearch": false,
+    "chat": true
+  },
+  "mpesa": {
+    "shortcode": "secret://mpesa-shortcode",
+    "type": "till"
+  }
 }

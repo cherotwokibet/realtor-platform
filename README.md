@@ -43,10 +43,12 @@ node tools\tenant-cli\src\cli.ts prepare realtime-estates
 
 cd apps\realtor_app
 flutter create . --platforms=android,ios,web --org ke.co.realtimeestates --project-name realtor_app
+dart run flutter_launcher_icons            # icons from the tenant (config written by prepare)
+dart run flutter_native_splash:create      # splash from the tenant
 flutter run -d chrome
 ```
 
-`flutter create .` only adds the platform folders. It leaves `lib/` alone. Commit the `android/`, `ios/` and `web/` folders it makes. Per-tenant flavors (bundle ID, icon, splash, Firebase config) replace the hand-set values in P1 "Flutter flavors generator".
+`prepare` generates the realtor's icons, splash, favicons, PWA and share images from the SVGs in `brand/<id>/` (output in `brand/<id>/generated/`, not committed) and writes `flutter_launcher_icons.yaml` / `flutter_native_splash.yaml` for that realtor. The platform folders (`android/`, `ios/`, `web/`) are generated per tenant and not committed until P1 "Flutter flavors generator" makes them tenant-neutral.
 
 Swap to the dummy tenant to see the clone: `node tools\tenant-cli\src\cli.ts prepare demo-homes`, then hot-restart.
 
@@ -66,6 +68,10 @@ CI runs all of these on every push, checks that the Dart and TypeScript CSS outp
 
 See the onboarding steps in the tracker's White-label kit tab. In short: add `tenants/<id>.json` and `brand/<id>/`, run `validate`, provision the Firebase projects, prepare and build.
 
+## Brand assets
+
+Each realtor supplies seven SVGs in `brand/<id>/` (stacked, horizontal and mark, each in light and reverse versions, plus a favicon); see `brand/realtime-estates/BRAND.md`. `node tools/tenant-cli/src/cli.ts icons <id>` builds every raster size the stores and browsers need. Tests check sizes, opacity and the Android safe zone.
+
 ## Not yet done
 
-Fonts are named in the tenant file but not bundled yet. The app falls back to the platform font until P1 bundles Poppins/Inter/Manrope per tenant.
+Fonts are named in the tenant file but not bundled yet. The app falls back to the platform font (Roboto on web, fetched from Google) until P1 bundles Poppins/Inter/Manrope per tenant.

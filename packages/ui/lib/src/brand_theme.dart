@@ -71,6 +71,9 @@ ThemeData buildBrandTheme(TenantConfig tenant) {
     onPrimaryContainer: Color(c.primary),
     secondary: Color(c.accent),
     onSecondary: Color(c.onAccent),
+    // Selected chips/segments use the soft primary tint, not the accent.
+    secondaryContainer: Color(c.primarySoft),
+    onSecondaryContainer: Color(c.primary),
     surface: Color(c.surface),
     onSurface: Color(c.ink),
     onSurfaceVariant: Color(c.textMuted),
@@ -168,7 +171,7 @@ ThemeData buildBrandTheme(TenantConfig tenant) {
         radiusSm: b.radiusSm,
         radiusMd: b.radiusMd,
         spacing: tokens.spacing,
-        logoAsset: 'assets/tenant/${b.logo.split('/').last}',
+        logoAsset: 'assets/tenant/logo-horizontal.png',
       ),
     ],
   );

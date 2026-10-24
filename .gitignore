@@ -32,3 +32,8 @@ firebase_options*.dart
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated per tenant by tools/tenant-cli (icons, splash, launcher configs)
+brand/*/generated/
+apps/realtor_app/flutter_launcher_icons.yaml
+apps/realtor_app/flutter_native_splash.yaml
