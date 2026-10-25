@@ -96,6 +96,8 @@ export interface ListingFilters {
   verifiedOnly?: boolean;
   /** Radius search around a point, in km. */
   near?: { lat: number; lng: number; km: number };
+  /** Draw-an-area search: 3 to 20 corners, implicitly closed. */
+  polygon?: Array<{ lat: number; lng: number }>;
   sort?: 'newest' | 'price-asc' | 'price-desc' | 'nearest';
   page?: number;
   perPage?: number;
@@ -113,6 +115,9 @@ export function toSearchParams(f: ListingFilters): SearchParams<SearchDoc> {
     by.push(`priceKES:[${Math.trunc(f.minPriceKES ?? 0)}..${Math.trunc(f.maxPriceKES ?? 10_000_000_000)}]`);
   if (f.verifiedOnly) by.push('verified:=true');
   if (f.near) by.push(`location:(${f.near.lat}, ${f.near.lng}, ${f.near.km} km)`);
+
+  if (f.polygon && f.polygon.length >= 3 && f.polygon.length <= 20)
+    by.push(`location:(${f.polygon.map((p) => `${p.lat}, ${p.lng}`).join(', ')})`);
 
   const sort = {
     newest: 'featured:desc,updatedAt:desc',

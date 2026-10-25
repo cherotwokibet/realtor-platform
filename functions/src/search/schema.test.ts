@@ -44,6 +44,14 @@ test('geo radius, sorting by distance and safe paging', () => {
   assert.equal(p.page, 1);
 });
 
+test('drawn polygon becomes a Typesense geo polygon filter; too few or too many corners are ignored', () => {
+  const tri = [{ lat: -1.28, lng: 36.8 }, { lat: -1.28, lng: 36.84 }, { lat: -1.3, lng: 36.82 }];
+  assert.match(toSearchParams({ purpose: 'rent', polygon: tri }).filter_by!, /location:\(-1\.28, 36\.8, -1\.28, 36\.84, -1\.3, 36\.82\)$/);
+  assert.doesNotMatch(toSearchParams({ purpose: 'rent', polygon: tri.slice(0, 2) }).filter_by!, /location/);
+  const many = Array.from({ length: 21 }, (_, i) => ({ lat: -1.2 - i / 1000, lng: 36.8 + (i % 2) / 100 }));
+  assert.doesNotMatch(toSearchParams({ purpose: 'rent', polygon: many }).filter_by!, /location/);
+});
+
 test('backticks in user input cannot break out of a filter value', () => {
   const p = toSearchParams({ purpose: 'rent', areas: ['kilimani` || purpose:=`sale'] });
   assert.equal(p.filter_by, 'purpose:=[`rent`] && area:=[`kilimani || purpose:=sale`]');

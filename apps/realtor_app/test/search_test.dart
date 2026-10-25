@@ -64,6 +64,13 @@ void main() {
     expect(find.text('Student hostel bed, Kasarani'), findsOneWidget);
   });
 
+  testWidgets('a drawn area in the URL filters results', (tester) async {
+    // Triangle around Kasarani only (demo-2 and demo-9).
+    await open(tester, '/rent?poly=-1.20,36.88~-1.20,36.92~-1.24,36.90');
+    expect(find.text('2 homes'), findsOneWidget);
+    expect(find.text('Student hostel bed, Kasarani'), findsOneWidget);
+  });
+
   testWidgets('the home search box opens results', (tester) async {
     final h = await open(tester, '/');
     await tester.enterText(find.byType(TextField), 'kasarani');

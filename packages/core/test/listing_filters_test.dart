@@ -28,6 +28,7 @@ void main() {
         amenities: ['wifi', 'parking'],
         verifiedOnly: true,
         near: GeoRadius(-1.2676, 36.8108, 2),
+        polygon: [GeoPoint(-1.28, 36.8), GeoPoint(-1.28, 36.84), GeoPoint(-1.3, 36.82)],
         sort: ListingSort.nearest,
         page: 3,
       ),
@@ -35,6 +36,14 @@ void main() {
     for (final f in cases) {
       expect(ListingFilters.fromUri(f.toUri()), f, reason: f.toUri().toString());
     }
+  });
+
+  test('polygon: junk corners are dropped, fewer than 3 means no polygon', () {
+    expect(parse('/rent?poly=-1.28,36.8~-1.28,36.84')!.polygon, isEmpty);
+    expect(parse('/rent?poly=-1.28,36.8~x,y~-1.28,36.84~-1.3,36.82')!.polygon.length, 3);
+    expect(parse('/rent?poly=99,0~-1.28,36.84~-1.3,36.82')!.polygon, isEmpty);
+    final tooMany = List.generate(21, (i) => '-1.${i + 1},36.8').join('~');
+    expect(parse('/rent?poly=$tooMany')!.polygon, isEmpty);
   });
 
   test('area-only path is told apart from a type path', () {
