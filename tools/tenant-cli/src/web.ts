@@ -15,6 +15,10 @@ function setMeta(html: string, attr: 'name' | 'property', key: string, content: 
   return re.test(html) ? html.replace(re, tag) : html.replace('</head>', `  ${tag}\n</head>`);
 }
 
+// Old links used hash URLs (app.<domain>/#/listing/x). Rewrite them to the
+// path before Flutter starts, so go_router sees /listing/x (P3-s07).
+const HASH_REDIRECT = `<script>if(location.hash.indexOf('#/')===0)history.replaceState(null,'',location.hash.slice(1));</script>`;
+
 export function patchIndexHtml(html: string, t: any): string {
   let out = html
     .replace(/<html[^>]*>/, `<html lang="${t.locale.default.split('-')[0]}">`)
@@ -25,6 +29,7 @@ export function patchIndexHtml(html: string, t: any): string {
   out = setMeta(out, 'property', 'og:title', t.name);
   out = setMeta(out, 'property', 'og:description', webDescription(t));
   out = setMeta(out, 'property', 'og:image', 'og.png');
+  if (!out.includes(HASH_REDIRECT)) out = out.replace('</head>', `  ${HASH_REDIRECT}\n</head>`);
   return out;
 }
 

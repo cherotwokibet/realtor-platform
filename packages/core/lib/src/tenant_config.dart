@@ -220,6 +220,8 @@ class TenantConfig {
     required this.adminDomain,
     required this.androidId,
     required this.iosId,
+    this.androidCertSha256 = const [],
+    this.appleTeamId,
     required this.firebaseProjects,
     required this.firebaseRegion,
     required this.phone,
@@ -236,6 +238,11 @@ class TenantConfig {
   final Brand brand;
   final String shareDomain, appDomain, adminDomain;
   final String androidId, iosId;
+
+  /// Release certificate fingerprints and Apple Team ID for App Links and
+  /// Universal Links; empty / null until the store accounts exist.
+  final List<String> androidCertSha256;
+  final String? appleTeamId;
   final Map<FirebaseEnv, String> firebaseProjects;
   final String firebaseRegion;
 
@@ -260,6 +267,8 @@ class TenantConfig {
         adminDomain: adminDomain,
         androidId: androidId,
         iosId: iosId,
+        androidCertSha256: androidCertSha256,
+        appleTeamId: appleTeamId,
         firebaseProjects: firebaseProjects,
         firebaseRegion: firebaseRegion,
         phone: phone,
@@ -297,6 +306,8 @@ class TenantConfig {
       adminDomain: _req<String>(domains, 'admin', 'domains'),
       androidId: _req<String>(apps, 'androidId', 'apps'),
       iosId: _req<String>(apps, 'iosId', 'apps'),
+      androidCertSha256: ((apps['androidCertSha256'] as List<Object?>?) ?? const []).cast<String>(),
+      appleTeamId: apps['appleTeamId'] as String?,
       firebaseProjects: {
         for (final e in FirebaseEnv.values) e: _req<String>(projects, e.name, 'firebase.projects'),
       },

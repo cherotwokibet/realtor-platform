@@ -49,6 +49,15 @@ void main() {
     });
   });
 
+  testWidgets('every App Link path has a screen, not an error page', (tester) async {
+    for (final path in ['/listing/2-bedroom-apartment-kilimani', '/area/kilimani', '/agent/agent-wanjiku']) {
+      final h = await open(tester, path);
+      expect(h.location, path);
+      expect(find.textContaining('Page Not Found'), findsNothing, reason: path);
+      expect(find.byType(PlaceholderScreen), findsOneWidget, reason: path);
+    }
+  });
+
   testWidgets('a shared link opens straight into its results', (tester) async {
     await open(tester, '/rent/apartments/kilimani?beds=2');
     expect(find.text('Apartments to rent in Kilimani'), findsOneWidget);

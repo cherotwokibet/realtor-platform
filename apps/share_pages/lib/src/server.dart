@@ -7,6 +7,7 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
 import 'agent_page.dart';
+import 'app_links.dart';
 import 'area_page.dart';
 import 'home_page.dart';
 import 'lead_api.dart';
@@ -19,7 +20,7 @@ final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 
 /// Routes: `/`, `/listing/<slug>` (+ POST `/listing/<slug>/enquire`),
 /// `/go/whatsapp/<slug>`, `/area/<slug>`, `/agent/<id>`, `/sitemap.xml`,
-/// `/robots.txt`. Without [leads] there is no enquiry form and WhatsApp
+/// `/robots.txt` and the App Links / Universal Links files in `/.well-known/`. Without [leads] there is no enquiry form and WhatsApp
 /// taps are not counted.
 shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? leads}) {
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing, {EnquiryFormState? form, int status = 200}) async {
@@ -99,6 +100,9 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
         'cache-control': 'public, max-age=3600',
       });
     })
+    // Served as JSON with no redirect, as Android and iOS require.
+    ..get('/.well-known/assetlinks.json', (shelf.Request _) => _json(assetLinks(tenant)))
+    ..get('/.well-known/apple-app-site-association', (shelf.Request _) => _json(appleAppSiteAssociation(tenant)))
     ..get('/robots.txt', (shelf.Request _) => shelf.Response.ok(
           'User-agent: *\nAllow: /\nDisallow: /go/\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n',
           headers: {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400'},
@@ -114,6 +118,9 @@ shelf.Response _html(ResponseLike r, {int? status, bool private = false}) => she
       // Hosting CDN keeps it for 10 min; browsers re-check after 5.
       'cache-control': private ? 'private, no-store' : 'public, max-age=300, s-maxage=600',
     });
+
+shelf.Response _json(Object data) => shelf.Response.ok(jsonEncode(data),
+    headers: {'content-type': 'application/json', 'cache-control': 'public, max-age=3600'});
 
 /// A urlencoded form body, or null when it is over 8 KB.
 Future<Map<String, String>?> _formBody(shelf.Request req) async {
