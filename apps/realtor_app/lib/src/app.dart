@@ -39,7 +39,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
         ],
       ),
-      // Share pages hand visitors to these paths (P3): keep them stable.
+      // Share pages hand visitors to these paths (P3), and App Links open
+      // them from shared links: keep them in step with appLinkPaths.
       GoRoute(
         path: '/listing/:slug',
         builder: (context, state) => PlaceholderScreen(title: 'Listing ${state.pathParameters['slug']}'),
@@ -47,6 +48,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/area/:slug',
         builder: (context, state) => PlaceholderScreen(title: 'Area ${state.pathParameters['slug']}'),
+      ),
+      GoRoute(
+        path: '/agent/:id',
+        builder: (context, state) => PlaceholderScreen(title: 'Agent ${state.pathParameters['id']}'),
       ),
     ],
   );

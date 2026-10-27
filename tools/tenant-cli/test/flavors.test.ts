@@ -9,6 +9,7 @@ import {
   androidFlavorsGradle,
   patchBuildGradle,
   patchManifest,
+  appLinkPaths,
 } from '../src/flavors.ts';
 import { repoRoot } from '../src/validate.ts';
 
@@ -49,4 +50,40 @@ test('gradle and manifest patches apply once', () => {
     patchManifest('<application\n        android:label="realtor_app"\n        android:name="${applicationName}"'),
     '<application\n        android:label="${appName}"\n        android:name="${applicationName}"',
   );
+});
+
+// What `flutter create --platforms=android` writes (trimmed).
+const flutterManifest = `<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="realtor_app"
+        android:name="\${applicationName}">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>`;
+
+test('the main activity opens share-domain links (App Links), once', () => {
+  const once = patchManifest(flutterManifest);
+  assert.match(once, /<intent-filter android:autoVerify="true">[\s\S]*android:host="\$\{shareHost\}"[\s\S]*<\/intent-filter>\n        <\/activity>/);
+  for (const p of ['/listing/', '/area/', '/agent/']) assert.ok(once.includes(`android:pathPrefix="${p}"`), p);
+  assert.match(once, /android.intent.action.MAIN/, 'launcher filter kept');
+  assert.equal(patchManifest(once), once);
+});
+
+test('each flavor sets its own share host', () => {
+  const g = androidFlavorsGradle([tenant('realtime-estates'), tenant('demo-homes')]);
+  assert.match(g, /create\("realtimeEstates"\)[\s\S]*?manifestPlaceholders\["shareHost"\] = "realtimeestates\.co\.ke"/);
+  assert.match(g, /create\("demoHomes"\)[\s\S]*?manifestPlaceholders\["shareHost"\] = "demohomes\.example\.com"/);
+});
+
+test('app-link paths match the share server\'s', () => {
+  const dart = readFileSync(join(repoRoot(), 'apps/share_pages/lib/src/app_links.dart'), 'utf8');
+  const list = /const appLinkPaths = \[([^\]]*)\]/.exec(dart)![1];
+  assert.deepEqual([...list.matchAll(/'([^']+)'/g)].map((m) => m[1]), appLinkPaths);
 });

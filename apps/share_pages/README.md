@@ -20,6 +20,7 @@ Live now:
   - Pages showing a visitor's own input are `private, no-store`, so the CDN never keeps them.
   - **Ask on WhatsApp** goes through `/go/whatsapp/<slug>`, which calls `logContactTap` (a counter, no personal data, D13) and redirects to `wa.me`. A failed count never blocks WhatsApp. `/go/` is disallowed in robots.txt.
   - The server never writes Firestore and never logs form contents; Functions do the storing (D7). `FUNCTIONS_BASE` overrides the default `https://europe-west1-<project>.cloudfunctions.net`.
+- **App Links / Universal Links (P3-s07):** `/.well-known/assetlinks.json` and `/.well-known/apple-app-site-association` let the installed app open `/listing/`, `/area/` and `/agent/` links. They are built from `apps.androidCertSha256` and `apps.appleTeamId` in the tenant file. Until those exist, both files are valid but claim nothing. `tenant flavors` adds the matching `autoVerify` intent filter for each flavor's share domain to the Android manifest, and CI checks it in every APK. `tenant web` rewrites old `#/…` links to paths before Flutter starts.
 - `/sitemap.xml` (home, every area, every active agent, every live listing with `lastmod`) and `/robots.txt` pointing at it
 
 Listing text is HTML-escaped by Jaspr. Inside the JSON-LD script, every `<` is written as `\u003c`, so a title can't close the script. A test covers this.

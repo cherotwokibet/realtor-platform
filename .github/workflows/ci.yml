@@ -229,6 +229,18 @@ jobs:
           done
           test "$(printf '%s' "$ids" | sort | uniq -d)" = "" || { echo "duplicate application ids"; exit 1; }
           test "$(printf '%s' "$ids" | grep -c .)" -ge 2
+      - name: App Links (each flavor opens its own share domain)
+        working-directory: apps/realtor_app
+        run: |
+          aapt2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
+          for f in $(ls assets/flavors); do
+            apk=build/app/outputs/flutter-apk/$(ls build/app/outputs/flutter-apk | grep -i "^app-$f-debug\.apk$")
+            host=$(node -e 'const fs=require("fs");for(const x of fs.readdirSync("../../tenants").filter(n=>n.endsWith(".json"))){const t=JSON.parse(fs.readFileSync("../../tenants/"+x,"utf8"));if(t.id.replace(/-([a-z0-9])/g,(_,c)=>c.toUpperCase())===process.argv[1])console.log(t.domains.share)}' "$f")
+            tree=$("$aapt2" dump xmltree --file AndroidManifest.xml "$apk")
+            echo "$tree" | grep -qE "host\(0x[0-9a-f]+\)=\"$host\"" || { echo "$f: no App Link for $host"; exit 1; }
+            echo "$tree" | grep -q 'autoVerify' || { echo "$f: autoVerify missing"; exit 1; }
+            echo "$f → https://$host/listing/… opens the app"
+          done
 
   terraform:
     name: Terraform (format + validate, never applied)
