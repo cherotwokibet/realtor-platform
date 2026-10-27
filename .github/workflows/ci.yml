@@ -212,6 +212,12 @@ jobs:
           flutter pub get
           dart run flutter_launcher_icons
           dart run flutter_native_splash:create --flavors "$(ls assets/flavors | paste -sd, -)"
+          # The template gives Gradle an 8 GB heap and the Kotlin daemon
+          # inherits it: with native plugins that is more than the 16 GB
+          # runner has, and the runner dies mid-build with no log.
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/' android/gradle.properties
+          echo 'kotlin.daemon.jvmargs=-Xmx2g' >> android/gradle.properties
+          grep -E 'jvmargs' android/gradle.properties
       - name: Build a debug APK per flavor
         working-directory: apps/realtor_app
         run: |
