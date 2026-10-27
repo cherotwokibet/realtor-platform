@@ -111,31 +111,6 @@ class Enquiry {
   }
 }
 
-/// Viewing slots offered on the form. They mirror `VIEWING_RULES` in
-/// functions/src/api/viewings.ts, which has the final say: half-hour starts
-/// 08:00-17:30 Nairobi time (UTC+3 all year), Monday to Saturday.
-final viewingTimes = [
-  for (var m = 8 * 60; m <= 17 * 60 + 30; m += 30) '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}',
-];
-
-/// The next [count] viewing days (no Sundays), from today in Nairobi:
-/// value `2026-10-27`, label `Tue 27 Oct`.
-List<({String value, String label})> viewingDays(DateTime now, {int count = 12}) {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  final nairobi = now.toUtc().add(const Duration(hours: 3));
-  var d = DateTime.utc(nairobi.year, nairobi.month, nairobi.day);
-  final out = <({String value, String label})>[];
-  while (out.length < count) {
-    if (d.weekday != DateTime.sunday) {
-      final value = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-      out.add((value: value, label: '${days[d.weekday - 1]} ${d.day} ${months[d.month - 1]}'));
-    }
-    d = d.add(const Duration(days: 1));
-  }
-  return out;
-}
-
 /// What a visitor typed into the viewing form, checked before any call.
 class ViewingRequest {
   ViewingRequest._(this.slot, this.name, this.phone, this.message);
@@ -158,7 +133,7 @@ class ViewingRequest {
     if (message.length > 2000) errors['message'] = 'Keep the message under 2,000 characters.';
     if (form['consent'] != 'yes') errors['consent'] = 'Tick the box so we may contact you.';
     return (
-      request: errors.isEmpty ? ViewingRequest._('${day}T$time:00+03:00', name, phone!, message.isEmpty ? null : message) : null,
+      request: errors.isEmpty ? ViewingRequest._(viewingSlot(day, time), name, phone!, message.isEmpty ? null : message) : null,
       errors: errors,
     );
   }
