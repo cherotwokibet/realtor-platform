@@ -358,6 +358,20 @@ void main() {
     expect(find.text('new.agent@example.com'), findsNothing);
   });
 
+  testWidgets('the team loads once, not again on every rebuild', (tester) async {
+    await open(tester, as: owner);
+    final demo = container.read(demoAdminProvider);
+    final before = demo.teamCalls;
+    await tester.tap(find.text('Team'));
+    await tester.pumpAndSettle();
+    expect(demo.teamCalls, before + 1);
+    // A full rebuild (what a token refresh or theme change does) must not refetch.
+    tester.binding.buildOwner!.reassemble(tester.binding.rootElement!);
+    await tester.pump(const Duration(seconds: 1));
+    expect(demo.teamCalls, before + 1);
+    expect(find.text('owner@example.com'), findsOneWidget);
+  });
+
   testWidgets('managers see the team but cannot change it; agents do not see it', (tester) async {
     await open(tester, as: manager);
     await tester.tap(find.text('Team'));

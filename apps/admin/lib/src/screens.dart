@@ -340,8 +340,14 @@ class TeamScreen extends ConsumerStatefulWidget {
 }
 
 class _TeamScreenState extends ConsumerState<TeamScreen> {
-  var _reload = 0;
   final _saving = <String>{};
+
+  /// Loaded once, and again after a change: not on every build, or any
+  /// rebuild (a token refresh, say) would start the query over and the
+  /// list would never appear.
+  late Future<List<StaffMember>> _team = _load();
+
+  Future<List<StaffMember>> _load() => ref.read(adminRepositoryProvider).team(ref.read(staffProvider)!);
 
   Future<void> _change(StaffUser who,
       {required String email, StaffRole? role, String? agentId, required String done}) async {
@@ -355,7 +361,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     if (!mounted) return;
     setState(() {
       _saving.remove(email);
-      if (ok) _reload++;
+      if (ok) _team = _load();
     });
   }
 
@@ -393,7 +399,6 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
   @override
   Widget build(BuildContext context) {
     final who = ref.watch(staffProvider)!;
-    final repo = ref.watch(adminRepositoryProvider);
     return _TablePage(
       title: 'Team',
       subtitle: who.canManageStaff
@@ -410,8 +415,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
             )
           : null,
       table: FutureBuilder<List<StaffMember>>(
-        key: ValueKey(('team', _reload)),
-        future: repo.team(who),
+        future: _team,
         builder: (context, snap) {
           if (snap.hasError) {
             return Padding(
