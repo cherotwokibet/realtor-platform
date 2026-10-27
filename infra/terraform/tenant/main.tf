@@ -64,6 +64,8 @@ module "env" {
   firestore_rules = file("${local.repo}/firestore.rules")
   storage_rules   = file("${local.repo}/storage.rules")
 
+  firestore_indexes = jsondecode(file("${local.repo}/firestore.indexes.json"))
+
   share_pages_image = var.share_pages_image
 }
 

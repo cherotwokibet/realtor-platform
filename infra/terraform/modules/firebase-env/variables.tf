@@ -44,3 +44,9 @@ variable "share_pages_image" {
   type        = string
   default     = null
 }
+
+variable "firestore_indexes" {
+  description = "Decoded firestore.indexes.json: its `indexes` list becomes composite indexes."
+  type        = any
+  default     = { indexes = [] }
+}

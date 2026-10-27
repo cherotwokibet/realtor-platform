@@ -69,6 +69,28 @@ resource "google_firebase_storage_bucket" "media" {
   depends_on = [google_firebase_project.this]
 }
 
+# Composite indexes from the repo's firestore.indexes.json (the same file
+# the Firebase CLI and the emulator read), keyed by collection and fields.
+resource "google_firestore_index" "composite" {
+  for_each = {
+    for ix in var.firestore_indexes.indexes :
+    "${ix.collectionGroup}:${join(",", [for f in ix.fields : "${f.fieldPath}-${lookup(f, "order", lookup(f, "arrayConfig", ""))}"])}" => ix
+  }
+  project     = google_project.this.project_id
+  database    = google_firestore_database.default.name
+  collection  = each.value.collectionGroup
+  query_scope = lookup(each.value, "queryScope", "COLLECTION")
+
+  dynamic "fields" {
+    for_each = each.value.fields
+    content {
+      field_path   = fields.value.fieldPath
+      order        = lookup(fields.value, "order", null)
+      array_config = lookup(fields.value, "arrayConfig", null)
+    }
+  }
+}
+
 resource "google_firebaserules_ruleset" "firestore" {
   project = google_project.this.project_id
   source {
