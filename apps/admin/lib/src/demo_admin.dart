@@ -170,8 +170,12 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     _log(who, 'listing.$action', listing.title, listing.status, to, reason: reason?.trim(), at: at);
   }
 
+  /// How many times the team was read (tests check screens don't refetch needlessly).
+  var teamCalls = 0;
+
   @override
   Future<List<StaffMember>> team(StaffUser who) async {
+    teamCalls++;
     if (!who.canOpen(AdminSection.team)) throw StaffAccessException('the team is for owners and managers');
     return _team.values.toList()..sort((a, b) => (a.email ?? '').compareTo(b.email ?? ''));
   }
