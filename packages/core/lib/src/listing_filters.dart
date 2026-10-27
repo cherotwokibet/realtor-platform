@@ -167,16 +167,10 @@ class ListingFilters {
 
     GeoRadius? near;
     final n = (p['near'] ?? '').split(',').map(double.tryParse).toList();
-    if (n.length == 3 &&
-        n.every((x) => x != null) &&
-        n[0]!.abs() <= 90 &&
-        n[1]!.abs() <= 180 &&
-        n[2]! > 0 &&
-        n[2]! <= 100) {
+    if (n.length == 3 && n.every((x) => x != null) && n[0]!.abs() <= 90 && n[1]!.abs() <= 180 && n[2]! > 0 && n[2]! <= 100) {
       near = GeoRadius(n[0]!, n[1]!, n[2]!);
     }
-    final sort =
-        _sortParam.entries.where((e) => e.value == p['sort']).map((e) => e.key).firstOrNull ?? ListingSort.newest;
+    final sort = _sortParam.entries.where((e) => e.value == p['sort']).map((e) => e.key).firstOrNull ?? ListingSort.newest;
     final q = p['q']?.trim();
     return ListingFilters(
       purpose: purpose,

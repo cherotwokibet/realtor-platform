@@ -10,7 +10,10 @@ Map<String, Object?> load(String id) =>
 void main() {
   group('TenantConfig', () {
     test('parses every tenant file in the repo', () {
-      final files = Directory('../../tenants').listSync().whereType<File>().where((f) => f.path.endsWith('.json'));
+      final files = Directory('../../tenants')
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.json'));
       expect(files.length, greaterThanOrEqualTo(2));
       for (final f in files) {
         final t = TenantConfig.fromJson(jsonDecode(f.readAsStringSync()) as Map<String, Object?>);
