@@ -34,4 +34,6 @@ Do the same for anything else that already exists, such as Firebase on the proje
 
 Repeat with `env=stage` and `env=prod` (each has its own state prefix). The state bucket `realtor-platform-tfstate` must exist first (one per operator, versioned, in a project you own).
 
-Not yet covered: Firestore indexes (none defined yet), the Typesense collection (P2 search), and custom domains on Hosting (needs DNS access, P8).
+Firestore composite indexes come from the repo's `firestore.indexes.json`, the same file the emulator reads.
+
+Not yet covered: the Typesense collection (P2 search), and custom domains on Hosting (needs DNS access, P8).
