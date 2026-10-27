@@ -36,7 +36,7 @@ Repeat with `env=stage` and `env=prod` (each has its own state prefix). The stat
 
 Firestore composite indexes come from the repo's `firestore.indexes.json`, the same file the emulator reads.
 
-Cloud Functions (2nd gen) service agents get the roles a first Functions deploy needs (`google_project_iam_member.functions_agents`): without them `firebase deploy --only functions` stops with "We failed to modify the IAM policy for the project". The bindings are additive, so granting them by hand with the `gcloud` commands the CLI prints is safe; a later apply just finds them in place.
+Cloud Functions (2nd gen) service agents get the roles a first Functions deploy needs (`google_project_iam_member.functions_agents`): without them `firebase deploy --only functions` stops with "We failed to modify the IAM policy for the project", or `onListingPhoto` fails with *Permission "storage.buckets.get" denied … the Eventarc service account* (the Eventarc agent's own role, which Google grants late on a fresh project). The bindings are additive, so granting them by hand with the `gcloud` commands the CLI prints is safe; a later apply just finds them in place.
 
 **Quota project.** Identity Platform (`google_identity_platform_config.auth`) refuses user credentials without a quota project: *"identitytoolkit.googleapis.com API requires a quota project"*. For an existing project, set it for the session before `plan`/`apply`, and clear it afterwards (it must not point at a project that does not exist yet when you create a new one):
 
