@@ -38,6 +38,16 @@ Firestore composite indexes come from the repo's `firestore.indexes.json`, the s
 
 Cloud Functions (2nd gen) service agents get the roles a first Functions deploy needs (`google_project_iam_member.functions_agents`): without them `firebase deploy --only functions` stops with "We failed to modify the IAM policy for the project". The bindings are additive, so granting them by hand with the `gcloud` commands the CLI prints is safe; a later apply just finds them in place.
 
+**Quota project.** Identity Platform (`google_identity_platform_config.auth`) refuses user credentials without a quota project: *"identitytoolkit.googleapis.com API requires a quota project"*. For an existing project, set it for the session before `plan`/`apply`, and clear it afterwards (it must not point at a project that does not exist yet when you create a new one):
+
+```sh
+export GOOGLE_BILLING_PROJECT=<project-id> USER_PROJECT_OVERRIDE=true
+terraform plan ... && terraform apply ...
+unset GOOGLE_BILLING_PROJECT USER_PROJECT_OVERRIDE
+```
+
+For a brand-new project, the first apply creates the project and everything but the sign-in config; run the same plan/apply again with the two variables set to finish it.
+
 ### Staff admin (P5, D14)
 
 Terraform registers an admin web app, an admin Hosting site (`<project-id>-admin`, output `admin_url`) and email + password sign-in (Identity Platform, free tier up to 50,000 monthly users).
