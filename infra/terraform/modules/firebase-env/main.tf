@@ -10,6 +10,7 @@ locals {
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "cloudfunctions.googleapis.com",
+    "compute.googleapis.com",
     "eventarc.googleapis.com",
     "firebase.googleapis.com",
     "firebaseappcheck.googleapis.com",
@@ -18,6 +19,7 @@ locals {
     "firebasestorage.googleapis.com",
     "firestore.googleapis.com",
     "identitytoolkit.googleapis.com",
+    "pubsub.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "storage.googleapis.com",
@@ -149,6 +151,40 @@ resource "google_firebase_web_app" "app" {
   project      = google_project.this.project_id
   display_name = "${local.t.name} (${var.env})"
   depends_on   = [google_firebase_project.this]
+}
+
+# Cloud Functions (2nd gen) needs these service agents to hold roles before
+# the first deploy: storage events reach Eventarc through Pub/Sub, and the
+# functions run as the Compute default service account. The Firebase CLI
+# tries to grant them itself and fails without project-owner rights.
+data "google_storage_project_service_account" "gcs" {
+  project    = google_project.this.project_id
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_project_service_identity" "pubsub" {
+  provider   = google-beta
+  project    = google_project.this.project_id
+  service    = "pubsub.googleapis.com"
+  depends_on = [google_project_service.apis]
+}
+
+locals {
+  compute_sa = "serviceAccount:${google_project.this.number}-compute@developer.gserviceaccount.com"
+  functions_agent_roles = {
+    gcs_publishes_events = { member = "serviceAccount:${data.google_storage_project_service_account.gcs.email_address}", role = "roles/pubsub.publisher" }
+    pubsub_signs_tokens  = { member = "serviceAccount:${google_project_service_identity.pubsub.email}", role = "roles/iam.serviceAccountTokenCreator" }
+    functions_invoke_run = { member = local.compute_sa, role = "roles/run.invoker" }
+    functions_get_events = { member = local.compute_sa, role = "roles/eventarc.eventReceiver" }
+  }
+}
+
+resource "google_project_iam_member" "functions_agents" {
+  for_each   = local.functions_agent_roles
+  project    = google_project.this.project_id
+  role       = each.value.role
+  member     = each.value.member
+  depends_on = [google_project_service.apis]
 }
 
 # Staff admin (P5): its own web app and Hosting site. Hosting serves the

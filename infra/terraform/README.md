@@ -36,6 +36,8 @@ Repeat with `env=stage` and `env=prod` (each has its own state prefix). The stat
 
 Firestore composite indexes come from the repo's `firestore.indexes.json`, the same file the emulator reads.
 
+Cloud Functions (2nd gen) service agents get the roles a first Functions deploy needs (`google_project_iam_member.functions_agents`): without them `firebase deploy --only functions` stops with "We failed to modify the IAM policy for the project". The bindings are additive, so granting them by hand with the `gcloud` commands the CLI prints is safe; a later apply just finds them in place.
+
 ### Staff admin (P5, D14)
 
 Terraform registers an admin web app, an admin Hosting site (`<project-id>-admin`, output `admin_url`) and email + password sign-in (Identity Platform, free tier up to 50,000 monthly users).
