@@ -45,7 +45,7 @@ jobs:
           out() { if has "$2"; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
           shared='^(packages/core|packages/tokens|tenants|brand|fonts|tools/tenant-cli)/|^pubspec\.'
           out functions '^functions/|^(firestore|storage)\.rules$'
-          out dart "$shared|^(packages|apps)/|^analysis_options\.yaml$"
+          out dart "$shared|^(packages|apps)/|^analysis_options\.yaml$|^functions/src/model/transitions\.json$"
           if [ "$DRAFT" = true ]; then echo "app=false" >> "$GITHUB_OUTPUT"; echo "admin=false" >> "$GITHUB_OUTPUT"
           else out app "$shared|^(packages/ui|apps/realtor_app)/"; out admin "$shared|^(packages/ui|apps/admin)/"; fi
           out infra '^infra/|^tenants/|^(firestore|storage)\.rules$'

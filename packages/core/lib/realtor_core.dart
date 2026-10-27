@@ -1,6 +1,7 @@
 /// Shared models and tenant config for the realtor platform.
 library;
 
+export 'src/admin_actions.dart';
 export 'src/admin_repository.dart';
 export 'src/listing_filters.dart';
 export 'src/listing_repository.dart';

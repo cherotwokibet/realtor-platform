@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { canMove, type ListingStatus, verificationExpiry } from '../listing-rules';
 import { geohash, slugify } from '../model/geo';
 import { docId, kes, listing, listingPurpose, listingType, mediaItem, slug } from '../model/schema';
+import transitions from '../model/transitions.json';
 import { audit } from './audit';
 import { type Caller, isManager, parseInput, requireManager, requireStaff } from './auth';
 
@@ -76,13 +77,10 @@ async function uniqueSlug(db: Firestore, base: string, id: string): Promise<stri
   return taken.empty ? base : `${base}-${id.slice(0, 6).toLowerCase()}`.slice(0, 80);
 }
 
-const ACTION_TO: Record<'approve' | 'reject' | 'expire' | 'let' | 'sold', ListingStatus> = {
-  approve: 'live',
-  reject: 'draft',
-  expire: 'expired',
-  let: 'let',
-  sold: 'sold',
-};
+const ACTION_TO: Record<'approve' | 'reject' | 'expire' | 'let' | 'sold', ListingStatus> = transitions.moderation as Record<
+  'approve' | 'reject' | 'expire' | 'let' | 'sold',
+  ListingStatus
+>;
 
 export const moderateListingInput = z
   .object({ listingId: docId, action: z.enum(['approve', 'reject', 'expire', 'let', 'sold']), reason: z.string().max(500).optional() })

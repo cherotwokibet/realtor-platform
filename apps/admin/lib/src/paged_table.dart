@@ -11,12 +11,20 @@ class TableColumn<T> {
 
 /// A data table that loads one page at a time from the server and pages
 /// with the cursor each page returns. Give it a new [key] when a filter
-/// changes, so it starts again from the first page.
+/// changes, so it starts again from the first page; change [reload] to
+/// load the page on screen again (after an action changed a row).
 class PagedTable<T> extends StatefulWidget {
-  const PagedTable({super.key, required this.columns, required this.load, this.empty = 'Nothing here yet.'});
+  const PagedTable({
+    super.key,
+    required this.columns,
+    required this.load,
+    this.empty = 'Nothing here yet.',
+    this.reload = 0,
+  });
   final List<TableColumn<T>> columns;
   final Future<RowPage<T>> Function(String? after) load;
   final String empty;
+  final int reload;
 
   @override
   State<PagedTable<T>> createState() => _PagedTableState<T>();
@@ -26,6 +34,12 @@ class _PagedTableState<T> extends State<PagedTable<T>> {
   /// The cursor each page was loaded with; the last one is on screen.
   final _cursors = <String?>[null];
   late Future<RowPage<T>> _page = widget.load(null);
+
+  @override
+  void didUpdateWidget(PagedTable<T> old) {
+    super.didUpdateWidget(old);
+    if (old.reload != widget.reload) _page = widget.load(_cursors.last);
+  }
 
   void _go(String? cursor, {required bool back}) => setState(() {
         if (back) {

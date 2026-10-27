@@ -6,8 +6,12 @@ import 'demo_admin.dart';
 /// Overridden in main() with the tenant loaded from assets.
 final tenantProvider = Provider<TenantConfig>((ref) => throw UnimplementedError('tenantProvider not overridden'));
 
-/// Demo data until the admin reads Firestore.
-final adminRepositoryProvider = Provider<AdminRepository>((ref) => DemoAdminRepository());
+/// Demo data and actions until the admin reads Firestore and calls the Functions.
+final demoAdminProvider = Provider<DemoAdminRepository>((ref) => DemoAdminRepository());
+
+final adminRepositoryProvider = Provider<AdminRepository>((ref) => ref.watch(demoAdminProvider));
+
+final adminActionsProvider = Provider<AdminActions>((ref) => ref.watch(demoAdminProvider));
 
 /// The signed-in staff member, or null. Firebase Auth will fill this from the
 /// ID token's claims (`StaffUser.fromClaims`); demo accounts until then.

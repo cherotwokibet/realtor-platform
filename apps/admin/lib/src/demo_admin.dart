@@ -34,8 +34,11 @@ const _channels = ['form', 'viewing', 'form', 'call', 'whatsapp'];
 
 /// Demo data with the same shape and scoping as the Firestore version: an
 /// agent only ever gets their own leads and listings, and no audit log.
-class DemoAdminRepository implements AdminRepository {
-  DemoAdminRepository({DateTime? now}) : _now = now ?? DateTime(2026, 10, 27, 12) {
+/// Actions check what the Functions check and write the audit log, in memory.
+class DemoAdminRepository implements AdminRepository, AdminActions {
+  DemoAdminRepository({DateTime? now, DateTime Function()? clock})
+      : _now = now ?? DateTime(2026, 10, 27, 12),
+        _clock = clock ?? DateTime.now {
     final agentIds = _agents.keys.toList();
     for (var i = 0; i < 18; i++) {
       final agentId = agentIds[i % agentIds.length];
@@ -90,6 +93,7 @@ class DemoAdminRepository implements AdminRepository {
   }
 
   final DateTime _now;
+  final DateTime Function() _clock;
   final _listings = <StaffListingRow>[];
   final _leads = <LeadRow>[];
   final _audit = <AuditRow>[];
@@ -111,6 +115,55 @@ class DemoAdminRepository implements AdminRepository {
     if (!who.canOpen(AdminSection.audit)) throw StaffAccessException('the audit log is for owners and managers');
     return pageAfter(_audit, (r) => r.id, after: after, limit: limit);
   }
+
+  @override
+  Future<void> moveLead(StaffUser who, {required String leadId, required String stage}) async {
+    final i = _leads.indexWhere((l) => l.id == leadId);
+    if (i < 0) throw AdminActionException('not-found', 'no such lead');
+    final lead = _leads[i];
+    if (!who.isManager && lead.agentId != who.agentId) throw AdminActionException('permission-denied', 'not your lead');
+    if (!nextLeadStages(lead.stage).contains(stage)) {
+      throw AdminActionException('failed-precondition', 'a lead cannot go from ${lead.stage} to $stage');
+    }
+    _leads[i] = lead.withStage(stage);
+    _log(who, 'lead.stage', lead.listingTitle, lead.stage, stage);
+  }
+
+  @override
+  Future<void> moderateListing(StaffUser who,
+      {required String listingId, required String action, String? reason}) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final to = moderationTargets[action];
+    if (to == null) throw AdminActionException('invalid-argument', 'unknown action $action');
+    if (action == 'reject' && (reason == null || reason.trim().isEmpty)) {
+      throw AdminActionException('invalid-argument', 'a rejection needs a reason');
+    }
+    final i = _listings.indexWhere((l) => l.id == listingId);
+    if (i < 0) throw AdminActionException('not-found', 'no such listing');
+    final listing = _listings[i];
+    if (!(listingStatusMoves[listing.status] ?? const []).contains(to)) {
+      throw AdminActionException('failed-precondition', 'a ${listing.status} listing cannot be set to $to');
+    }
+    final at = _clock();
+    _listings[i] = listing.withStatus(to, at);
+    _log(who, 'listing.$action', listing.title, listing.status, to, reason: reason?.trim(), at: at);
+  }
+
+  void _log(StaffUser who, String action, String target, String from, String to, {String? reason, DateTime? at}) =>
+      _audit.insert(
+        0,
+        AuditRow(
+          id: 'audit-local-${_audit.length + 1}',
+          at: at ?? _clock(),
+          actorName: who.name,
+          actorRole: who.role,
+          action: action,
+          target: target,
+          from: from,
+          to: to,
+          reason: reason,
+        ),
+      );
 }
 
 String _areaName(String slug) =>
