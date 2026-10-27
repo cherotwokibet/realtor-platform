@@ -187,6 +187,13 @@ jobs:
     needs: [changes, dart]
     if: needs.changes.outputs.app == 'true'
     steps:
+      # A dead runner uploads no log at all; a full disk is the usual cause.
+      # Drop toolchains this job never uses (.NET, Haskell, CodeQL, Swift).
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          df -h /
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
@@ -221,7 +228,12 @@ jobs:
       - name: Build a debug APK per flavor
         working-directory: apps/realtor_app
         run: |
-          for f in $(ls assets/flavors); do flutter build apk --debug --flavor "$f"; done
+          for f in $(ls assets/flavors); do
+            flutter build apk --debug --flavor "$f"
+            # Keep the APK, drop the intermediates before the next flavor.
+            rm -rf build/app/intermediates build/app/tmp
+            df -h / | tail -1
+          done
       - name: Distinct application ids (install side by side)
         working-directory: apps/realtor_app
         run: |
