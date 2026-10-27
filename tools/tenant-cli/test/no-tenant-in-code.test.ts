@@ -7,7 +7,7 @@ import { repoRoot } from '../src/validate.ts';
 // Rule 1 of the README: nothing about a realtor lives in code. A second
 // realtor must run with zero code changes, so no tenant's identifiers may
 // appear in the apps, packages, functions or tooling source.
-const codeDirs = ['apps/realtor_app/lib', 'apps/share_pages/lib', 'apps/share_pages/bin', 'packages/core/lib', 'packages/tokens/lib', 'packages/ui/lib', 'functions/src', 'tools/tenant-cli/src'];
+const codeDirs = ['apps/admin/lib', 'apps/realtor_app/lib', 'apps/share_pages/lib', 'apps/share_pages/bin', 'packages/core/lib', 'packages/tokens/lib', 'packages/ui/lib', 'functions/src', 'tools/tenant-cli/src'];
 
 function files(dir: string): string[] {
   if (!existsSync(dir)) return [];

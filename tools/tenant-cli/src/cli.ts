@@ -26,7 +26,7 @@ function usage(): never {
   validate [id...]   Check tenant files against the schema, assets and colour contrast
   css <id>           Write build/tokens/<id>.css for the share pages
   icons <id>         Generate app icons, splash, favicons, PWA and share images into brand/<id>/generated
-  prepare <id>       Generate icons, then copy the tenant file, logos and fonts into apps/realtor_app/assets/tenant
+  prepare <id>       Generate icons, then copy the tenant file, logos and fonts into assets/tenant of the app and the admin
   flavors [id...]    One Android flavor per tenant (default: all): assets/flavors/<flavor>/, flavor-only
                      pubspec assets, per-flavor icon + splash configs, productFlavors in android/app
 
@@ -55,27 +55,33 @@ function resetDir(dir: string): void {
   writeFileSync(join(dir, '.gitkeep'), '');
 }
 
-/** Tenant file, logos, fonts (+ manifest) and icon inputs, under apps/realtor_app/<rel>. */
-async function writeAppAssets(root: string, t: any, rel: string): Promise<void> {
+/**
+ * Tenant file, logos, fonts (+ manifest) and icon inputs, under apps/realtor_app/<rel>.
+ * Apps in [alsoTo] (the admin) get the same files except the icon inputs.
+ */
+async function writeAppAssets(root: string, t: any, rel: string, alsoTo: string[] = []): Promise<void> {
   const r = await generateIcons(root, t);
-  const out = join(root, 'apps', 'realtor_app', rel);
-  resetDir(out);
-  writeFileSync(join(out, 'tenant.json'), JSON.stringify(t, null, 2));
-  // Fixed file names: the app refers to these, never to a realtor's own names.
-  for (const f of ['logo-horizontal.png', 'logo-horizontal-reverse.png', 'logo-stacked.png', 'mark.png']) {
-    copyFileSync(join(r.outDir, f), join(out, f));
-  }
-  // Fonts: the app registers every entry of fonts.json before the first frame.
-  mkdirSync(join(out, 'fonts'), { recursive: true });
   const fonts = tenantFontFiles(t);
-  for (const f of fonts) copyFileSync(join(root, f.source), join(out, 'fonts', f.file));
-  writeFileSync(
-    join(out, 'fonts.json'),
-    JSON.stringify(fonts.map((f) => ({ family: f.family, weight: f.weight, asset: `${rel}/fonts/${f.file}` })), null, 2),
-  );
-  // Launcher icon + splash inputs live in a subfolder, which Flutter does not bundle.
-  mkdirSync(join(out, 'icons'), { recursive: true });
-  for (const f of r.files.filter((f) => f.endsWith('.png'))) copyFileSync(join(r.outDir, f), join(out, 'icons', f));
+  for (const app of ['realtor_app', ...alsoTo]) {
+    const out = join(root, 'apps', app, rel);
+    resetDir(out);
+    writeFileSync(join(out, 'tenant.json'), JSON.stringify(t, null, 2));
+    // Fixed file names: the app refers to these, never to a realtor's own names.
+    for (const f of ['logo-horizontal.png', 'logo-horizontal-reverse.png', 'logo-stacked.png', 'mark.png']) {
+      copyFileSync(join(r.outDir, f), join(out, f));
+    }
+    // Fonts: the app registers every entry of fonts.json before the first frame.
+    mkdirSync(join(out, 'fonts'), { recursive: true });
+    for (const f of fonts) copyFileSync(join(root, f.source), join(out, 'fonts', f.file));
+    writeFileSync(
+      join(out, 'fonts.json'),
+      JSON.stringify(fonts.map((f) => ({ family: f.family, weight: f.weight, asset: `${rel}/fonts/${f.file}` })), null, 2),
+    );
+    if (app !== 'realtor_app') continue;
+    // Launcher icon + splash inputs live in a subfolder, which Flutter does not bundle.
+    mkdirSync(join(out, 'icons'), { recursive: true });
+    for (const f of r.files.filter((f) => f.endsWith('.png'))) copyFileSync(join(r.outDir, f), join(out, 'icons', f));
+  }
 }
 
 switch (cmd) {
@@ -149,12 +155,12 @@ next:
     if (!id) usage();
     const root = repoRoot();
     const t = loadValid(id);
-    await writeAppAssets(root, t, 'assets/tenant');
+    await writeAppAssets(root, t, 'assets/tenant', ['admin']);
     const app = join(root, 'apps', 'realtor_app');
     const cfg = flutterConfigs(t);
     writeFileSync(join(app, 'flutter_launcher_icons.yaml'), cfg.launcherIcons);
     writeFileSync(join(app, 'flutter_native_splash.yaml'), cfg.nativeSplash);
-    console.log(`prepared ${id} → apps/realtor_app/assets/tenant (icons in brand/${id}/generated)`);
+    console.log(`prepared ${id} → apps/realtor_app and apps/admin assets/tenant (icons in brand/${id}/generated)`);
     break;
   }
   case 'flavors': {

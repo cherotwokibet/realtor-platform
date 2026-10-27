@@ -7,6 +7,7 @@ workspace:
   - packages/core
   - packages/tokens
   - packages/ui
+  - apps/admin
   - apps/realtor_app
   - apps/share_pages
 
