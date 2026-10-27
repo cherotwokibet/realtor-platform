@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { docId, kenyanPhone, lead, leadChannel, leadStage } from '../model/schema';
+import transitions from '../model/transitions.json';
 import { audit } from './audit';
 import { type Caller, isManager, parseInput, requireStaff } from './auth';
 
@@ -61,14 +62,8 @@ export async function logContactTap(db: Firestore, input: unknown): Promise<{ co
 }
 
 type Stage = z.infer<typeof leadStage>;
-const NEXT: Record<Stage, Stage[]> = {
-  new: ['contacted', 'lost'],
-  contacted: ['viewing', 'offer', 'lost'],
-  viewing: ['offer', 'won', 'lost'],
-  offer: ['won', 'lost'],
-  won: [],
-  lost: ['contacted'],
-};
+/** Allowed stage moves, shared with the admin's menus (packages/core checks it reads the same file). */
+const NEXT: Record<Stage, readonly Stage[]> = transitions.leadStage as Record<Stage, Stage[]>;
 
 export const canMoveLead = (from: Stage, to: Stage) => NEXT[from].includes(to);
 

@@ -30,6 +30,19 @@ class LeadRow {
   final String id, listingId, listingTitle, agentId, agentName, channel, stage;
   final DateTime createdAt;
   final String? contactName, contactPhone;
+
+  LeadRow withStage(String stage) => LeadRow(
+        id: id,
+        listingId: listingId,
+        listingTitle: listingTitle,
+        agentId: agentId,
+        agentName: agentName,
+        channel: channel,
+        stage: stage,
+        createdAt: createdAt,
+        contactName: contactName,
+        contactPhone: contactPhone,
+      );
 }
 
 class StaffListingRow {
@@ -50,6 +63,21 @@ class StaffListingRow {
   final String id, slug, title, area, status, agentId, agentName;
   final int priceKES, leads, calls, whatsapps;
   final DateTime updatedAt;
+
+  StaffListingRow withStatus(String status, DateTime updatedAt) => StaffListingRow(
+        id: id,
+        slug: slug,
+        title: title,
+        area: area,
+        priceKES: priceKES,
+        status: status,
+        agentId: agentId,
+        agentName: agentName,
+        updatedAt: updatedAt,
+        leads: leads,
+        calls: calls,
+        whatsapps: whatsapps,
+      );
 }
 
 class AuditRow {

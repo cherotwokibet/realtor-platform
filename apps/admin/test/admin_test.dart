@@ -18,6 +18,14 @@ final wanjiku = demoStaff.firstWhere((s) => s.agentId == 'agent-wanjiku');
 
 late ProviderContainer container;
 
+/// Taps [f] after scrolling it into view (wide tables scroll sideways).
+Future<void> tapVisible(WidgetTester tester, Finder f) async {
+  await tester.ensureVisible(f);
+  await tester.pumpAndSettle();
+  await tester.tap(f);
+  await tester.pumpAndSettle();
+}
+
 Future<void> open(WidgetTester tester, {StaffUser? as, double width = 1280}) async {
   tester.view.physicalSize = Size(width, 1400);
   tester.view.devicePixelRatio = 1;
@@ -68,6 +76,37 @@ void main() {
       final leads = await repo.leads(manager, limit: 100);
       expect(leads.rows.map((r) => r.agentId).toSet().length, 3);
       expect((await repo.audit(manager)).rows, isNotEmpty);
+    });
+  });
+
+  group('DemoAdminRepository actions (what the Functions check)', () {
+    test('an agent moves their own lead one allowed step, and it is in the audit log', () async {
+      final repo = DemoAdminRepository(clock: () => DateTime(2026, 10, 28, 9));
+      final lead = (await repo.leads(wanjiku, stage: 'new')).rows.first;
+      await repo.moveLead(wanjiku, leadId: lead.id, stage: 'contacted');
+      final moved = (await repo.leads(wanjiku, limit: 100)).rows.firstWhere((r) => r.id == lead.id);
+      expect(moved.stage, 'contacted');
+      final entry = (await repo.audit(manager)).rows.first;
+      expect(
+          (entry.actorName, entry.action, entry.from, entry.to), ('Wanjiku Mwangi', 'lead.stage', 'new', 'contacted'));
+      expect(entry.at, DateTime(2026, 10, 28, 9));
+    });
+
+    test("refuses other agents' leads, impossible moves and agents moderating", () async {
+      final repo = DemoAdminRepository();
+      final others =
+          (await repo.leads(manager, stage: 'new', limit: 100)).rows.firstWhere((r) => r.agentId != 'agent-wanjiku');
+      Future<void> fails(Future<void> f, String code) =>
+          expectLater(f, throwsA(isA<AdminActionException>().having((e) => e.code, 'code', code)));
+      await fails(repo.moveLead(wanjiku, leadId: others.id, stage: 'contacted'), 'permission-denied');
+      await fails(repo.moveLead(manager, leadId: others.id, stage: 'won'), 'failed-precondition');
+      final pending = (await repo.listings(manager, status: 'pending')).rows.first;
+      await fails(repo.moderateListing(wanjiku, listingId: pending.id, action: 'approve'), 'permission-denied');
+      await fails(
+          repo.moderateListing(manager, listingId: pending.id, action: 'reject', reason: ' '), 'invalid-argument');
+      await fails(repo.moderateListing(manager, listingId: pending.id, action: 'sold'), 'failed-precondition');
+      await repo.moderateListing(manager, listingId: pending.id, action: 'approve');
+      expect((await repo.listings(manager, status: 'live', limit: 100)).rows.map((r) => r.id), contains(pending.id));
     });
   });
 
@@ -137,6 +176,66 @@ void main() {
     for (final r in notLive.where((r) => live.every((l) => l.title != r.title))) {
       expect(find.text(r.title), findsNothing, reason: r.id);
     }
+  });
+
+  testWidgets('an agent moves a lead on from its stage menu', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'New'));
+    await tester.pumpAndSettle();
+    final lead = (await container.read(adminRepositoryProvider).leads(wanjiku, stage: 'new')).rows.first;
+    await tapVisible(tester, find.byTooltip('Move ${lead.contactName} on'));
+    expect(find.text('Lost'), findsWidgets);
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Contacted'));
+    await tester.pumpAndSettle();
+    expect(find.text('${lead.contactName} moved to Contacted'), findsOneWidget);
+    // Filtered on New, the moved lead leaves the page.
+    expect(find.byTooltip('Move ${lead.contactName} on'), findsNothing);
+  });
+
+  testWidgets('agents get no moderation menu on listings', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PopupMenuButton<String>), findsNothing);
+  });
+
+  testWidgets('a manager rejects a pending listing with a reason, and the audit log shows it', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Pending'));
+    await tester.pumpAndSettle();
+    final listing = (await container.read(adminRepositoryProvider).listings(manager, status: 'pending')).rows.first;
+    await tapVisible(tester, find.byTooltip('Change ${listing.title}'));
+    await tester.tap(find.text('Reject…'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save')).onPressed, isNull);
+    await tester.enterText(find.byType(TextField), 'Blurry photos');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('${listing.title}: Draft'), findsOneWidget);
+
+    await tester.tap(find.text('Audit log'));
+    await tester.pumpAndSettle();
+    expect(find.text('Blurry photos'), findsOneWidget);
+    expect(find.text('Listing reject'), findsWidgets);
+  });
+
+  testWidgets('cancelling the reason leaves the listing as it was', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Pending'));
+    await tester.pumpAndSettle();
+    final listing = (await container.read(adminRepositoryProvider).listings(manager, status: 'pending')).rows.first;
+    await tapVisible(tester, find.byTooltip('Change ${listing.title}'));
+    await tester.tap(find.text('Reject…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    final still = (await container.read(adminRepositoryProvider).listings(manager, status: 'pending')).rows;
+    expect(still.map((r) => r.id), contains(listing.id));
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

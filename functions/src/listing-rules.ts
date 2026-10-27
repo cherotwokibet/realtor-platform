@@ -1,5 +1,7 @@
 /** Server-side business rules for listings. Pure functions, unit-tested. */
 
+import transitions from './model/transitions.json';
+
 export const REGION = 'europe-west1';
 
 /** Listings must be re-confirmed by an agent every 30 days to keep the Verified badge. */
@@ -11,15 +13,11 @@ export function verificationExpiry(verifiedAt: Date): Date {
   return new Date(verifiedAt.getTime() + VERIFICATION_DAYS * 24 * 60 * 60 * 1000);
 }
 
-/** Allowed status moves. Clients can request a move; only Functions apply it. */
-const MOVES: Record<ListingStatus, ListingStatus[]> = {
-  draft: ['pending'],
-  pending: ['live', 'draft'],
-  live: ['expired', 'let', 'sold', 'draft'],
-  expired: ['pending', 'live'],
-  let: ['live'],
-  sold: [],
-};
+/**
+ * Allowed status moves. Clients can request a move; only Functions apply it.
+ * The table is shared with the admin's menus (model/transitions.json).
+ */
+const MOVES: Record<ListingStatus, readonly ListingStatus[]> = transitions.listingStatus as Record<ListingStatus, ListingStatus[]>;
 
 export function canMove(from: ListingStatus, to: ListingStatus): boolean {
   return MOVES[from].includes(to);

@@ -11,7 +11,9 @@ Staff roles are custom claims set by a Function (`role`: owner / manager / agent
 | Owner, manager | all | all | yes |
 | Agent | own | own | no |
 
-Every table pages on the server (`startAfter` + `limit`), newest first. Changes (lead stage, approving a listing) go through the Functions, which write the audit log in the same transaction (D7).
+Every table pages on the server (`startAfter` + `limit`), newest first.
+
+Changes go through the Functions, which check the role, apply the change and write the audit log in one transaction (D7): an agent moves their own leads along the pipeline (`updateLeadStage`); owners and managers approve, reject with a reason, relist or close listings (`moderateListing`). The menus offer only the moves the Functions allow, read from the same table (`functions/src/model/transitions.json`, mirrored in `packages/core` and checked by a test).
 
 ## Run
 
