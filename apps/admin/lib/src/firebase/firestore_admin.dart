@@ -93,6 +93,30 @@ class FirestoreAdminRepository implements AdminRepository {
     });
   }
 
+  @override
+  Future<List<StaffMember>> team(StaffUser who) async {
+    if (!who.canOpen(AdminSection.team)) throw StaffAccessException('the team is for owners and managers');
+    final names = await _agents();
+    final docs = (await _db.collection('staff').orderBy('email').get()).docs;
+    return [
+      for (final d in docs)
+        if (StaffRole.values.where((r) => r.name == d.data()['role']).firstOrNull case final role?)
+          StaffMember(
+            uid: d.id,
+            role: role,
+            email: d.data()['email'] as String?,
+            name: d.data()['name'] as String?,
+            agentId: d.data()['agentId'] as String?,
+            agentName: names[d.data()['agentId']],
+          ),
+    ];
+  }
+
+  @override
+  Future<List<AgentOption>> agents(StaffUser who) async => [
+        for (final e in (await _agents()).entries) AgentOption(e.key, e.value)
+      ]..sort((a, b) => a.name.compareTo(b.name));
+
   /// One page of [q] after the document [after], plus the next cursor.
   Future<RowPage<T>> _page<T>(
     String collection,

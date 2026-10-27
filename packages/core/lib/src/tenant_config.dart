@@ -281,9 +281,8 @@ class TenantConfig {
       );
 
   /// WhatsApp deep link with a prefilled message, or null until a number exists.
-  Uri? whatsappLink(String message) => whatsapp == 'TBC'
-      ? null
-      : Uri.https('wa.me', '/${whatsapp.replaceAll('+', '')}', {'text': message});
+  Uri? whatsappLink(String message) =>
+      whatsapp == 'TBC' ? null : Uri.https('wa.me', '/${whatsapp.replaceAll('+', '')}', {'text': message});
 
   factory TenantConfig.fromJson(Json j) {
     const p = 'tenant';

@@ -56,5 +56,6 @@ abstract interface class LeadRepository {
   Future<void> logTap({required String listingId, required String channel});
 
   /// `bookViewing`; [slot] as `viewingSlot` builds it.
-  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone});
+  Future<void> bookViewing(
+      {required String listingId, required String slot, required String name, required String phone});
 }

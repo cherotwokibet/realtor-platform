@@ -3,7 +3,8 @@
 /// say: half-hour starts 08:00-17:30 Nairobi time (UTC+3 all year),
 /// Monday to Saturday.
 final viewingTimes = [
-  for (var m = 8 * 60; m <= 17 * 60 + 30; m += 30) '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}',
+  for (var m = 8 * 60; m <= 17 * 60 + 30; m += 30)
+    '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}',
 ];
 
 /// The next [count] viewing days (no Sundays), from today in Nairobi:

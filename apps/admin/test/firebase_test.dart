@@ -131,6 +131,17 @@ void main() {
       expect((l2.priceKES, l2.leads, l2.calls, l2.whatsapps, l2.agentName), (50002, 2, 4, 0, 'Agent A'));
     });
 
+    test('the team: managers only, by email, with agent names; unknown roles skipped', () async {
+      await db.collection('staff').doc('u2').set({'email': 'b@example.com', 'role': 'agent', 'agentId': 'agent-a'});
+      await db.collection('staff').doc('u1').set({'email': 'a@example.com', 'name': 'Boss', 'role': 'owner'});
+      await db.collection('staff').doc('u3').set({'email': 'c@example.com', 'role': 'intern'});
+      expect(() => repo.team(agent), throwsA(isA<StaffAccessException>()));
+      final team = await repo.team(manager);
+      expect(team.map((m) => m.email), ['a@example.com', 'b@example.com']);
+      expect((team.last.role, team.last.agentName), (StaffRole.agent, 'Agent A'));
+      expect((await repo.agents(manager)).map((a) => a.name), ['Agent A', 'Agent B']);
+    });
+
     test('the audit log: managers only, newest first, scripts shown as such', () async {
       expect(() => repo.audit(agent), throwsA(isA<StaffAccessException>()));
       final rows = (await repo.audit(manager)).rows;
@@ -167,6 +178,13 @@ void main() {
       expect(calls[0].$2, {'leadId': 'lead1', 'stage': 'contacted'});
       expect(calls[1].$2, {'listingId': 'l0', 'action': 'approve'});
       expect(calls[2].$2, {'listingId': 'l1', 'action': 'reject', 'reason': 'Blurry'});
+      await actions.setStaffRole(manager, email: ' a@example.com ', role: StaffRole.agent, agentId: 'agent-a');
+      await actions.setStaffRole(manager, email: 'b@example.com', role: StaffRole.manager, agentId: 'ignored');
+      await actions.setStaffRole(manager, email: 'c@example.com', role: null);
+      expect(calls.skip(3).map((c) => c.$1).toSet(), {'setStaffRole'});
+      expect(calls[3].$2, {'email': 'a@example.com', 'role': 'agent', 'agentId': 'agent-a'});
+      expect(calls[4].$2, {'email': 'b@example.com', 'role': 'manager'});
+      expect(calls[5].$2, {'email': 'c@example.com', 'role': null});
     });
 
     test('a refusal becomes an AdminActionException with the callable code', () async {

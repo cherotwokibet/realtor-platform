@@ -23,6 +23,14 @@ class CallableAdminActions implements AdminActions {
   Future<void> moderateListing(StaffUser who, {required String listingId, required String action, String? reason}) =>
       _run('moderateListing', {'listingId': listingId, 'action': action, if (reason != null) 'reason': reason});
 
+  @override
+  Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) =>
+      _run('setStaffRole', {
+        'email': email.trim(),
+        'role': role?.name,
+        if (role == StaffRole.agent) 'agentId': agentId,
+      });
+
   Future<void> _run(String name, Map<String, Object?> data) async {
     try {
       await _call(name, data);

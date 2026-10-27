@@ -50,6 +50,13 @@ class SlowActions implements AdminActions {
     await gate.future;
     return inner.moderateListing(who, listingId: listingId, action: action, reason: reason);
   }
+
+  @override
+  Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) async {
+    calls++;
+    await gate.future;
+    return inner.setStaffRole(who, email: email, role: role, agentId: agentId);
+  }
 }
 
 late SlowActions slow;
@@ -146,6 +153,30 @@ void main() {
       await fails(repo.moderateListing(manager, listingId: pending.id, action: 'sold'), 'failed-precondition');
       await repo.moderateListing(manager, listingId: pending.id, action: 'approve');
       expect((await repo.listings(manager, status: 'live', limit: 100)).rows.map((r) => r.id), contains(pending.id));
+    });
+  });
+
+  group('DemoAdminRepository team (what setStaffRole checks)', () {
+    test('an owner adds someone who has signed in, as an agent of a real agent record', () async {
+      final repo = DemoAdminRepository();
+      await repo.setStaffRole(owner, email: 'New.Agent@example.com', role: StaffRole.agent, agentId: 'agent-achieng');
+      final added = (await repo.team(owner)).firstWhere((m) => m.email == 'new.agent@example.com');
+      expect((added.role, added.agentId, added.agentName), (StaffRole.agent, 'agent-achieng', 'Achieng Odhiambo'));
+      final entry = (await repo.audit(owner)).rows.first;
+      expect(
+          (entry.action, entry.target, entry.from, entry.to), ('staff.role', 'new.agent@example.com', 'none', 'agent'));
+    });
+
+    test('refuses non-owners, unknown emails, agents without a record and owner lock-out', () async {
+      final repo = DemoAdminRepository();
+      Future<void> fails(Future<void> f, String code) =>
+          expectLater(f, throwsA(isA<AdminActionException>().having((e) => e.code, 'code', code)));
+      await fails(
+          repo.setStaffRole(manager, email: 'new.agent@example.com', role: StaffRole.manager), 'permission-denied');
+      await fails(repo.setStaffRole(owner, email: 'nobody@example.com', role: StaffRole.manager), 'not-found');
+      await fails(repo.setStaffRole(owner, email: 'new.agent@example.com', role: StaffRole.agent), 'invalid-argument');
+      await fails(repo.setStaffRole(owner, email: 'owner@example.com', role: StaffRole.manager), 'failed-precondition');
+      expect(() => repo.team(wanjiku), throwsA(isA<StaffAccessException>()));
     });
   });
 
@@ -295,6 +326,53 @@ void main() {
     await tester.pumpAndSettle();
     final still = (await container.read(adminRepositoryProvider).listings(manager, status: 'pending')).rows;
     expect(still.map((r) => r.id), contains(listing.id));
+  });
+
+  testWidgets('an owner adds someone to the team as an agent, then removes them', (tester) async {
+    await open(tester, as: owner);
+    await tester.tap(find.text('Team'));
+    await tester.pumpAndSettle();
+    expect(find.text('manager@example.com'), findsOneWidget);
+    expect(find.byTooltip('Change owner@example.com'), findsNothing, reason: 'no menu on your own row');
+
+    await tester.tap(find.text('Add someone'));
+    await tester.pumpAndSettle();
+    final save = find.widgetWithText(FilledButton, 'Save');
+    await tester.enterText(find.widgetWithText(TextField, 'Their email'), 'new.agent@example.com');
+    await tester.pump();
+    expect(tester.widget<FilledButton>(save).onPressed, isNull, reason: 'an agent needs an agent record');
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'Acts as agent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Achieng Odhiambo').last);
+    await tester.pumpAndSettle();
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('new.agent@example.com is now agent'), findsOneWidget);
+    expect(find.text('new.agent@example.com'), findsOneWidget);
+
+    await tapVisible(tester, find.byTooltip('Change new.agent@example.com'));
+    await tester.tap(find.text('Remove from staff…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+    expect(find.text('new.agent@example.com'), findsNothing);
+  });
+
+  testWidgets('managers see the team but cannot change it; agents do not see it', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Team'));
+    await tester.pumpAndSettle();
+    expect(find.text('Only owners change roles.'), findsOneWidget);
+    expect(find.text('Add someone'), findsNothing);
+    expect(find.byType(PopupMenuButton<String>), findsNothing);
+    await tester.tap(find.byTooltip('Sign out (${manager.name})'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(wanjiku.name));
+    await tester.pumpAndSettle();
+    expect(find.text('Team'), findsNothing);
+    container.read(routerProvider).go('/team');
+    await tester.pumpAndSettle();
+    expect(location(), '/leads');
   });
 
   testWidgets('signing out returns to sign in', (tester) async {
