@@ -10,6 +10,7 @@ import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
 import { moderateListing, submitListing } from './listings';
+import { bookViewing } from './viewings';
 
 let db: Firestore;
 const visitor: Caller = { uid: null, role: null, agentId: null };
@@ -30,7 +31,7 @@ before(() => {
 });
 
 beforeEach(async () => {
-  for (const c of ['listings', 'leads', 'areas', 'agents']) {
+  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings']) {
     const all = await db.collection(c).get();
     await Promise.all(all.docs.map((d) => d.ref.delete()));
   }
@@ -51,6 +52,45 @@ const newListing = {
   lng: 36.786,
   area: 'kilimani',
 };
+
+describe('bookViewing', () => {
+  // `now` is Saturday 24 Oct 2026, 12:00 Nairobi; Monday 26 Oct 10:30 is open.
+  const slot = '2026-10-26T10:30:00+03:00';
+  const amina = { name: 'Amina', phone: '+254700000401' };
+
+  test('books a slot with the listing agent and stores the client as a consented lead', async () => {
+    const { viewingId, leadId } = await bookViewing(db, { listingId: 'listing-001', slot, client: amina, consent: true }, now);
+    assert.equal(viewingId, `agent-wanjiku_${new Date(slot).getTime()}`);
+    const v = (await db.collection('viewings').doc(viewingId).get()).data()!;
+    assert.equal(v.status, 'requested');
+    assert.equal(v.agentId, 'agent-wanjiku');
+    assert.equal(v.slot.toDate().toISOString(), '2026-10-26T07:30:00.000Z');
+    const l = (await db.collection('leads').doc(leadId).get()).data()!;
+    assert.equal(l.channel, 'viewing');
+    assert.deepEqual(l.contact, amina);
+    assert.equal(l.retainUntil.toDate().getTime() - l.consentAt.toDate().getTime(), LEAD_RETENTION_DAYS * 86_400_000);
+  });
+
+  test('one active booking per agent per slot; a cancelled slot frees up', async () => {
+    await bookViewing(db, { listingId: 'listing-001', slot, client: amina, consent: true }, now);
+    // listing-004 has the same agent (every third listing): same slot is taken.
+    await rejectsWith(bookViewing(db, { listingId: 'listing-004', slot, client: { name: 'Juma', phone: '+254700000402' }, consent: true }, now), 'already-exists');
+    // A different agent at the same time is fine.
+    await bookViewing(db, { listingId: 'listing-002', slot, client: { name: 'Juma', phone: '+254700000402' }, consent: true }, now);
+    await db.collection('viewings').doc(`agent-wanjiku_${new Date(slot).getTime()}`).update({ status: 'cancelled' });
+    await bookViewing(db, { listingId: 'listing-004', slot, client: { name: 'Juma', phone: '+254700000402' }, consent: true }, now);
+  });
+
+  test('refuses closed slots, missing consent and unavailable listings', async () => {
+    const ok = { listingId: 'listing-001', slot, client: amina, consent: true };
+    await rejectsWith(bookViewing(db, { ...ok, slot: '2026-10-25T10:30:00+03:00' }, now), 'invalid-argument'); // Sunday
+    await rejectsWith(bookViewing(db, { ...ok, slot: '2026-10-26 10:30' }, now), 'invalid-argument'); // no offset
+    await rejectsWith(bookViewing(db, { ...ok, consent: false }, now), 'invalid-argument');
+    await rejectsWith(bookViewing(db, { ...ok, client: { name: 'A', phone: '0712345678' } }, now), 'invalid-argument');
+    await rejectsWith(bookViewing(db, { ...ok, listingId: 'no-such-listing' }, now), 'not-found');
+    assert.equal((await db.collection('viewings').count().get()).data().count, 0);
+  });
+});
 
 describe('logContactTap', () => {
   test('counts call and WhatsApp taps on the listing and stores no lead', async () => {
