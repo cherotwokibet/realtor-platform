@@ -77,6 +77,6 @@ async function applyRole(
   const ref = db.collection('staff').doc(user.uid);
   if (role) batch.set(ref, { email: user.email ?? null, name: user.displayName ?? null, role, agentId, updatedAt: now });
   else batch.delete(ref);
-  audit(batch, db, caller, { action: 'staff.role', target: { collection: 'staff', id: user.uid }, from: typeof prev === 'string' ? prev : null, to: role ?? 'none' }, now);
+  audit(batch, db, caller, { action: 'staff.role', target: { collection: 'staff', id: user.uid, label: user.email }, from: typeof prev === 'string' ? prev : null, to: role ?? 'none' }, now);
   await batch.commit();
 }

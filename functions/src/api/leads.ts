@@ -80,8 +80,12 @@ export async function updateLeadStage(db: Firestore, caller: Caller, input: unkn
     if (!isManager(caller) && snap.get('agentId') !== caller.agentId) throw new HttpsError('permission-denied', 'not your lead');
     const from = snap.get('stage') as Stage;
     if (!canMoveLead(from, req.stage)) throw new HttpsError('failed-precondition', `a lead cannot go from ${from} to ${req.stage}`);
+    // The audit log names the lead by its listing, not by the person (no personal data there).
+    const listingId = snap.get('listingId') as string | null;
+    const listing = listingId ? await tx.get(db.collection('listings').doc(listingId)) : null;
+    const title = listing?.get('title') as string | undefined;
     tx.update(ref, { stage: req.stage });
-    audit(tx, db, caller, { action: 'lead.stage', target: { collection: 'leads', id: ref.id }, from, to: req.stage }, now);
+    audit(tx, db, caller, { action: 'lead.stage', target: { collection: 'leads', id: ref.id, label: title ? `Lead on ${title}` : undefined }, from, to: req.stage }, now);
   });
   return { stage: req.stage };
 }
