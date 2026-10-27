@@ -8,6 +8,13 @@ const demoStaff = [
   StaffUser(uid: 'demo-otieno', name: 'Brian Otieno', role: StaffRole.agent, agentId: 'agent-otieno'),
 ];
 
+/// Demo sign-in accounts by email: the staff above, plus one person who has
+/// signed in but has no role yet, for trying out the Team page.
+final _demoAccounts = {
+  for (final u in demoStaff) '${u.uid.replaceFirst('demo-', '')}@example.com': u,
+  'new.agent@example.com': const StaffUser(uid: 'demo-new', name: 'New Agent', role: StaffRole.agent),
+};
+
 const _agents = {
   'agent-wanjiku': 'Wanjiku Mwangi',
   'agent-otieno': 'Brian Otieno',
@@ -98,6 +105,20 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   final _leads = <LeadRow>[];
   final _audit = <AuditRow>[];
 
+  /// uid -> member; starts with the demo staff (the no-role account is not staff).
+  late final _team = {
+    for (final e in _demoAccounts.entries)
+      if (e.value.uid != 'demo-new')
+        e.value.uid: StaffMember(
+          uid: e.value.uid,
+          email: e.key,
+          name: e.value.name,
+          role: e.value.role,
+          agentId: e.value.agentId,
+          agentName: _agents[e.value.agentId],
+        ),
+  };
+
   @override
   Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25}) async {
     final rows = scopedTo(who, _leads, (r) => r.agentId).where((r) => stage == null || r.stage == stage).toList();
@@ -147,6 +168,46 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     final at = _clock();
     _listings[i] = listing.withStatus(to, at);
     _log(who, 'listing.$action', listing.title, listing.status, to, reason: reason?.trim(), at: at);
+  }
+
+  @override
+  Future<List<StaffMember>> team(StaffUser who) async {
+    if (!who.canOpen(AdminSection.team)) throw StaffAccessException('the team is for owners and managers');
+    return _team.values.toList()..sort((a, b) => (a.email ?? '').compareTo(b.email ?? ''));
+  }
+
+  @override
+  Future<List<AgentOption>> agents(StaffUser who) async =>
+      [for (final e in _agents.entries) AgentOption(e.key, e.value)]..sort((a, b) => a.name.compareTo(b.name));
+
+  @override
+  Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) async {
+    if (!who.canManageStaff) throw AdminActionException('permission-denied', 'owner only');
+    final account = _demoAccounts[email.trim().toLowerCase()];
+    if (account == null) {
+      throw AdminActionException(
+          'not-found', 'no account with that email: ask them to sign in to the admin once first');
+    }
+    if (account.uid == who.uid && role != StaffRole.owner) {
+      throw AdminActionException('failed-precondition', 'an owner cannot remove their own owner role');
+    }
+    if (role == StaffRole.agent && !_agents.containsKey(agentId)) {
+      throw AdminActionException('invalid-argument', 'an agent needs a known agent record');
+    }
+    final before = _team[account.uid]?.role.name;
+    if (role == null) {
+      _team.remove(account.uid);
+    } else {
+      final id = role == StaffRole.agent ? agentId : null;
+      _team[account.uid] = StaffMember(
+          uid: account.uid,
+          email: email.trim().toLowerCase(),
+          name: account.name,
+          role: role,
+          agentId: id,
+          agentName: _agents[id]);
+    }
+    _log(who, 'staff.role', email.trim().toLowerCase(), before ?? 'none', role?.name ?? 'none');
   }
 
   void _log(StaffUser who, String action, String target, String from, String to, {String? reason, DateTime? at}) =>

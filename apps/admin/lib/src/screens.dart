@@ -330,3 +330,213 @@ class AuditScreen extends ConsumerWidget {
     );
   }
 }
+
+/// Staff and their roles. Owners and managers see it; only owners change it
+/// (setStaffRole), and nobody can lock themselves out of the owner role.
+class TeamScreen extends ConsumerStatefulWidget {
+  const TeamScreen({super.key});
+  @override
+  ConsumerState<TeamScreen> createState() => _TeamScreenState();
+}
+
+class _TeamScreenState extends ConsumerState<TeamScreen> {
+  var _reload = 0;
+  final _saving = <String>{};
+
+  Future<void> _change(StaffUser who,
+      {required String email, StaffRole? role, String? agentId, required String done}) async {
+    if (_saving.contains(email)) return;
+    setState(() => _saving.add(email));
+    final ok = await _act(
+      context,
+      () => ref.read(adminActionsProvider).setStaffRole(who, email: email, role: role, agentId: agentId),
+      done,
+    );
+    if (!mounted) return;
+    setState(() {
+      _saving.remove(email);
+      if (ok) _reload++;
+    });
+  }
+
+  Future<void> _edit(StaffUser who, {StaffMember? member}) async {
+    final agents = await ref.read(adminRepositoryProvider).agents(who);
+    if (!mounted) return;
+    final r = await showDialog<_StaffChoice>(
+      context: context,
+      builder: (context) => _StaffDialog(member: member, agents: agents),
+    );
+    if (r == null || !mounted) return;
+    await _change(who,
+        email: r.email,
+        role: r.role,
+        agentId: r.agentId,
+        done: '${r.email} is now ${label(r.role.name).toLowerCase()}. They get it on their next sign-in.');
+  }
+
+  Future<void> _remove(StaffUser who, StaffMember m) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${m.email ?? m.name ?? 'this person'} from staff?'),
+        content: const Text('Their account stays, but they lose access to the admin on their next sign-in.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (yes != true || !mounted || m.email == null) return;
+    await _change(who, email: m.email!, done: '${m.email} removed from staff.');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final who = ref.watch(staffProvider)!;
+    final repo = ref.watch(adminRepositoryProvider);
+    return _TablePage(
+      title: 'Team',
+      subtitle: who.canManageStaff
+          ? 'Add people after they have signed in to this admin once. Changes apply on their next sign-in.'
+          : 'Only owners change roles.',
+      filters: who.canManageStaff
+          ? Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: () => _edit(who),
+                icon: const Icon(Icons.person_add_alt),
+                label: const Text('Add someone'),
+              ),
+            )
+          : null,
+      table: FutureBuilder<List<StaffMember>>(
+        key: ValueKey(('team', _reload)),
+        future: repo.team(who),
+        builder: (context, snap) {
+          if (snap.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text("Couldn't load the team: ${snap.error}",
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            );
+          }
+          final team = snap.data;
+          if (team == null) {
+            return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
+          }
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columns: const [
+                DataColumn(label: Text('Email')),
+                DataColumn(label: Text('Name')),
+                DataColumn(label: Text('Role')),
+                DataColumn(label: Text('Acts as agent')),
+              ],
+              rows: [
+                for (final m in team)
+                  DataRow(cells: [
+                    DataCell(Text(m.email ?? '—')),
+                    DataCell(Text(m.name ?? '—')),
+                    DataCell(_MenuCell(
+                      text: label(m.role.name),
+                      tooltip: 'Change ${m.email ?? m.uid}',
+                      saving: _saving.contains(m.email),
+                      // Owners change anyone but themselves (no lock-out).
+                      options: who.canManageStaff && m.uid != who.uid && m.email != null
+                          ? const ['edit', 'remove']
+                          : const [],
+                      labelOf: (o) => o == 'edit' ? 'Change role…' : 'Remove from staff…',
+                      onSelected: (o) => o == 'edit' ? _edit(who, member: m) : _remove(who, m),
+                    )),
+                    DataCell(Text(m.agentName ?? m.agentId ?? '')),
+                  ]),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+typedef _StaffChoice = ({String email, StaffRole role, String? agentId});
+
+/// Email (fixed when changing someone), role, and the agent record for agents.
+class _StaffDialog extends StatefulWidget {
+  const _StaffDialog({this.member, required this.agents});
+  final StaffMember? member;
+  final List<AgentOption> agents;
+
+  @override
+  State<_StaffDialog> createState() => _StaffDialogState();
+}
+
+class _StaffDialogState extends State<_StaffDialog> {
+  late final _email = TextEditingController(text: widget.member?.email ?? '');
+  late StaffRole _role = widget.member?.role ?? StaffRole.agent;
+  late String? _agentId = widget.member?.agentId;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  bool get _valid {
+    final e = _email.text.trim();
+    return e.contains('@') && e.contains('.') && (_role != StaffRole.agent || _agentId != null);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.member == null ? 'Add someone to staff' : 'Change ${widget.member!.email}'),
+        content: SizedBox(
+          width: 360,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (widget.member == null)
+              TextField(
+                controller: _email,
+                autofocus: true,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Their email',
+                  helperText: 'They must have signed in to this admin once.',
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<StaffRole>(
+              initialValue: _role,
+              decoration: const InputDecoration(labelText: 'Role'),
+              items: [for (final r in StaffRole.values) DropdownMenuItem(value: r, child: Text(label(r.name)))],
+              onChanged: (r) => setState(() => _role = r ?? _role),
+            ),
+            if (_role == StaffRole.agent) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: widget.agents.any((a) => a.id == _agentId) ? _agentId : null,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                    labelText: 'Acts as agent', helperText: 'Sees only this agent\'s leads and listings.'),
+                items: [for (final a in widget.agents) DropdownMenuItem(value: a.id, child: Text(a.name))],
+                onChanged: (id) => setState(() => _agentId = id),
+              ),
+            ],
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: _valid
+                ? () => Navigator.pop<_StaffChoice>(context, (
+                      email: _email.text.trim().toLowerCase(),
+                      role: _role,
+                      agentId: _role == StaffRole.agent ? _agentId : null,
+                    ))
+                : null,
+            child: const Text('Save'),
+          ),
+        ],
+      );
+}
