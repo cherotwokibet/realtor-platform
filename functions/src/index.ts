@@ -22,6 +22,7 @@ import { Client as Typesense } from 'typesense';
 import { type SearchConfig, searchConfig } from './search/config';
 import { searchRelevantChange, syncListing } from './search/sync';
 import { getStorage } from 'firebase-admin/storage';
+import { mediaBucketName } from './media/bucket';
 import { handleListingUpload } from './media/upload';
 import { callerFrom } from './api/auth';
 import * as leads from './api/leads';
@@ -49,7 +50,7 @@ export const moderateListing = onCall((req) => listings.moderateListing(getFires
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 
 // Media pipeline (D6): raw listing photos -> WebP variants + blurhash.
-export const onListingPhoto = onObjectFinalized({ memory: '1GiB', timeoutSeconds: 120 }, async (event) => {
+export const onListingPhoto = onObjectFinalized({ bucket: mediaBucketName(process.env), memory: '1GiB', timeoutSeconds: 120 }, async (event) => {
   const r = await handleListingUpload(getStorage().bucket(event.data.bucket), getFirestore(), event.data.name);
   if (r.status === 'rejected') console.warn(`rejected ${event.data.name}: ${r.reason}`);
 });
