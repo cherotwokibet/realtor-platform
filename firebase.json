@@ -50,7 +50,7 @@
           ]
         },
         {
-          "source": "**/*.@(png|ttf|otf)",
+          "source": "**/*.@(png|ttf)",
           "headers": [
             {
               "key": "Cache-Control",
@@ -59,7 +59,7 @@
           ]
         },
         {
-          "source": "/@(flutter_bootstrap.js|flutter.js|main.dart.js|main.dart.mjs|main.dart.wasm|version.json|manifest.json)",
+          "source": "/@(flutter_bootstrap.js|flutter.js|main.dart.js|main.dart.mjs|main.dart.wasm|version.json|manifest.json|assets/fonts/MaterialIcons-Regular.otf)",
           "headers": [
             {
               "key": "Cache-Control",
@@ -120,7 +120,7 @@
           ]
         },
         {
-          "source": "/@(flutter_bootstrap.js|flutter.js|main.dart.js|main.dart.mjs|main.dart.wasm|version.json|manifest.json)",
+          "source": "/@(flutter_bootstrap.js|flutter.js|main.dart.js|main.dart.mjs|main.dart.wasm|version.json|manifest.json|assets/fonts/MaterialIcons-Regular.otf)",
           "headers": [
             {
               "key": "Cache-Control",
