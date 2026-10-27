@@ -67,7 +67,7 @@ export async function submitListing(db: Firestore, caller: Caller, input: unknow
     parseInput(listing, doc);
     tx.set(ref, doc);
     const from = existing.exists ? (existing.get('status') as ListingStatus) : null;
-    audit(tx, db, caller, { action: 'listing.submit', target: { collection: 'listings', id: ref.id }, from, to: 'pending' }, now);
+    audit(tx, db, caller, { action: 'listing.submit', target: { collection: 'listings', id: ref.id, label: req.title }, from, to: 'pending' }, now);
   });
   return { listingId: ref.id, slug: finalSlug };
 }
@@ -103,7 +103,7 @@ export async function moderateListing(db: Firestore, caller: Caller, input: unkn
       ...(to === 'live' ? { verifiedAt: now, expiresAt: verificationExpiry(now) } : {}),
       ...(req.action === 'reject' ? { rejection: { reason: req.reason, at: now, by: caller.uid } } : {}),
     });
-    audit(tx, db, caller, { action: `listing.${req.action}`, target: { collection: 'listings', id: ref.id }, from, to, reason: req.reason }, now);
+    audit(tx, db, caller, { action: `listing.${req.action}`, target: { collection: 'listings', id: ref.id, label: snap.get('title') as string | undefined }, from, to, reason: req.reason }, now);
   });
   return { status: to };
 }

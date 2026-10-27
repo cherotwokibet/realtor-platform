@@ -26,7 +26,7 @@ One Firestore database per tenant project (D1), so documents carry no tenant id.
 | `payments/{id}` | purpose (viewing-fee / deposit / featured-ad), amountKES, phone, listingId, checkoutRequestId, status (pending / paid / failed / cancelled), receipt | *Functions only* (Daraja, P6) |
 | `savedSearches/{id}` | userId, filters {purpose, types, areas, minBeds, maxPriceKES}, channels (push / email / whatsapp), lastNotifiedAt | The signed-in user; lastNotifiedAt *Functions* |
 | `staff/{uid}` | email, name, role (owner / manager / agent), agentId, updatedAt | *Functions only* (`setStaffRole`, mirror of the custom claims); managers read all, staff read their own |
-| `audit/{id}` | at, actor {uid, role, agentId}, action (lead.stage / listing.submit / listing.approve / …), target {collection, id}, from, to, reason | *Functions only*, in the same transaction as the change; owners and managers read. Ids and states only, no personal data |
+| `audit/{id}` | at, actor {uid, role, agentId}, action (lead.stage / listing.submit / listing.approve / …), target {collection, id, label}, from, to, reason | *Functions only*, in the same transaction as the change; owners and managers read. Ids, states and a label (listing title, staff email); no client personal data |
 | `areas/{slug}` | name, county, centre (geo), guide, amenities[], stats {medianRentKES, listings} | Admin; stats *Functions* |
 | `config/tenant` | Read-only copy of the tenant file for runtime flags | Deploy step |
 

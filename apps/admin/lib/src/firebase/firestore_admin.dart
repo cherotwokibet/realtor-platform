@@ -83,7 +83,8 @@ class FirestoreAdminRepository implements AdminRepository {
               actorName: actor['name'] as String? ?? (role?.name ?? 'Script'),
               actorRole: role,
               action: _str(d, 'action'),
-              target: '${target['collection'] ?? ''}/${target['id'] ?? ''}',
+              // Older entries have no label: show where they point instead.
+              target: target['label'] as String? ?? '${target['collection'] ?? ''}/${target['id'] ?? ''}',
               from: d.data()['from'] as String?,
               to: d.data()['to'] as String?,
               reason: d.data()['reason'] as String?,

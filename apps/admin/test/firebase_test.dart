@@ -89,7 +89,7 @@ void main() {
         'at': Timestamp.fromDate(t0),
         'actor': {'uid': 'u-m', 'role': 'manager', 'agentId': null, 'name': 'Manager'},
         'action': 'listing.approve',
-        'target': {'collection': 'listings', 'id': 'l0'},
+        'target': {'collection': 'listings', 'id': 'l0', 'label': 'Listing 0'},
         'from': 'pending',
         'to': 'live',
       });
@@ -146,7 +146,8 @@ void main() {
       expect(() => repo.audit(agent), throwsA(isA<StaffAccessException>()));
       final rows = (await repo.audit(manager)).rows;
       expect(rows.map((r) => r.action), ['listing.approve', 'staff.role']);
-      expect((rows.first.actorRole, rows.first.target), (StaffRole.manager, 'listings/l0'));
+      expect((rows.first.actorRole, rows.first.target), (StaffRole.manager, 'Listing 0'));
+      expect(rows.last.target, 'staff/u-o', reason: 'no label: falls back to collection/id');
       expect((rows.last.actorRole, rows.last.actorName, rows.last.from), (null, 'owner bootstrap script', null));
     });
   });

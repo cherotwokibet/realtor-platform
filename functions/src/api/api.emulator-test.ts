@@ -145,7 +145,7 @@ describe('updateLeadStage', () => {
     assert.equal(log.length, 1);
     assert.deepEqual(
       { ...log[0], at: log[0].at.toDate() },
-      { at: now, actor: { uid: 'u1', role: 'agent', agentId: 'agent-wanjiku', name: null }, action: 'lead.stage', target: { collection: 'leads', id: 'lead-001' }, from: 'new', to: 'contacted' },
+      { at: now, actor: { uid: 'u1', role: 'agent', agentId: 'agent-wanjiku', name: null }, action: 'lead.stage', target: { collection: 'leads', id: 'lead-001', label: `Lead on ${seedDocs(now).find((d) => d.id === 'listing-001')!.data.title}` }, from: 'new', to: 'contacted' },
     );
   });
 });
@@ -175,6 +175,7 @@ describe('listings', () => {
     assert.equal(l.expiresAt.toDate().getTime() - l.verifiedAt.toDate().getTime(), 30 * 86_400_000);
     await rejectsWith(moderateListing(db, manager, { listingId, action: 'approve' }), 'failed-precondition');
     const log = (await db.collection('audit').orderBy('action').get()).docs.map((d) => d.data());
+    assert.deepEqual(log.map((e) => e.target.label), [newListing.title, newListing.title]);
     assert.deepEqual(log.map((e) => [e.action, e.actor.uid, e.target.id, e.from, e.to]), [
       ['listing.approve', 'm1', listingId, 'pending', 'live'],
       ['listing.submit', 'u1', listingId, null, 'pending'],
@@ -235,7 +236,9 @@ describe('staff roles', () => {
     assert.deepEqual(auth.claims('new@example.com'), { beta: true });
     assert.equal((await db.collection('staff').doc('u9').get()).exists, false);
 
-    const log = (await db.collection('audit').get()).docs.map((d) => d.data()).map((e) => `${e.from}->${e.to}`).sort();
+    const entries = (await db.collection('audit').get()).docs.map((d) => d.data());
+    assert.deepEqual([...new Set(entries.map((e) => e.target.label))], ['new@example.com']);
+    const log = entries.map((e) => `${e.from}->${e.to}`).sort();
     assert.deepEqual(log, ['agent->manager', 'manager->none', 'null->agent']);
   });
 
