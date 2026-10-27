@@ -21,6 +21,9 @@ abstract interface class LeadApi {
 
   /// `logContactTap`: counts a call or WhatsApp tap, no personal data (D13).
   Future<void> logTap({required String listingId, required String channel});
+
+  /// `bookViewing`: [slot] is ISO 8601 with the Nairobi offset.
+  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message});
 }
 
 class LeadApiException implements Exception {
@@ -73,6 +76,16 @@ class CallableLeadApi implements LeadApi {
   @override
   Future<void> logTap({required String listingId, required String channel}) =>
       _call('logContactTap', {'listingId': listingId, 'channel': channel});
+
+  @override
+  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message}) =>
+      _call('bookViewing', {
+        'listingId': listingId,
+        'slot': slot,
+        'client': {'name': name, 'phone': phone},
+        if (message != null) 'message': message,
+        'consent': true,
+      });
 }
 
 /// What a visitor typed into the enquiry form, checked before any call.
@@ -93,6 +106,34 @@ class Enquiry {
     if (form['consent'] != 'yes') errors['consent'] = 'Tick the box so we may contact you.';
     return (
       enquiry: errors.isEmpty ? Enquiry._(phone!, name.isEmpty ? null : name, message.isEmpty ? null : message) : null,
+      errors: errors,
+    );
+  }
+}
+
+/// What a visitor typed into the viewing form, checked before any call.
+class ViewingRequest {
+  ViewingRequest._(this.slot, this.name, this.phone, this.message);
+
+  /// e.g. `2026-10-27T10:30:00+03:00`.
+  final String slot;
+  final String name, phone;
+  final String? message;
+
+  static ({ViewingRequest? request, Map<String, String> errors}) parse(Map<String, String> form) {
+    final errors = <String, String>{};
+    final day = form['day'] ?? '';
+    final time = form['time'] ?? '';
+    final name = (form['name'] ?? '').trim();
+    final phone = normaliseKenyanPhone(form['phone'] ?? '');
+    final message = (form['message'] ?? '').trim();
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(day) || !viewingTimes.contains(time)) errors['slot'] = 'Pick a day and a time.';
+    if (name.isEmpty || name.length > 80) errors['name'] = 'Enter your name so the agent knows who to expect.';
+    if (phone == null) errors['phone'] = 'Enter a Kenyan mobile number, like 0712 345 678.';
+    if (message.length > 2000) errors['message'] = 'Keep the message under 2,000 characters.';
+    if (form['consent'] != 'yes') errors['consent'] = 'Tick the box so we may contact you.';
+    return (
+      request: errors.isEmpty ? ViewingRequest._(viewingSlot(day, time), name, phone!, message.isEmpty ? null : message) : null,
       errors: errors,
     );
   }

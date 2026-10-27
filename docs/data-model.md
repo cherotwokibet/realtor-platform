@@ -4,7 +4,7 @@ Approved by Boniface on 24 Oct 2026.
 
 One Firestore database per tenant project (D1), so documents carry no tenant id. Schemas live in `functions/src/model/schema.ts` (zod). Functions validate every write against them, and the emulator seed (`functions/src/seed/`) must pass them too.
 
-**Who writes:** clients read public data and create only what a visitor can create (a lead, a viewing request). Every field marked *Functions* is set only by Cloud Functions with the Admin SDK (D7). `firestore.rules` enforces this, and `functions/src/rules/firestore.rules-test.ts` tests every collection in the emulator (`npm --prefix functions run test:rules` inside `firebase emulators:exec`). Staff roles are custom claims (`role`: owner / manager / agent, plus `agentId` for agents) set by a Function. Agents read only their own leads, viewings and draft listings. The only client write is a signed-in user's own saved searches, and even then only `filters` and `channels` can change.
+**Who writes:** clients read public data and create only what a visitor can create (a lead, a viewing request). Every field marked *Functions* is set only by Cloud Functions with the Admin SDK (D7). `firestore.rules` enforces this, and `functions/src/rules/firestore.rules-test.ts` tests every collection in the emulator (`npm --prefix functions run test:rules` inside `firebase emulators:exec`). Staff roles are custom claims (`role`: owner / manager / agent, plus `agentId` for agents) set by the owner-only `setStaffRole` Function; the first owner of a project comes from `npm --prefix functions run staff:owner` (once). Agents read only their own leads, viewings and draft listings. The only client write is a signed-in user's own saved searches, and even then only `filters` and `channels` can change.
 
 ## Conventions
 
@@ -25,6 +25,8 @@ One Firestore database per tenant project (D1), so documents carry no tenant id.
 | `viewings/{id}` | listingId, agentId, slot, client {name, phone}, status (requested / confirmed / done / no-show / cancelled), feeKES, paymentId, createdAt | Requested by clients via `bookViewing`; status *Functions* |
 | `payments/{id}` | purpose (viewing-fee / deposit / featured-ad), amountKES, phone, listingId, checkoutRequestId, status (pending / paid / failed / cancelled), receipt | *Functions only* (Daraja, P6) |
 | `savedSearches/{id}` | userId, filters {purpose, types, areas, minBeds, maxPriceKES}, channels (push / email / whatsapp), lastNotifiedAt | The signed-in user; lastNotifiedAt *Functions* |
+| `staff/{uid}` | email, name, role (owner / manager / agent), agentId, updatedAt | *Functions only* (`setStaffRole`, mirror of the custom claims); managers read all, staff read their own |
+| `audit/{id}` | at, actor {uid, role, agentId}, action (lead.stage / listing.submit / listing.approve / …), target {collection, id}, from, to, reason | *Functions only*, in the same transaction as the change; owners and managers read. Ids and states only, no personal data |
 | `areas/{slug}` | name, county, centre (geo), guide, amenities[], stats {medianRentKES, listings} | Admin; stats *Functions* |
 | `config/tenant` | Read-only copy of the tenant file for runtime flags | Deploy step |
 
@@ -38,11 +40,12 @@ Inputs are validated with zod in `functions/src/api/`, and the stored document i
 |---|---|---|
 | `createLead` | anyone, with the consent tick | Lead on a **live** listing, assigned to that listing's agent; sets `consentAt` and `retainUntil` (24 months, D12) and adds 1 to the listing's `stats.leads` |
 | `logContactTap` | anyone | Adds 1 to a **live** listing's `stats.calls` or `stats.whatsapps` (D13). Stores no personal data and no lead. Counter-only writes do not re-sync search |
+| `bookViewing` | anyone, with the consent tick | Requests a viewing of a **live** listing with its agent: a half-hour slot, Mon–Sat, 08:00–17:30 Nairobi time, at least 2 hours and at most 30 days ahead. One active booking per agent per slot (id `<agentId>_<slot ms>`; a cancelled slot frees up). The client's name and phone are also stored as a lead (channel `viewing`, consent and 24-month retention) and counted in `stats.leads`. Fee is 0 until M-Pesa (P6) |
 | `updateLeadStage` | the lead's agent, or a manager | new → contacted → viewing → offer → won, any stage → lost, and lost → contacted |
 | `submitListing` | agents (as themselves), managers (for any agent) | Create or edit → `pending`; sets slug (unique), geohash, stats and timestamps; the area must exist |
 | `moderateListing` | managers | approve (live, verified for 30 days), reject (needs a reason), expire, let, sold; status moves from `listing-rules.ts` |
 
-Still to come in P2-s03: `bookViewing`, plus rate limits on `createLead` (P6 fraud controls).
+Still to come: rate limits on the public callables (P6 fraud controls), confirming and cancelling viewings from admin (P5 bookings), and agent availability instead of fixed hours.
 
 ## Media pipeline (P2-s04, D6)
 

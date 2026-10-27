@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_app/src/app.dart';
+import 'package:realtor_app/src/listing/listing_screen.dart';
 import 'package:realtor_app/src/providers.dart';
 import 'package:realtor_app/src/search/demo_search.dart';
 import 'package:realtor_core/realtor_core.dart';
@@ -47,6 +48,15 @@ void main() {
       expect(r.hits.every((h) => h.area == 'kasarani'), isTrue);
       expect(r.found, 2);
     });
+  });
+
+  testWidgets('every App Link path has a screen, not an error page', (tester) async {
+    for (final path in ['/listing/2-bedroom-apartment-kilimani', '/area/kilimani', '/agent/agent-wanjiku']) {
+      final h = await open(tester, path);
+      expect(h.location, path);
+      expect(find.textContaining('Page Not Found'), findsNothing, reason: path);
+      expect(find.byType(path.startsWith('/listing/') ? ListingScreen : PlaceholderScreen), findsOneWidget, reason: path);
+    }
   });
 
   testWidgets('a shared link opens straight into its results', (tester) async {

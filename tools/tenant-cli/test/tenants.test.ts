@@ -51,3 +51,14 @@ test('a font that is not bundled fails validation', async () => {
   assert.equal(problems.length, 4);
   assert.match(problems[0], /fonts\/PlusJakartaSans\/PlusJakartaSans-Regular\.ttf/);
 });
+
+test('store ids for App Links / Universal Links are optional and checked', () => {
+  const schema = JSON.parse(readFileSync(join(repoRoot(), 'tenants/schema/tenant.schema.json'), 'utf8'));
+  const apps = schema.properties.apps.properties;
+  const fp = new RegExp(apps.androidCertSha256.items.pattern);
+  assert.ok(fp.test('14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5'));
+  assert.ok(!fp.test('14:6d:e9'), 'full upper-case SHA-256 only');
+  assert.ok(new RegExp(apps.appleTeamId.pattern).test('ABCDE12345'));
+  assert.ok(!new RegExp(apps.appleTeamId.pattern).test('abc'));
+  assert.ok(!schema.properties.apps.required.includes('androidCertSha256'));
+});

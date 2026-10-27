@@ -3,6 +3,8 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { docId, kenyanPhone, lead, leadChannel, leadStage } from '../model/schema';
+import transitions from '../model/transitions.json';
+import { audit } from './audit';
 import { type Caller, isManager, parseInput, requireStaff } from './auth';
 
 /** How long a lead's personal data is kept (Data Protection Act 2019). Proposed: 24 months. */
@@ -60,21 +62,15 @@ export async function logContactTap(db: Firestore, input: unknown): Promise<{ co
 }
 
 type Stage = z.infer<typeof leadStage>;
-const NEXT: Record<Stage, Stage[]> = {
-  new: ['contacted', 'lost'],
-  contacted: ['viewing', 'offer', 'lost'],
-  viewing: ['offer', 'won', 'lost'],
-  offer: ['won', 'lost'],
-  won: [],
-  lost: ['contacted'],
-};
+/** Allowed stage moves, shared with the admin's menus (packages/core checks it reads the same file). */
+const NEXT: Record<Stage, readonly Stage[]> = transitions.leadStage as Record<Stage, Stage[]>;
 
 export const canMoveLead = (from: Stage, to: Stage) => NEXT[from].includes(to);
 
 export const updateLeadStageInput = z.object({ leadId: docId, stage: leadStage });
 
 /** Agents move their own leads; managers move any. */
-export async function updateLeadStage(db: Firestore, caller: Caller, input: unknown): Promise<{ stage: Stage }> {
+export async function updateLeadStage(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ stage: Stage }> {
   requireStaff(caller);
   const req = parseInput(updateLeadStageInput, input);
   const ref = db.collection('leads').doc(req.leadId);
@@ -85,6 +81,7 @@ export async function updateLeadStage(db: Firestore, caller: Caller, input: unkn
     const from = snap.get('stage') as Stage;
     if (!canMoveLead(from, req.stage)) throw new HttpsError('failed-precondition', `a lead cannot go from ${from} to ${req.stage}`);
     tx.update(ref, { stage: req.stage });
+    audit(tx, db, caller, { action: 'lead.stage', target: { collection: 'leads', id: ref.id }, from, to: req.stage }, now);
   });
   return { stage: req.stage };
 }

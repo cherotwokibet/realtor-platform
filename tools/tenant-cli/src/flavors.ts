@@ -32,6 +32,7 @@ export function androidFlavorsGradle(tenants: any[]): string {
             dimension = "tenant"
             applicationId = "${t.apps.androidId}"
             manifestPlaceholders["appName"] = "${kotlinString(appName(t))}"
+            manifestPlaceholders["shareHost"] = "${kotlinString(t.domains.share)}"
         }`,
     )
     .join('\n');
@@ -67,8 +68,29 @@ export function patchBuildGradle(src: string): string {
   return src.slice(0, at) + '\n' + APPLY + '\n' + src.slice(at);
 }
 
+/** Share-page paths the app opens itself (App Links, P3-s07). Keep in step
+ * with appLinkPaths in apps/share_pages/lib/src/app_links.dart. */
+export const appLinkPaths = ['/listing/', '/area/', '/agent/'];
+
+const APP_LINKS = `            <!-- App Links (written by \`tenant flavors\`): share-domain pages open the app. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="\${shareHost}" />
+${appLinkPaths.map((p) => `                <data android:pathPrefix="${p}" />`).join('\n')}
+            </intent-filter>
+`;
+
 /** The launcher label comes from each flavor's appName placeholder
- * (resValue is off by default from AGP 9). */
+ * (resValue is off by default from AGP 9), and the main activity handles
+ * the flavor's share-domain links. */
 export function patchManifest(src: string): string {
-  return src.replace(/android:label="[^"]*"/, 'android:label="${appName}"');
+  let out = src.replace(/android:label="[^"]*"/, 'android:label="${appName}"');
+  const at = out.indexOf('</activity>');
+  if (at >= 0 && !out.includes('android:host="${shareHost}"')) {
+    const lineStart = out.lastIndexOf('\n', at) + 1;
+    out = out.slice(0, lineStart) + APP_LINKS + out.slice(lineStart);
+  }
+  return out;
 }

@@ -228,6 +228,20 @@
         },
         "iosId": {
           "$ref": "#/$defs/bundleId"
+        },
+        "androidCertSha256": {
+          "type": "array",
+          "description": "SHA-256 fingerprints of the release (Play App Signing) certificates, for Android App Links. Leave out until the Play Console app exists.",
+          "items": {
+            "type": "string",
+            "pattern": "^([0-9A-F]{2}:){31}[0-9A-F]{2}$"
+          },
+          "uniqueItems": true
+        },
+        "appleTeamId": {
+          "type": "string",
+          "description": "Apple Developer Team ID, for iOS Universal Links. Leave out until the Apple account exists.",
+          "pattern": "^[A-Z0-9]{10}$"
         }
       }
     },

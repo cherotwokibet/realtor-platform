@@ -47,3 +47,17 @@ test('manifest uses the tenant name, colours and locale', () => {
   assert.deepEqual(m.icons, [1], 'keeps generated icons');
   assert.match(webDescription(t), /Live where you love/);
 });
+
+test('old #/ links are rewritten to paths before Flutter starts, once', () => {
+  const once = patchIndexHtml(flutterIndex, tenant('demo-homes'));
+  const script = /<script>([^<]*)<\/script>\n<\/head>/.exec(once);
+  assert.ok(script, 'redirect script sits in <head>');
+  const calls: string[] = [];
+  const location = { hash: '#/listing/2-bedroom-apartment-kilimani' };
+  const history = { replaceState: (_s: unknown, _t: string, url: string) => calls.push(url) };
+  new Function('location', 'history', script[1])(location, history);
+  assert.deepEqual(calls, ['/listing/2-bedroom-apartment-kilimani']);
+  new Function('location', 'history', script[1])({ hash: '#enquire' }, history);
+  assert.equal(calls.length, 1, 'plain anchors are left alone');
+  assert.equal(patchIndexHtml(once, tenant('demo-homes')), once);
+});

@@ -22,6 +22,7 @@ jobs:
       functions: ${{ steps.f.outputs.functions }}
       dart: ${{ steps.f.outputs.dart }}
       app: ${{ steps.f.outputs.app }}
+      admin: ${{ steps.f.outputs.admin }}
       infra: ${{ steps.f.outputs.infra }}
       share: ${{ steps.f.outputs.share }}
       emulator: ${{ steps.f.outputs.emulator }}
@@ -44,9 +45,9 @@ jobs:
           out() { if has "$2"; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
           shared='^(packages/core|packages/tokens|tenants|brand|fonts|tools/tenant-cli)/|^pubspec\.'
           out functions '^functions/|^(firestore|storage)\.rules$'
-          out dart "$shared|^(packages|apps)/|^analysis_options\.yaml$"
-          if [ "$DRAFT" = true ]; then echo "app=false" >> "$GITHUB_OUTPUT"
-          else out app "$shared|^(packages/ui|apps/realtor_app)/"; fi
+          out dart "$shared|^(packages|apps)/|^analysis_options\.yaml$|^functions/src/model/transitions\.json$"
+          if [ "$DRAFT" = true ]; then echo "app=false" >> "$GITHUB_OUTPUT"; echo "admin=false" >> "$GITHUB_OUTPUT"
+          else out app "$shared|^(packages/ui|apps/realtor_app)/"; out admin "$shared|^(packages/ui|apps/admin)/"; fi
           out infra '^infra/|^tenants/|^(firestore|storage)\.rules$'
           out share '^(packages/core|packages/tokens|tenants|apps/share_pages)/|^\.dockerignore$'
           out emulator '^(functions|apps/share_pages|packages/core)/|^(firestore|storage)\.rules$|^firestore\.indexes\.json$|^firebase\.json$'
@@ -130,6 +131,7 @@ jobs:
         run: |
           (cd packages/ui && flutter test)
           (cd apps/realtor_app && flutter test)
+          (cd apps/admin && flutter test)
       - name: Dart and TS emit identical CSS
         run: |
           for t in realtime-estates demo-homes; do
@@ -181,12 +183,47 @@ jobs:
           path: apps/realtor_app/build/web
           retention-days: 7
 
+  admin:
+    name: Admin web build
+    runs-on: ubuntu-latest
+    needs: [changes, dart]
+    if: needs.changes.outputs.admin == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/tenant-cli/package-lock.json
+      - run: npm ci
+        working-directory: tools/tenant-cli
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: node tools/tenant-cli/src/cli.ts prepare realtime-estates
+      - name: Build web
+        working-directory: apps/admin
+        run: |
+          flutter create . --platforms=web --project-name realtor_admin >/dev/null
+          rm -f test/widget_test.dart
+          flutter build web --release
+          test -f build/web/main.dart.js
+
   android:
     name: Android flavors (every tenant, side by side)
     runs-on: ubuntu-latest
     needs: [changes, dart]
     if: needs.changes.outputs.app == 'true'
     steps:
+      # A dead runner uploads no log at all; a full disk is the usual cause.
+      # Drop toolchains this job never uses (.NET, Haskell, CodeQL, Swift).
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          df -h /
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
@@ -212,10 +249,21 @@ jobs:
           flutter pub get
           dart run flutter_launcher_icons
           dart run flutter_native_splash:create --flavors "$(ls assets/flavors | paste -sd, -)"
+          # The template gives Gradle an 8 GB heap and the Kotlin daemon
+          # inherits it: with native plugins that is more than the 16 GB
+          # runner has, and the runner dies mid-build with no log.
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/' android/gradle.properties
+          echo 'kotlin.daemon.jvmargs=-Xmx2g' >> android/gradle.properties
+          grep -E 'jvmargs' android/gradle.properties
       - name: Build a debug APK per flavor
         working-directory: apps/realtor_app
         run: |
-          for f in $(ls assets/flavors); do flutter build apk --debug --flavor "$f"; done
+          for f in $(ls assets/flavors); do
+            flutter build apk --debug --flavor "$f"
+            # Keep the APK, drop the intermediates before the next flavor.
+            rm -rf build/app/intermediates build/app/tmp
+            df -h / | tail -1
+          done
       - name: Distinct application ids (install side by side)
         working-directory: apps/realtor_app
         run: |
@@ -229,6 +277,18 @@ jobs:
           done
           test "$(printf '%s' "$ids" | sort | uniq -d)" = "" || { echo "duplicate application ids"; exit 1; }
           test "$(printf '%s' "$ids" | grep -c .)" -ge 2
+      - name: App Links (each flavor opens its own share domain)
+        working-directory: apps/realtor_app
+        run: |
+          aapt2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
+          for f in $(ls assets/flavors); do
+            apk=build/app/outputs/flutter-apk/$(ls build/app/outputs/flutter-apk | grep -i "^app-$f-debug\.apk$")
+            host=$(node -e 'const fs=require("fs");for(const x of fs.readdirSync("../../tenants").filter(n=>n.endsWith(".json"))){const t=JSON.parse(fs.readFileSync("../../tenants/"+x,"utf8"));if(t.id.replace(/-([a-z0-9])/g,(_,c)=>c.toUpperCase())===process.argv[1])console.log(t.domains.share)}' "$f")
+            tree=$("$aapt2" dump xmltree --file AndroidManifest.xml "$apk")
+            echo "$tree" | grep -qE "host\(0x[0-9a-f]+\)=\"$host\"" || { echo "$f: no App Link for $host"; exit 1; }
+            echo "$tree" | grep -q 'autoVerify' || { echo "$f: autoVerify missing"; exit 1; }
+            echo "$f → https://$host/listing/… opens the app"
+          done
 
   terraform:
     name: Terraform (format + validate, never applied)

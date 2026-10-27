@@ -1,0 +1,25 @@
+{
+  "leadStage": {
+    "new": ["contacted", "lost"],
+    "contacted": ["viewing", "offer", "lost"],
+    "viewing": ["offer", "won", "lost"],
+    "offer": ["won", "lost"],
+    "won": [],
+    "lost": ["contacted"]
+  },
+  "listingStatus": {
+    "draft": ["pending"],
+    "pending": ["live", "draft"],
+    "live": ["expired", "let", "sold", "draft"],
+    "expired": ["pending", "live"],
+    "let": ["live"],
+    "sold": []
+  },
+  "moderation": {
+    "approve": "live",
+    "reject": "draft",
+    "expire": "expired",
+    "let": "let",
+    "sold": "sold"
+  }
+}
