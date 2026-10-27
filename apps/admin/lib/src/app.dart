@@ -4,10 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
-import 'demo_admin.dart';
 import 'format.dart';
 import 'providers.dart';
 import 'screens.dart';
+import 'session.dart';
 
 /// One admin section: its route and navigation destination.
 class _Section {
@@ -27,10 +27,13 @@ final _sections = [
 
 const signInPath = '/sign-in';
 
-/// Where [path] should go instead for [who], or null to open it: signed-out
-/// staff go to sign in, and nobody opens a section their role doesn't cover.
-String? adminRedirect(StaffUser? who, String path) {
-  if (who == null) return path == signInPath ? null : signInPath;
+/// Where [path] should go instead in [session], or null to open it: anyone
+/// not signed in as staff goes to sign in, and nobody opens a section their
+/// role doesn't cover. While starting, stay put (keeps deep links).
+String? adminRedirect(Session session, String path) {
+  if (session is Starting) return null;
+  if (session is! SignedIn) return path == signInPath ? null : signInPath;
+  final who = session.user;
   final home = '/${AdminSection.leads.name}';
   if (path == signInPath || path == '/') return home;
   for (final s in AdminSection.values) {
@@ -41,12 +44,12 @@ String? adminRedirect(StaffUser? who, String path) {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier(0);
-  ref.listen(staffProvider, (_, __) => refresh.value++);
+  ref.listen(sessionProvider, (_, __) => refresh.value++);
   ref.onDispose(refresh.dispose);
   return GoRouter(
     initialLocation: '/${AdminSection.leads.name}',
     refreshListenable: refresh,
-    redirect: (context, state) => adminRedirect(ref.read(staffProvider), state.uri.path),
+    redirect: (context, state) => adminRedirect(ref.read(sessionProvider), state.uri.path),
     routes: [
       GoRoute(path: signInPath, builder: (context, state) => const SignInScreen()),
       ShellRoute(
@@ -87,8 +90,8 @@ class _AdminShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final who = ref.watch(staffProvider);
-    // Signed out: the router is about to move to sign in; draw nothing until then.
-    if (who == null) return const SizedBox.shrink();
+    // Starting, or signed out with the router about to move to sign in.
+    if (who == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final tenant = ref.watch(tenantProvider);
     final sections = [
       for (final s in _sections)
@@ -110,7 +113,7 @@ class _AdminShell extends ConsumerWidget {
         IconButton(
           tooltip: 'Sign out (${who.name})',
           icon: const Icon(Icons.logout),
-          onPressed: () => ref.read(staffProvider.notifier).signOut(),
+          onPressed: () => ref.read(adminAuthProvider).signOut(),
         ),
       ],
     );
@@ -146,44 +149,161 @@ class _AdminShell extends ConsumerWidget {
   }
 }
 
-/// Demo accounts until Firebase Auth is connected; then email link or
-/// password sign-in, with the role read from the ID token's claims.
-class SignInScreen extends ConsumerWidget {
+/// Sign in: demo accounts on demo data; otherwise email + password or
+/// Google, with the role read from the ID token's claims.
+class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SignInScreen> createState() => _SignInScreenState();
+}
+
+class _SignInScreenState extends ConsumerState<SignInScreen> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  var _creating = false, _busy = false;
+  String? _error, _notice;
+
+  /// Firebase's own minimum is 6; staff accounts see personal data, so 8.
+  static const minPassword = 8;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run(Future<void> Function() action, {String? notice}) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      await action();
+      if (mounted && notice != null) setState(() => _notice = notice);
+    } on SignInException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tenant = ref.watch(tenantProvider);
-    final t = Theme.of(context).textTheme;
+    final session = ref.watch(sessionProvider);
+    final auth = ref.watch(adminAuthProvider);
+    final theme = Theme.of(context);
+    final t = theme.textTheme;
+    final email = _email.text.trim();
+    final password = _password.text;
+    final emailOk = email.contains('@') && email.contains('.');
+
+    final List<Widget> body;
+    if (session is Starting || _busy) {
+      body = [const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))];
+    } else if (session is NotStaff) {
+      body = [
+        _pad(Text('You are signed in as ${session.email ?? 'this account'}, but it has no staff role yet. '
+            'Ask the owner to add you, then check again.')),
+        _pad(Wrap(spacing: 8, children: [
+          FilledButton(onPressed: () => _run(auth.refresh), child: const Text('Check again')),
+          TextButton(onPressed: () => _run(auth.signOut), child: const Text('Sign out')),
+        ])),
+      ];
+    } else if (auth.demoAccounts.isNotEmpty) {
+      body = [
+        _pad(Text('Demo accounts over demo data. Pick one to see what that role sees.', style: t.bodyMedium)),
+        for (final s in auth.demoAccounts)
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: Text(s.name),
+            subtitle: Text(label(s.role.name)),
+            onTap: () => auth.signInAs(s),
+          ),
+      ];
+    } else {
+      final canSubmit = emailOk && password.length >= (_creating ? minPassword : 1);
+      body = [
+        _pad(AutofillGroup(
+          child: Column(children: [
+            TextField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(labelText: 'Work email'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _password,
+              obscureText: true,
+              autofillHints: [_creating ? AutofillHints.newPassword : AutofillHints.password],
+              decoration: InputDecoration(
+                labelText: 'Password',
+                helperText: _creating ? 'At least $minPassword characters' : null,
+              ),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) {
+                if (canSubmit) _submit(auth, email, password);
+              },
+            ),
+          ]),
+        )),
+        _pad(FilledButton(
+          onPressed: canSubmit ? () => _submit(auth, email, password) : null,
+          child: Text(_creating ? 'Create account' : 'Sign in'),
+        )),
+        _pad(Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: () => setState(() {
+                _creating = !_creating;
+                _error = null;
+              }),
+              child: Text(_creating ? 'I have an account' : 'New here? Create an account'),
+            ),
+            if (!_creating)
+              TextButton(
+                onPressed: emailOk
+                    ? () => _run(() => auth.sendPasswordReset(email),
+                        notice: 'If $email has an account, a link to set a new password is on its way.')
+                    : null,
+                child: const Text('Forgot password?'),
+              ),
+          ],
+        )),
+        const Divider(height: 24),
+        _pad(OutlinedButton.icon(
+          onPressed: () => _run(auth.signInWithGoogle),
+          icon: const Icon(Icons.account_circle_outlined),
+          label: const Text('Continue with Google'),
+        )),
+      ];
+    }
+
     return Scaffold(
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Card(
-            margin: const EdgeInsets.all(16),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text('${tenant.name} admin', style: t.headlineSmall),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                    child:
-                        Text('Demo accounts over demo data. Pick one to see what that role sees.', style: t.bodyMedium),
-                  ),
-                  for (final s in demoStaff)
-                    ListTile(
-                      leading: const Icon(Icons.person_outline),
-                      title: Text(s.name),
-                      subtitle: Text(label(s.role.name)),
-                      onTap: () => ref.read(staffProvider.notifier).signIn(s),
-                    ),
-                ],
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Card(
+              margin: const EdgeInsets.all(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _pad(Text('${tenant.name} admin', style: t.headlineSmall)),
+                    if (_error != null) _pad(Text(_error!, style: TextStyle(color: theme.colorScheme.error))),
+                    if (_notice != null) _pad(Text(_notice!)),
+                    ...body,
+                  ],
+                ),
               ),
             ),
           ),
@@ -191,4 +311,10 @@ class SignInScreen extends ConsumerWidget {
       ),
     );
   }
+
+  void _submit(AdminAuth auth, String email, String password) => _run(
+        () => _creating ? auth.createAccount(email, password) : auth.signInWithPassword(email, password),
+      );
+
+  Widget _pad(Widget child) => Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8), child: child);
 }

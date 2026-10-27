@@ -93,7 +93,9 @@ class AuditRow {
     this.reason,
   });
   final String id, actorName, action, target;
-  final StaffRole actorRole;
+
+  /// Null for a trusted script (the first-owner bootstrap).
+  final StaffRole? actorRole;
   final DateTime at;
   final String? from, to, reason;
 }

@@ -13,9 +13,11 @@ locals {
     "eventarc.googleapis.com",
     "firebase.googleapis.com",
     "firebaseappcheck.googleapis.com",
+    "firebasehosting.googleapis.com",
     "firebaserules.googleapis.com",
     "firebasestorage.googleapis.com",
     "firestore.googleapis.com",
+    "identitytoolkit.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "storage.googleapis.com",
@@ -147,6 +149,46 @@ resource "google_firebase_web_app" "app" {
   project      = google_project.this.project_id
   display_name = "${local.t.name} (${var.env})"
   depends_on   = [google_firebase_project.this]
+}
+
+# Staff admin (P5): its own web app and Hosting site. Hosting serves the
+# linked app's config at /__/firebase/init.json, so no config is committed.
+resource "google_firebase_web_app" "admin" {
+  provider     = google-beta
+  project      = google_project.this.project_id
+  display_name = "${local.t.name} admin (${var.env})"
+  depends_on   = [google_firebase_project.this]
+}
+
+resource "google_firebase_hosting_site" "admin" {
+  provider = google-beta
+  project  = google_project.this.project_id
+  # Site ids are at most 30 characters.
+  site_id = "${trimsuffix(substr(local.project_id, 0, 24), "-")}-admin"
+  app_id  = google_firebase_web_app.admin.app_id
+}
+
+# Sign-in (D14): email + password here. Google is switched on once in the
+# Firebase console (Authentication > Sign-in method > Google), which makes
+# its OAuth client without a client secret ever entering this state. Staff
+# roles are custom claims set by the setStaffRole Function, never here.
+resource "google_identity_platform_config" "auth" {
+  project = google_project.this.project_id
+  authorized_domains = [
+    "localhost",
+    "${local.project_id}.firebaseapp.com",
+    "${local.project_id}.web.app",
+    "${google_firebase_hosting_site.admin.site_id}.web.app",
+    "${google_firebase_hosting_site.admin.site_id}.firebaseapp.com",
+  ]
+  sign_in {
+    allow_duplicate_emails = false
+    email {
+      enabled           = true
+      password_required = true
+    }
+  }
+  depends_on = [google_project_service.apis, google_firebase_project.this]
 }
 
 # Empty secrets only. Values are added in Secret Manager by the realtor's

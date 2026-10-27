@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_admin/src/app.dart';
 import 'package:realtor_admin/src/demo_admin.dart';
 import 'package:realtor_admin/src/providers.dart';
+import 'package:realtor_admin/src/session.dart';
 import 'package:realtor_core/realtor_core.dart';
 
 TenantConfig tenant() => TenantConfig.fromJson(
@@ -45,17 +46,22 @@ String location() => container.read(routerProvider).routerDelegate.currentConfig
 void main() {
   group('adminRedirect', () {
     test('signed out goes to sign in; signed in leaves it', () {
-      expect(adminRedirect(null, '/leads'), signInPath);
-      expect(adminRedirect(null, signInPath), isNull);
-      expect(adminRedirect(manager, signInPath), '/leads');
-      expect(adminRedirect(manager, '/'), '/leads');
+      expect(adminRedirect(const SignedOut(), '/leads'), signInPath);
+      expect(adminRedirect(const SignedOut(), signInPath), isNull);
+      expect(adminRedirect(const NotStaff('x@example.com'), '/leads'), signInPath);
+      expect(adminRedirect(SignedIn(manager), signInPath), '/leads');
+      expect(adminRedirect(SignedIn(manager), '/'), '/leads');
+    });
+
+    test('while starting, a deep link stays put', () {
+      expect(adminRedirect(const Starting(), '/listings'), isNull);
     });
 
     test('nobody opens a section their role does not cover', () {
-      expect(adminRedirect(wanjiku, '/audit'), '/leads');
-      expect(adminRedirect(wanjiku, '/listings'), isNull);
-      expect(adminRedirect(manager, '/audit'), isNull);
-      expect(adminRedirect(owner, '/nowhere'), '/leads');
+      expect(adminRedirect(SignedIn(wanjiku), '/audit'), '/leads');
+      expect(adminRedirect(SignedIn(wanjiku), '/listings'), isNull);
+      expect(adminRedirect(SignedIn(manager), '/audit'), isNull);
+      expect(adminRedirect(SignedIn(owner), '/nowhere'), '/leads');
     });
   });
 

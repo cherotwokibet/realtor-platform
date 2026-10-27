@@ -264,7 +264,7 @@ class AuditScreen extends ConsumerWidget {
         load: (after) => repo.audit(who, after: after, limit: pageSize),
         columns: [
           TableColumn('When', (r) => Text(shortDateTime(r.at))),
-          TableColumn('Who', (r) => Text('${r.actorName} (${label(r.actorRole.name)})')),
+          TableColumn('Who', (r) => Text('${r.actorName} (${label(r.actorRole?.name ?? 'script')})')),
           TableColumn('Action', (r) => Text(label(r.action))),
           TableColumn('On', (r) => Text(r.target)),
           TableColumn('Change', (r) => Text([r.from, r.to].whereType<String>().map(label).join(' → '))),
