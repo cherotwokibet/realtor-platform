@@ -17,8 +17,9 @@ import { setGlobalOptions } from 'firebase-functions/v2';
 import { onCall, onRequest } from 'firebase-functions/v2/https';
 import { onObjectFinalized } from 'firebase-functions/v2/storage';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
-import { defineSecret, defineString } from 'firebase-functions/params';
+import { defineSecret } from 'firebase-functions/params';
 import { Client as Typesense } from 'typesense';
+import { type SearchConfig, searchConfig } from './search/config';
 import { searchRelevantChange, syncListing } from './search/sync';
 import { getStorage } from 'firebase-admin/storage';
 import { handleListingUpload } from './media/upload';
@@ -54,18 +55,22 @@ export const onListingPhoto = onObjectFinalized({ memory: '1GiB', timeoutSeconds
 });
 
 // Search (D4): live listings mirrored into <TENANT_ID>_listings on Typesense.
-const TENANT_ID = defineString('TENANT_ID');
-const TYPESENSE_HOST = defineString('TYPESENSE_HOST');
-const TYPESENSE_API_KEY = defineSecret('TYPESENSE_API_KEY');
+// Deployed as search-onListingWrite only when the project has search set up
+// (see search/config.ts); otherwise the group is empty and needs no secret.
+const searchCfg = searchConfig(process.env);
+export const search = searchCfg ? { onListingWrite: listingSearchTrigger(searchCfg) } : {};
 
-export const onListingWrite = onDocumentWritten({ document: 'listings/{id}', secrets: [TYPESENSE_API_KEY] }, async (event) => {
-  if (!searchRelevantChange(event.data?.before.data(), event.data?.after.data())) return;
-  const client = new Typesense({
-    nodes: [{ host: TYPESENSE_HOST.value(), port: 443, protocol: 'https' }],
-    apiKey: TYPESENSE_API_KEY.value(),
-    connectionTimeoutSeconds: 5,
+function listingSearchTrigger(cfg: SearchConfig) {
+  const apiKey = defineSecret('TYPESENSE_API_KEY');
+  return onDocumentWritten({ document: 'listings/{id}', secrets: [apiKey] }, async (event) => {
+    if (!searchRelevantChange(event.data?.before.data(), event.data?.after.data())) return;
+    const client = new Typesense({
+      nodes: [{ host: cfg.host, port: 443, protocol: 'https' }],
+      apiKey: apiKey.value(),
+      connectionTimeoutSeconds: 5,
+    });
+    await syncListing(client, cfg.tenantId, event.params.id, event.data?.after.data());
   });
-  await syncListing(client, TENANT_ID.value(), event.params.id, event.data?.after.data());
-});
+}
 
 export { verificationExpiry };
