@@ -50,11 +50,29 @@
           ]
         },
         {
-          "source": "**/*.@(js|wasm|mjs|json|png|ttf|otf)",
+          "source": "**/*.@(png|ttf)",
           "headers": [
             {
               "key": "Cache-Control",
               "value": "public, max-age=3600"
+            }
+          ]
+        },
+        {
+          "source": "/@(flutter_bootstrap.js|flutter.js|main.dart.js|main.dart.mjs|main.dart.wasm|version.json|manifest.json|assets/fonts/MaterialIcons-Regular.otf)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/assets/**/*.json",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
             }
           ]
         }
@@ -94,6 +112,24 @@
         },
         {
           "source": "/flutter_service_worker.js",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/@(flutter_bootstrap.js|flutter.js|main.dart.js|main.dart.mjs|main.dart.wasm|version.json|manifest.json|assets/fonts/MaterialIcons-Regular.otf)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/assets/**/*.json",
           "headers": [
             {
               "key": "Cache-Control",
