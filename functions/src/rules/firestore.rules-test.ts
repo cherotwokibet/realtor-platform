@@ -34,6 +34,7 @@ beforeEach(async () => {
     for (const d of seedDocs()) await setDoc(doc(db, d.collection, d.id), d.data);
     await setDoc(doc(db, 'listings', 'draft-1'), { ...seedDocs().find((d) => d.id === 'listing-001')!.data, status: 'draft', agentId: 'agent-otieno' });
     await setDoc(doc(db, 'agents', 'agent-gone'), { name: 'Former Agent', active: false });
+    await setDoc(doc(db, 'audit', 'a-1'), { at: new Date(), action: 'lead.stage', actor: { uid: 'boss', role: 'manager', agentId: null } });
     await setDoc(doc(db, 'payments', 'pay-1'), { purpose: 'viewing-fee', amountKES: 500, status: 'paid' });
     await setDoc(doc(db, 'viewings', 'view-1'), { listingId: 'listing-001', agentId: 'agent-wanjiku', status: 'requested' });
     await setDoc(doc(db, 'config', 'tenant'), { id: 'demo' });
@@ -113,6 +114,17 @@ describe('viewings and payments', () => {
     await assertSucceeds(getDoc(doc(manager(), 'payments', 'pay-1')));
     await assertFails(updateDoc(doc(manager(), 'payments', 'pay-1'), { status: 'paid' }));
     await assertFails(setDoc(doc(user(), 'payments', 'fake'), { status: 'paid', amountKES: 1 }));
+  });
+});
+
+describe('audit', () => {
+  test('owners and managers read the audit log; agents and the public cannot; nobody writes', async () => {
+    await assertSucceeds(getDoc(doc(manager(), 'audit', 'a-1')));
+    await assertSucceeds(getDoc(doc(env.authenticatedContext('own', { role: 'owner' }).firestore(), 'audit', 'a-1')));
+    await assertFails(getDoc(doc(agent(), 'audit', 'a-1')));
+    await assertFails(getDoc(doc(visitor(), 'audit', 'a-1')));
+    await assertFails(setDoc(doc(manager(), 'audit', 'a-2'), { action: 'listing.approve' }));
+    await assertFails(deleteDoc(doc(manager(), 'audit', 'a-1')));
   });
 });
 
