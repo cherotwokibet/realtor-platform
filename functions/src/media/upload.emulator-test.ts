@@ -10,7 +10,12 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import type { Bucket } from '@google-cloud/storage';
 import { seedDocs } from '../seed/data';
-import { handleListingUpload } from './upload';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { handleListingUpload, handleListingVideo } from './upload';
+import { ffmpegBinary } from './video';
 
 let db: Firestore;
 let bucket: Bucket;
@@ -65,4 +70,34 @@ test("an agent's upload to someone else's listing is rejected and deleted", asyn
 
 test('paths outside uploads/ are ignored', async () => {
   assert.deepEqual(await handleListingUpload({} as Bucket, {} as Firestore, 'brand/watermark.png'), { status: 'ignored' });
+});
+
+const hasFfmpeg = spawnSync(ffmpegBinary(), ['-version']).status === 0;
+function clip(size: string): Buffer {
+  const out = join(mkdtempSync(join(tmpdir(), 'clip-')), 'c.mp4');
+  const r = spawnSync(ffmpegBinary(), ['-y', '-f', 'lavfi', '-i', `testsrc=size=${size}:rate=24:duration=2`, '-pix_fmt', 'yuv420p', out]);
+  assert.equal(r.status, 0);
+  return readFileSync(out);
+}
+
+test('a video upload becomes an HLS ladder and a media entry; photos skip videos', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
+  const path = 'uploads/agents/agent-wanjiku/listings/listing-001/walkthrough.mp4';
+  await bucket.file(path).save(clip('1280x720'), { contentType: 'video/mp4' });
+  assert.deepEqual(await handleListingUpload(bucket, db, path), { status: 'ignored' });
+  const r = await handleListingVideo(bucket, db, path);
+  assert.equal(r.status, 'processed');
+  if (r.status !== 'processed') return;
+  for (const p of Object.values(r.variants)) assert.ok((await bucket.file(p).exists())[0], p);
+  assert.equal((await bucket.file(path).exists())[0], false);
+  const media = (await db.collection('listings').doc('listing-001').get()).get('media') as { kind: string }[];
+  assert.equal(media.filter((x) => x.kind === 'video').length, 1);
+});
+
+test('a small video is rejected and recorded on the listing', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
+  const path = 'uploads/agents/agent-wanjiku/listings/listing-001/small.mp4';
+  await bucket.file(path).save(clip('640x360'), { contentType: 'video/mp4' });
+  const r = await handleListingVideo(bucket, db, path);
+  assert.equal(r.status, 'rejected');
+  assert.match((await db.collection('listings').doc('listing-001').get()).get('lastMediaError').reason, /at least 720px/);
+  assert.equal((await bucket.file(path).exists())[0], false);
 });

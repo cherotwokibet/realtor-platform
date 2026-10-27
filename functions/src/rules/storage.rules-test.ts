@@ -40,6 +40,12 @@ test('agents upload only into their own folder; managers into theirs', async () 
   await assertFails(uploadBytes(ref(env.authenticatedContext('alice').storage(), `${mine}/e.jpg`), jpeg, img));
 });
 
+test('videos are allowed in uploads/, other types are not', async () => {
+  const clip = new Uint8Array(1024);
+  await assertSucceeds(uploadBytes(ref(agent('agent-wanjiku'), `${mine}/walk.mp4`), clip, { contentType: 'video/mp4' }));
+  await assertFails(uploadBytes(ref(agent('agent-wanjiku'), `${mine}/walk.avi`), clip, { contentType: 'video/x-msvideo' }));
+});
+
 test('only images under 20 MB, and no raw reads', async () => {
   await assertFails(uploadBytes(ref(agent('agent-wanjiku'), `${mine}/x.pdf`), jpeg, { contentType: 'application/pdf' }));
   await assertFails(getBytes(ref(agent('agent-wanjiku'), `${mine}/a.jpg`)));

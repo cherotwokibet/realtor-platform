@@ -5,7 +5,6 @@
  * Callables: createLead, logContactTap, updateLeadStage, submitListing, moderateListing.
  *
  * Planned (see tracker):
- *   P2  onMediaUpload   -> ffmpeg HLS for video (photos done: onListingPhoto)
  *   P4  sendPush        -> FCM HTTP v1 (replaces the legacy server key)
  *   P6  mpesaStkPush / mpesaCallback -> Daraja
  *   P6  verifyListing / expireListings (scheduled, 30-day re-verification)
@@ -20,7 +19,7 @@ import { defineSecret, defineString } from 'firebase-functions/params';
 import { Client as Typesense } from 'typesense';
 import { searchRelevantChange, syncListing } from './search/sync';
 import { getStorage } from 'firebase-admin/storage';
-import { handleListingUpload } from './media/upload';
+import { handleListingUpload, handleListingVideo } from './media/upload';
 import { callerFrom } from './api/auth';
 import * as leads from './api/leads';
 import * as listings from './api/listings';
@@ -45,6 +44,13 @@ export const moderateListing = onCall((req) => listings.moderateListing(getFires
 // Media pipeline (D6): raw listing photos -> WebP variants + blurhash.
 export const onListingPhoto = onObjectFinalized({ memory: '1GiB', timeoutSeconds: 120 }, async (event) => {
   const r = await handleListingUpload(getStorage().bucket(event.data.bucket), getFirestore(), event.data.name);
+  if (r.status === 'rejected') console.warn(`rejected ${event.data.name}: ${r.reason}`);
+});
+
+// Same paths, video files: ffmpeg -> HLS ladder + poster. Needs an ffmpeg
+// binary at FFMPEG_PATH (or on PATH); see docs/decisions.md D14.
+export const onListingVideo = onObjectFinalized({ memory: '2GiB', cpu: 2, timeoutSeconds: 540 }, async (event) => {
+  const r = await handleListingVideo(getStorage().bucket(event.data.bucket), getFirestore(), event.data.name);
   if (r.status === 'rejected') console.warn(`rejected ${event.data.name}: ${r.reason}`);
 });
 
