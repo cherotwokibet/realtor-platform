@@ -80,3 +80,7 @@ output "app_ids" {
 output "share_pages_url" {
   value = module.env.share_pages_url
 }
+
+output "admin_url" {
+  value = module.env.admin_url
+}

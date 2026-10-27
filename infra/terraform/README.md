@@ -36,4 +36,23 @@ Repeat with `env=stage` and `env=prod` (each has its own state prefix). The stat
 
 Firestore composite indexes come from the repo's `firestore.indexes.json`, the same file the emulator reads.
 
+### Staff admin (P5, D14)
+
+Terraform registers an admin web app, an admin Hosting site (`<project-id>-admin`, output `admin_url`) and email-link sign-in (Identity Platform, free tier up to 50,000 monthly users; no passwords are stored). To put the admin online and make the first owner:
+
+```sh
+melos run app:prepare -- <tenant-id>
+(cd apps/admin && flutter create . --platforms=web --project-name realtor_admin && rm -f test/widget_test.dart && flutter build web --release)
+firebase target:apply hosting admin <project-id>-admin --project <project-id>   # once per project
+firebase deploy --only hosting:admin,functions --project <project-id>
+```
+
+Open `admin_url`, ask for a sign-in link and sign in once (the account then exists, with no role). Then, once per project:
+
+```sh
+PROJECT=<project-id> OWNER_EMAIL=<that email> npm --prefix functions run staff:owner
+```
+
+Sign out and in again (or press *Check again*) to pick up the owner role. From then on the owner adds staff with `setStaffRole`.
+
 Not yet covered: the Typesense collection (P2 search), and custom domains on Hosting (needs DNS access, P8).

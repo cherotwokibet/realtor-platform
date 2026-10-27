@@ -4,10 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
-import 'demo_admin.dart';
 import 'format.dart';
 import 'providers.dart';
 import 'screens.dart';
+import 'session.dart';
 
 /// One admin section: its route and navigation destination.
 class _Section {
@@ -27,10 +27,13 @@ final _sections = [
 
 const signInPath = '/sign-in';
 
-/// Where [path] should go instead for [who], or null to open it: signed-out
-/// staff go to sign in, and nobody opens a section their role doesn't cover.
-String? adminRedirect(StaffUser? who, String path) {
-  if (who == null) return path == signInPath ? null : signInPath;
+/// Where [path] should go instead in [session], or null to open it: anyone
+/// not signed in as staff goes to sign in, and nobody opens a section their
+/// role doesn't cover. While starting, stay put (keeps deep links).
+String? adminRedirect(Session session, String path) {
+  if (session is Starting) return null;
+  if (session is! SignedIn) return path == signInPath ? null : signInPath;
+  final who = session.user;
   final home = '/${AdminSection.leads.name}';
   if (path == signInPath || path == '/') return home;
   for (final s in AdminSection.values) {
@@ -41,12 +44,12 @@ String? adminRedirect(StaffUser? who, String path) {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier(0);
-  ref.listen(staffProvider, (_, __) => refresh.value++);
+  ref.listen(sessionProvider, (_, __) => refresh.value++);
   ref.onDispose(refresh.dispose);
   return GoRouter(
     initialLocation: '/${AdminSection.leads.name}',
     refreshListenable: refresh,
-    redirect: (context, state) => adminRedirect(ref.read(staffProvider), state.uri.path),
+    redirect: (context, state) => adminRedirect(ref.read(sessionProvider), state.uri.path),
     routes: [
       GoRoute(path: signInPath, builder: (context, state) => const SignInScreen()),
       ShellRoute(
@@ -87,8 +90,8 @@ class _AdminShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final who = ref.watch(staffProvider);
-    // Signed out: the router is about to move to sign in; draw nothing until then.
-    if (who == null) return const SizedBox.shrink();
+    // Starting, or signed out with the router about to move to sign in.
+    if (who == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final tenant = ref.watch(tenantProvider);
     final sections = [
       for (final s in _sections)
@@ -110,7 +113,7 @@ class _AdminShell extends ConsumerWidget {
         IconButton(
           tooltip: 'Sign out (${who.name})',
           icon: const Icon(Icons.logout),
-          onPressed: () => ref.read(staffProvider.notifier).signOut(),
+          onPressed: () => ref.read(adminAuthProvider).signOut(),
         ),
       ],
     );
@@ -146,15 +149,110 @@ class _AdminShell extends ConsumerWidget {
   }
 }
 
-/// Demo accounts until Firebase Auth is connected; then email link or
-/// password sign-in, with the role read from the ID token's claims.
-class SignInScreen extends ConsumerWidget {
+/// Sign in: demo accounts on demo data; otherwise an emailed one-time link,
+/// with the role read from the ID token's claims.
+class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SignInScreen> createState() => _SignInScreenState();
+}
+
+class _SignInScreenState extends ConsumerState<SignInScreen> {
+  final _email = TextEditingController();
+  String? _sentTo, _error;
+  var _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final auth = ref.read(adminAuthProvider);
+    final remembered = auth.rememberedEmail;
+    if (remembered != null) _email.text = remembered;
+    // Opened from the link in the same browser: finish without asking.
+    if (auth.openedFromLink && remembered != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _run(() => auth.completeSignIn(remembered)));
+    }
+  }
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run(Future<void> Function() action, {String? sentTo}) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await action();
+      if (mounted) setState(() => _sentTo = sentTo);
+    } on SignInException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tenant = ref.watch(tenantProvider);
+    final session = ref.watch(sessionProvider);
+    final auth = ref.watch(adminAuthProvider);
     final t = Theme.of(context).textTheme;
+    final email = _email.text.trim();
+
+    final List<Widget> body;
+    if (session is Starting || _busy) {
+      body = [const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))];
+    } else if (session is NotStaff) {
+      body = [
+        _pad(Text('You are signed in as ${session.email ?? 'this account'}, but it has no staff role yet. '
+            'Ask the owner to add you, then check again.')),
+        _pad(Wrap(spacing: 8, children: [
+          FilledButton(onPressed: () => _run(auth.refresh), child: const Text('Check again')),
+          TextButton(onPressed: () => _run(auth.signOut), child: const Text('Sign out')),
+        ])),
+      ];
+    } else if (auth.demoAccounts.isNotEmpty) {
+      body = [
+        _pad(Text('Demo accounts over demo data. Pick one to see what that role sees.', style: t.bodyMedium)),
+        for (final s in auth.demoAccounts)
+          ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: Text(s.name),
+            subtitle: Text(label(s.role.name)),
+            onTap: () => auth.signInAs(s),
+          ),
+      ];
+    } else if (_sentTo != null) {
+      body = [_pad(Text('We sent a sign-in link to $_sentTo. Open it in this browser to continue.'))];
+    } else {
+      final finishing = auth.openedFromLink;
+      body = [
+        _pad(Text(finishing
+            ? 'Confirm the email the sign-in link was sent to.'
+            : 'We will email you a one-time sign-in link.')),
+        _pad(TextField(
+          controller: _email,
+          keyboardType: TextInputType.emailAddress,
+          autofillHints: const [AutofillHints.email],
+          decoration: const InputDecoration(labelText: 'Work email'),
+          onChanged: (_) => setState(() {}),
+        )),
+        _pad(FilledButton(
+          onPressed: !email.contains('@')
+              ? null
+              : finishing
+                  ? () => _run(() => auth.completeSignIn(email))
+                  : () => _run(() => auth.sendSignInLink(email), sentTo: email),
+          child: Text(finishing ? 'Sign in' : 'Email me a link'),
+        )),
+      ];
+    }
+
     return Scaffold(
       body: Center(
         child: ConstrainedBox(
@@ -167,22 +265,9 @@ class SignInScreen extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text('${tenant.name} admin', style: t.headlineSmall),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                    child:
-                        Text('Demo accounts over demo data. Pick one to see what that role sees.', style: t.bodyMedium),
-                  ),
-                  for (final s in demoStaff)
-                    ListTile(
-                      leading: const Icon(Icons.person_outline),
-                      title: Text(s.name),
-                      subtitle: Text(label(s.role.name)),
-                      onTap: () => ref.read(staffProvider.notifier).signIn(s),
-                    ),
+                  _pad(Text('${tenant.name} admin', style: t.headlineSmall)),
+                  if (_error != null) _pad(Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  ...body,
                 ],
               ),
             ),
@@ -191,4 +276,6 @@ class SignInScreen extends ConsumerWidget {
       ),
     );
   }
+
+  Widget _pad(Widget child) => Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8), child: child);
 }

@@ -11,7 +11,12 @@ output "app_ids" {
     android = google_firebase_android_app.app.app_id
     ios     = google_firebase_apple_app.app.app_id
     web     = google_firebase_web_app.app.app_id
+    admin   = google_firebase_web_app.admin.app_id
   }
+}
+
+output "admin_url" {
+  value = google_firebase_hosting_site.admin.default_url
 }
 
 output "share_pages_url" {
