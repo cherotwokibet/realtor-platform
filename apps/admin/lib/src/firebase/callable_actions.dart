@@ -27,8 +27,12 @@ class CallableAdminActions implements AdminActions {
     try {
       await _call(name, data);
     } on FirebaseException catch (e) {
-      // FirebaseFunctionsException is one of these; its code is the callable status.
-      throw AdminActionException(e.code, e.message ?? e.code);
+      // FirebaseFunctionsException is one of these; its code is the callable
+      // status. On the web the code can carry a "functions/" prefix and the
+      // message an HTTP status, e.g. "... [400]": keep what a person reads.
+      final code = e.code.replaceFirst('functions/', '');
+      final message = (e.message ?? code).replaceFirst(RegExp(r'\s*\[\d{3}\]$'), '');
+      throw AdminActionException(code, message);
     }
   }
 }

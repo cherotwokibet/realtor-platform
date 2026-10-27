@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -27,11 +28,43 @@ Future<void> tapVisible(WidgetTester tester, Finder f) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> open(WidgetTester tester, {StaffUser? as, double width = 1280}) async {
+/// Actions that wait for [gate] before reaching the demo data, like a
+/// callable on a cold start.
+class SlowActions implements AdminActions {
+  SlowActions(this.inner);
+  final AdminActions inner;
+  final gate = Completer<void>();
+  var calls = 0;
+
+  @override
+  Future<void> moveLead(StaffUser who, {required String leadId, required String stage}) async {
+    calls++;
+    await gate.future;
+    return inner.moveLead(who, leadId: leadId, stage: stage);
+  }
+
+  @override
+  Future<void> moderateListing(StaffUser who,
+      {required String listingId, required String action, String? reason}) async {
+    calls++;
+    await gate.future;
+    return inner.moderateListing(who, listingId: listingId, action: action, reason: reason);
+  }
+}
+
+late SlowActions slow;
+
+Future<void> open(WidgetTester tester, {StaffUser? as, double width = 1280, bool slowActions = false}) async {
   tester.view.physicalSize = Size(width, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  container = ProviderContainer(overrides: [tenantProvider.overrideWithValue(tenant())]);
+  final demo = DemoAdminRepository();
+  slow = SlowActions(demo);
+  container = ProviderContainer(overrides: [
+    tenantProvider.overrideWithValue(tenant()),
+    demoAdminProvider.overrideWithValue(demo),
+    if (slowActions) adminActionsProvider.overrideWithValue(slow),
+  ]);
   addTearDown(container.dispose);
   await tester.pumpWidget(UncontrolledProviderScope(container: container, child: const AdminApp()));
   await tester.pumpAndSettle();
@@ -196,6 +229,26 @@ void main() {
     expect(find.text('${lead.contactName} moved to Contacted'), findsOneWidget);
     // Filtered on New, the moved lead leaves the page.
     expect(find.byTooltip('Move ${lead.contactName} on'), findsNothing);
+  });
+
+  testWidgets('while a stage change saves, the row shows it and offers nothing else', (tester) async {
+    await open(tester, as: wanjiku, slowActions: true);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'New'));
+    await tester.pumpAndSettle();
+    final lead = (await container.read(adminRepositoryProvider).leads(wanjiku, stage: 'new')).rows.first;
+    await tapVisible(tester, find.byTooltip('Move ${lead.contactName} on'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Contacted'));
+    await tester.pump();
+
+    expect(find.bySemanticsLabel('Saving'), findsOneWidget);
+    expect(find.byTooltip('Move ${lead.contactName} on'), findsNothing, reason: 'no second pick while saving');
+    expect(slow.calls, 1);
+
+    slow.gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Saving'), findsNothing);
+    expect(find.text('${lead.contactName} moved to Contacted'), findsOneWidget);
+    expect(slow.calls, 1);
   });
 
   testWidgets('agents get no moderation menu on listings', (tester) async {

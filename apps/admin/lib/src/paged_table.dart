@@ -20,11 +20,15 @@ class PagedTable<T> extends StatefulWidget {
     required this.load,
     this.empty = 'Nothing here yet.',
     this.reload = 0,
+    this.onLoaded,
   });
   final List<TableColumn<T>> columns;
   final Future<RowPage<T>> Function(String? after) load;
   final String empty;
   final int reload;
+
+  /// Called after each page arrives (rows that changed are now fresh).
+  final VoidCallback? onLoaded;
 
   @override
   State<PagedTable<T>> createState() => _PagedTableState<T>();
@@ -33,12 +37,15 @@ class PagedTable<T> extends StatefulWidget {
 class _PagedTableState<T> extends State<PagedTable<T>> {
   /// The cursor each page was loaded with; the last one is on screen.
   final _cursors = <String?>[null];
-  late Future<RowPage<T>> _page = widget.load(null);
+  late Future<RowPage<T>> _page = _load(null);
+
+  Future<RowPage<T>> _load(String? after) =>
+      widget.load(after)..then((_) => widget.onLoaded?.call(), onError: (Object _) {});
 
   @override
   void didUpdateWidget(PagedTable<T> old) {
     super.didUpdateWidget(old);
-    if (old.reload != widget.reload) _page = widget.load(_cursors.last);
+    if (old.reload != widget.reload) _page = _load(_cursors.last);
   }
 
   void _go(String? cursor, {required bool back}) => setState(() {
@@ -47,7 +54,7 @@ class _PagedTableState<T> extends State<PagedTable<T>> {
         } else {
           _cursors.add(cursor);
         }
-        _page = widget.load(_cursors.last);
+        _page = _load(_cursors.last);
       });
 
   @override

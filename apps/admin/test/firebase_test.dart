@@ -141,6 +141,22 @@ void main() {
   });
 
   group('CallableAdminActions', () {
+    test('web errors read plainly: no "functions/" prefix, no HTTP status', () async {
+      final actions = CallableAdminActions(
+        (name, data) async => throw FirebaseException(
+          plugin: 'firebase_functions',
+          code: 'functions/failed-precondition',
+          message: 'a lead cannot go from contacted to contacted [400]',
+        ),
+      );
+      await expectLater(
+        actions.moveLead(manager, leadId: 'lead1', stage: 'contacted'),
+        throwsA(isA<AdminActionException>()
+            .having((e) => e.code, 'code', 'failed-precondition')
+            .having((e) => e.message, 'message', 'a lead cannot go from contacted to contacted')),
+      );
+    });
+
     test('calls the Functions by name with only what they need', () async {
       final calls = <(String, Map<String, Object?>)>[];
       final actions = CallableAdminActions((name, data) async => calls.add((name, data)));
