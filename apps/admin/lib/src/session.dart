@@ -27,8 +27,9 @@ class SignedIn extends Session {
   final StaffUser user;
 }
 
-/// Sign-in for the admin: Firebase email link on Hosting, demo accounts
-/// everywhere else.
+/// Sign-in for the admin: Firebase email + password or Google on Hosting,
+/// demo accounts everywhere else. Passwords go straight to Firebase Auth;
+/// the admin never stores or logs them.
 abstract interface class AdminAuth {
   /// The current session first, then every change.
   Stream<Session> get sessions;
@@ -39,17 +40,15 @@ abstract interface class AdminAuth {
   /// Demo only.
   Future<void> signInAs(StaffUser user);
 
-  /// Emails a one-time sign-in link back to this admin.
-  Future<void> sendSignInLink(String email);
+  Future<void> signInWithPassword(String email, String password);
 
-  /// True when the admin was opened from a sign-in link.
-  bool get openedFromLink;
+  /// Makes an account with no role; an owner then gives it one.
+  Future<void> createAccount(String email, String password);
 
-  /// The email the link was sent to from this browser, if remembered.
-  String? get rememberedEmail;
+  /// Emails a link to set a new password.
+  Future<void> sendPasswordReset(String email);
 
-  /// Finishes signing in from the link the admin was opened with.
-  Future<void> completeSignIn(String email);
+  Future<void> signInWithGoogle();
 
   /// Reads the role again (after an owner changed it).
   Future<void> refresh();
@@ -89,16 +88,16 @@ class DemoAuth implements AdminAuth {
   Future<void> signOut() async => _set(const SignedOut());
 
   @override
-  Future<void> sendSignInLink(String email) => throw UnsupportedError('demo accounts only');
+  Future<void> signInWithPassword(String email, String password) => throw UnsupportedError('demo accounts only');
 
   @override
-  bool get openedFromLink => false;
+  Future<void> createAccount(String email, String password) => throw UnsupportedError('demo accounts only');
 
   @override
-  String? get rememberedEmail => null;
+  Future<void> sendPasswordReset(String email) => throw UnsupportedError('demo accounts only');
 
   @override
-  Future<void> completeSignIn(String email) => throw UnsupportedError('demo accounts only');
+  Future<void> signInWithGoogle() => throw UnsupportedError('demo accounts only');
 
   @override
   Future<void> refresh() async {}

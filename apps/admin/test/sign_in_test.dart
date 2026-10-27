@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_admin/src/app.dart';
+import 'package:realtor_admin/src/firebase/firebase_auth.dart';
 import 'package:realtor_admin/src/providers.dart';
 import 'package:realtor_admin/src/session.dart';
 import 'package:realtor_core/realtor_core.dart';
@@ -13,39 +14,34 @@ import 'package:realtor_core/realtor_core.dart';
 TenantConfig tenant() => TenantConfig.fromJson(
     jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>);
 
-/// Email-link sign-in without Firebase.
-class FakeLinkAuth implements AdminAuth {
-  FakeLinkAuth({this.openedFromLink = false, this.rememberedEmail, this.failWith});
+/// Password and Google sign-in without Firebase.
+class FakeAuth implements AdminAuth {
+  FakeAuth({this.failWith});
 
   final _changes = StreamController<Session>.broadcast();
-  final sent = <String>[];
-  final completed = <String>[];
+  final calls = <String>[];
   var refreshed = 0;
   final String? failWith;
 
   void emit(Session s) => _changes.add(s);
+
+  Future<void> _call(String what) async {
+    if (failWith != null) throw SignInException(failWith!);
+    calls.add(what);
+  }
 
   @override
   Stream<Session> get sessions => _changes.stream;
   @override
   List<StaffUser> get demoAccounts => const [];
   @override
-  final bool openedFromLink;
+  Future<void> signInWithPassword(String email, String password) => _call('signIn $email $password');
   @override
-  final String? rememberedEmail;
-
+  Future<void> createAccount(String email, String password) => _call('create $email $password');
   @override
-  Future<void> sendSignInLink(String email) async {
-    if (failWith != null) throw SignInException(failWith!);
-    sent.add(email);
-  }
-
+  Future<void> sendPasswordReset(String email) => _call('reset $email');
   @override
-  Future<void> completeSignIn(String email) async {
-    if (failWith != null) throw SignInException(failWith!);
-    completed.add(email);
-  }
-
+  Future<void> signInWithGoogle() => _call('google');
   @override
   Future<void> refresh() async => refreshed++;
   @override
@@ -56,7 +52,7 @@ class FakeLinkAuth implements AdminAuth {
 
 late ProviderContainer container;
 
-Future<void> open(WidgetTester tester, FakeLinkAuth auth, {Session first = const SignedOut()}) async {
+Future<void> open(WidgetTester tester, FakeAuth auth, {Session first = const SignedOut()}) async {
   tester.view.physicalSize = const Size(1280, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -73,50 +69,78 @@ Future<void> open(WidgetTester tester, FakeLinkAuth auth, {Session first = const
 
 String location() => container.read(routerProvider).routerDelegate.currentConfiguration.uri.path;
 
+Finder field(String label) => find.widgetWithText(TextField, label);
+
 void main() {
-  testWidgets('emails a link, then says where it went', (tester) async {
-    final auth = FakeLinkAuth();
+  testWidgets('signs in with email and password', (tester) async {
+    final auth = FakeAuth();
     await open(tester, auth);
     expect(find.text('Wanjiku Mwangi'), findsNothing);
-    final send = find.widgetWithText(FilledButton, 'Email me a link');
-    expect(tester.widget<FilledButton>(send).onPressed, isNull);
-    await tester.enterText(find.byType(TextField), ' boss@example.com ');
+    final signIn = find.widgetWithText(FilledButton, 'Sign in');
+    expect(tester.widget<FilledButton>(signIn).onPressed, isNull);
+    await tester.enterText(field('Work email'), ' boss@example.com ');
+    await tester.enterText(field('Password'), 'pa55word');
     await tester.pump();
-    await tester.tap(send);
+    await tester.tap(signIn);
     await tester.pumpAndSettle();
-    expect(auth.sent, ['boss@example.com']);
-    expect(find.textContaining('We sent a sign-in link to boss@example.com'), findsOneWidget);
-  });
-
-  testWidgets('opened from the link in the same browser, it finishes by itself', (tester) async {
-    final auth = FakeLinkAuth(openedFromLink: true, rememberedEmail: 'boss@example.com');
-    await open(tester, auth);
-    expect(auth.completed, ['boss@example.com']);
+    expect(auth.calls, ['signIn boss@example.com pa55word']);
     auth.emit(const SignedIn(StaffUser(uid: 'u', name: 'Boss', role: StaffRole.owner)));
     await tester.pumpAndSettle();
     expect(location(), '/leads');
   });
 
-  testWidgets('opened from the link elsewhere, it asks for the email first', (tester) async {
-    final auth = FakeLinkAuth(openedFromLink: true);
+  testWidgets('creates an account only with a password of at least 8 characters', (tester) async {
+    final auth = FakeAuth();
     await open(tester, auth);
-    expect(auth.completed, isEmpty);
-    await tester.enterText(find.byType(TextField), 'boss@example.com');
+    await tester.tap(find.text('New here? Create an account'));
+    await tester.pump();
+    await tester.enterText(field('Work email'), 'new@example.com');
+    await tester.enterText(field('Password'), 'short');
+    await tester.pump();
+    final create = find.widgetWithText(FilledButton, 'Create account');
+    expect(tester.widget<FilledButton>(create).onPressed, isNull);
+    await tester.enterText(field('Password'), 'longer-pass');
+    await tester.pump();
+    await tester.tap(create);
+    await tester.pumpAndSettle();
+    expect(auth.calls, ['create new@example.com longer-pass']);
+  });
+
+  testWidgets('sends a password reset once an email is typed', (tester) async {
+    final auth = FakeAuth();
+    await open(tester, auth);
+    final forgot = find.widgetWithText(TextButton, 'Forgot password?');
+    expect(tester.widget<TextButton>(forgot).onPressed, isNull);
+    await tester.enterText(field('Work email'), 'boss@example.com');
+    await tester.pump();
+    await tester.tap(forgot);
+    await tester.pumpAndSettle();
+    expect(auth.calls, ['reset boss@example.com']);
+    expect(find.textContaining('a link to set a new password is on its way'), findsOneWidget);
+  });
+
+  testWidgets('continues with Google', (tester) async {
+    final auth = FakeAuth();
+    await open(tester, auth);
+    await tester.tap(find.text('Continue with Google'));
+    await tester.pumpAndSettle();
+    expect(auth.calls, ['google']);
+  });
+
+  testWidgets('shows why sign-in failed and never shows the password', (tester) async {
+    final auth = FakeAuth(failWith: 'That email and password do not match an account.');
+    await open(tester, auth);
+    await tester.enterText(field('Work email'), 'boss@example.com');
+    await tester.enterText(field('Password'), 'secret-typed');
     await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
-    expect(auth.completed, ['boss@example.com']);
-  });
-
-  testWidgets('shows why sign-in failed', (tester) async {
-    final auth =
-        FakeLinkAuth(openedFromLink: true, rememberedEmail: 'boss@example.com', failWith: 'This link has expired.');
-    await open(tester, auth);
-    expect(find.text('This link has expired.'), findsOneWidget);
+    expect(find.text('That email and password do not match an account.'), findsOneWidget);
+    expect(tester.widget<TextField>(field('Password')).obscureText, isTrue);
   });
 
   testWidgets('an account with no staff role waits for an owner, and can check again', (tester) async {
-    final auth = FakeLinkAuth();
+    final auth = FakeAuth();
     await open(tester, auth, first: const NotStaff('new@example.com'));
     expect(location(), signInPath);
     expect(find.textContaining('new@example.com, but it has no staff role yet'), findsOneWidget);
@@ -125,11 +149,11 @@ void main() {
     expect(auth.refreshed, 1);
     await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilledButton, 'Email me a link'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
   });
 
   testWidgets('a deep link survives start-up and opens once the role is known', (tester) async {
-    final auth = FakeLinkAuth();
+    final auth = FakeAuth();
     tester.view.physicalSize = const Size(1280, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -145,5 +169,12 @@ void main() {
     auth.emit(const SignedIn(StaffUser(uid: 'u', name: 'Boss', role: StaffRole.manager)));
     await tester.pumpAndSettle();
     expect(location(), '/listings');
+  });
+
+  test('Firebase error codes become plain messages', () {
+    expect(signInMessage('invalid-credential', null), 'That email and password do not match an account.');
+    expect(signInMessage('operation-not-allowed', null), contains('not switched on'));
+    expect(signInMessage('something-new', 'Raw message'), 'Raw message');
+    expect(signInMessage('something-new', null), 'Could not sign in (something-new).');
   });
 }

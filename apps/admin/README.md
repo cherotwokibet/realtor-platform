@@ -28,7 +28,7 @@ Served by anything but Firebase Hosting (`flutter run`, a plain web server), the
 
 On Firebase Hosting it reads the admin web app's config from `/__/firebase/init.json` (D14), so none is committed, and switches to:
 
-- **Sign-in:** a one-time email link (`lib/src/firebase/firebase_auth.dart`). The role comes from the ID token's claims; an account with no role waits on a screen until an owner adds it.
+- **Sign-in:** email + password (with *Forgot password?*) or Google (`lib/src/firebase/firebase_auth.dart`). New staff create their own account; it has no role and waits on a screen until an owner adds it. The role comes from the ID token's claims.
 - **Tables:** Firestore, scoped by role, paged with `startAfterDocument` (`lib/src/firebase/firestore_admin.dart`; indexes in `firestore.indexes.json`).
 - **Changes:** the callable Functions (`lib/src/firebase/callable_actions.dart`).
 

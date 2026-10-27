@@ -15,7 +15,7 @@ final adminRepositoryProvider = Provider<AdminRepository>((ref) => ref.watch(dem
 
 final adminActionsProvider = Provider<AdminActions>((ref) => ref.watch(demoAdminProvider));
 
-/// Demo accounts until main() swaps in Firebase email-link sign-in.
+/// Demo accounts until main() swaps in Firebase sign-in (email + password, Google).
 final adminAuthProvider = Provider<AdminAuth>((ref) => DemoAuth(demoStaff));
 
 class SessionNotifier extends Notifier<Session> {

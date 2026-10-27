@@ -168,8 +168,10 @@ resource "google_firebase_hosting_site" "admin" {
   app_id  = google_firebase_web_app.admin.app_id
 }
 
-# Sign-in: email link only (no passwords are stored). Staff roles are
-# custom claims set by the setStaffRole Function, never here.
+# Sign-in (D14): email + password here. Google is switched on once in the
+# Firebase console (Authentication > Sign-in method > Google), which makes
+# its OAuth client without a client secret ever entering this state. Staff
+# roles are custom claims set by the setStaffRole Function, never here.
 resource "google_identity_platform_config" "auth" {
   project = google_project.this.project_id
   authorized_domains = [
@@ -183,7 +185,7 @@ resource "google_identity_platform_config" "auth" {
     allow_duplicate_emails = false
     email {
       enabled           = true
-      password_required = false
+      password_required = true
     }
   }
   depends_on = [google_project_service.apis, google_firebase_project.this]

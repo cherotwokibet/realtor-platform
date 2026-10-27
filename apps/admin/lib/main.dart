@@ -24,7 +24,7 @@ Future<void> main() async {
   if (firebase != null) {
     await Firebase.initializeApp(options: firebase);
     overrides.addAll([
-      adminAuthProvider.overrideWithValue(FirebaseAdminAuth(FirebaseAuth.instance, link: Uri.base)),
+      adminAuthProvider.overrideWithValue(FirebaseAdminAuth(FirebaseAuth.instance)),
       adminRepositoryProvider.overrideWithValue(FirestoreAdminRepository(FirebaseFirestore.instance)),
       adminActionsProvider.overrideWithValue(
         CallableAdminActions.firebase(FirebaseFunctions.instanceFor(region: tenant.firebaseRegion)),

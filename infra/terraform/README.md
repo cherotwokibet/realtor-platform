@@ -38,7 +38,11 @@ Firestore composite indexes come from the repo's `firestore.indexes.json`, the s
 
 ### Staff admin (P5, D14)
 
-Terraform registers an admin web app, an admin Hosting site (`<project-id>-admin`, output `admin_url`) and email-link sign-in (Identity Platform, free tier up to 50,000 monthly users; no passwords are stored). To put the admin online and make the first owner:
+Terraform registers an admin web app, an admin Hosting site (`<project-id>-admin`, output `admin_url`) and email + password sign-in (Identity Platform, free tier up to 50,000 monthly users).
+
+Google sign-in is switched on once per project by hand, so its client secret never enters Terraform state: Firebase console → Authentication → Sign-in method → Add new provider → Google → Enable, pick a support email, Save.
+
+To put the admin online and make the first owner:
 
 ```sh
 melos run app:prepare -- <tenant-id>
@@ -47,12 +51,12 @@ firebase target:apply hosting admin <project-id>-admin --project <project-id>   
 firebase deploy --only hosting:admin,functions --project <project-id>
 ```
 
-Open `admin_url`, ask for a sign-in link and sign in once (the account then exists, with no role). Then, once per project:
+Open `admin_url` and either create an account (email + password) or continue with Google; the account then exists, with no role. Then, once per project:
 
 ```sh
 PROJECT=<project-id> OWNER_EMAIL=<that email> npm --prefix functions run staff:owner
 ```
 
-Sign out and in again (or press *Check again*) to pick up the owner role. From then on the owner adds staff with `setStaffRole`.
+Press *Check again* (or sign out and in) to pick up the owner role. From then on the owner adds staff with `setStaffRole`.
 
 Not yet covered: the Typesense collection (P2 search), and custom domains on Hosting (needs DNS access, P8).

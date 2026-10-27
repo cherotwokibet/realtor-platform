@@ -149,8 +149,8 @@ class _AdminShell extends ConsumerWidget {
   }
 }
 
-/// Sign in: demo accounts on demo data; otherwise an emailed one-time link,
-/// with the role read from the ID token's claims.
+/// Sign in: demo accounts on demo data; otherwise email + password or
+/// Google, with the role read from the ID token's claims.
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
 
@@ -160,35 +160,29 @@ class SignInScreen extends ConsumerStatefulWidget {
 
 class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _email = TextEditingController();
-  String? _sentTo, _error;
-  var _busy = false;
+  final _password = TextEditingController();
+  var _creating = false, _busy = false;
+  String? _error, _notice;
 
-  @override
-  void initState() {
-    super.initState();
-    final auth = ref.read(adminAuthProvider);
-    final remembered = auth.rememberedEmail;
-    if (remembered != null) _email.text = remembered;
-    // Opened from the link in the same browser: finish without asking.
-    if (auth.openedFromLink && remembered != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _run(() => auth.completeSignIn(remembered)));
-    }
-  }
+  /// Firebase's own minimum is 6; staff accounts see personal data, so 8.
+  static const minPassword = 8;
 
   @override
   void dispose() {
     _email.dispose();
+    _password.dispose();
     super.dispose();
   }
 
-  Future<void> _run(Future<void> Function() action, {String? sentTo}) async {
+  Future<void> _run(Future<void> Function() action, {String? notice}) async {
     setState(() {
       _busy = true;
       _error = null;
+      _notice = null;
     });
     try {
       await action();
-      if (mounted) setState(() => _sentTo = sentTo);
+      if (mounted && notice != null) setState(() => _notice = notice);
     } on SignInException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -201,8 +195,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     final tenant = ref.watch(tenantProvider);
     final session = ref.watch(sessionProvider);
     final auth = ref.watch(adminAuthProvider);
-    final t = Theme.of(context).textTheme;
+    final theme = Theme.of(context);
+    final t = theme.textTheme;
     final email = _email.text.trim();
+    final password = _password.text;
+    final emailOk = email.contains('@') && email.contains('.');
 
     final List<Widget> body;
     if (session is Starting || _busy) {
@@ -227,48 +224,86 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             onTap: () => auth.signInAs(s),
           ),
       ];
-    } else if (_sentTo != null) {
-      body = [_pad(Text('We sent a sign-in link to $_sentTo. Open it in this browser to continue.'))];
     } else {
-      final finishing = auth.openedFromLink;
+      final canSubmit = emailOk && password.length >= (_creating ? minPassword : 1);
       body = [
-        _pad(Text(finishing
-            ? 'Confirm the email the sign-in link was sent to.'
-            : 'We will email you a one-time sign-in link.')),
-        _pad(TextField(
-          controller: _email,
-          keyboardType: TextInputType.emailAddress,
-          autofillHints: const [AutofillHints.email],
-          decoration: const InputDecoration(labelText: 'Work email'),
-          onChanged: (_) => setState(() {}),
+        _pad(AutofillGroup(
+          child: Column(children: [
+            TextField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(labelText: 'Work email'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _password,
+              obscureText: true,
+              autofillHints: [_creating ? AutofillHints.newPassword : AutofillHints.password],
+              decoration: InputDecoration(
+                labelText: 'Password',
+                helperText: _creating ? 'At least $minPassword characters' : null,
+              ),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) {
+                if (canSubmit) _submit(auth, email, password);
+              },
+            ),
+          ]),
         )),
         _pad(FilledButton(
-          onPressed: !email.contains('@')
-              ? null
-              : finishing
-                  ? () => _run(() => auth.completeSignIn(email))
-                  : () => _run(() => auth.sendSignInLink(email), sentTo: email),
-          child: Text(finishing ? 'Sign in' : 'Email me a link'),
+          onPressed: canSubmit ? () => _submit(auth, email, password) : null,
+          child: Text(_creating ? 'Create account' : 'Sign in'),
+        )),
+        _pad(Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: () => setState(() {
+                _creating = !_creating;
+                _error = null;
+              }),
+              child: Text(_creating ? 'I have an account' : 'New here? Create an account'),
+            ),
+            if (!_creating)
+              TextButton(
+                onPressed: emailOk
+                    ? () => _run(() => auth.sendPasswordReset(email),
+                        notice: 'If $email has an account, a link to set a new password is on its way.')
+                    : null,
+                child: const Text('Forgot password?'),
+              ),
+          ],
+        )),
+        const Divider(height: 24),
+        _pad(OutlinedButton.icon(
+          onPressed: () => _run(auth.signInWithGoogle),
+          icon: const Icon(Icons.account_circle_outlined),
+          label: const Text('Continue with Google'),
         )),
       ];
     }
 
     return Scaffold(
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Card(
-            margin: const EdgeInsets.all(16),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _pad(Text('${tenant.name} admin', style: t.headlineSmall)),
-                  if (_error != null) _pad(Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-                  ...body,
-                ],
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Card(
+              margin: const EdgeInsets.all(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _pad(Text('${tenant.name} admin', style: t.headlineSmall)),
+                    if (_error != null) _pad(Text(_error!, style: TextStyle(color: theme.colorScheme.error))),
+                    if (_notice != null) _pad(Text(_notice!)),
+                    ...body,
+                  ],
+                ),
               ),
             ),
           ),
@@ -276,6 +311,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       ),
     );
   }
+
+  void _submit(AdminAuth auth, String email, String password) => _run(
+        () => _creating ? auth.createAccount(email, password) : auth.signInWithPassword(email, password),
+      );
 
   Widget _pad(Widget child) => Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8), child: child);
 }
