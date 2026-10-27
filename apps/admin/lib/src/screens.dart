@@ -51,14 +51,29 @@ class _MenuCell extends StatelessWidget {
       required this.tooltip,
       required this.options,
       required this.labelOf,
-      required this.onSelected});
+      required this.onSelected,
+      this.saving = false});
   final String text, tooltip;
   final List<String> options;
   final String Function(String) labelOf;
   final ValueChanged<String> onSelected;
 
+  /// A change is on its way to the Functions: show it, and offer nothing
+  /// else until it lands (a second pick would race the first).
+  final bool saving;
+
   @override
   Widget build(BuildContext context) {
+    if (saving) {
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(text),
+        const SizedBox(width: 8),
+        const SizedBox.square(
+          dimension: 14,
+          child: CircularProgressIndicator(strokeWidth: 2, semanticsLabel: 'Saving'),
+        ),
+      ]);
+    }
     if (options.isEmpty) return Text(text);
     return PopupMenuButton<String>(
       tooltip: tooltip,
@@ -136,6 +151,27 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
   String? _stage;
   var _reload = 0;
 
+  /// Lead id -> stage being saved, and stages saved but not yet reloaded.
+  final _saving = <String, String>{}, _saved = <String, String>{};
+
+  Future<void> _move(StaffUser who, LeadRow r, String to) async {
+    if (_saving.containsKey(r.id)) return;
+    setState(() => _saving[r.id] = to);
+    final ok = await _act(
+      context,
+      () => ref.read(adminActionsProvider).moveLead(who, leadId: r.id, stage: to),
+      '${r.contactName ?? 'Lead'} moved to ${label(to)}',
+    );
+    if (!mounted) return;
+    setState(() {
+      _saving.remove(r.id);
+      if (ok) {
+        _saved[r.id] = to;
+        _reload++;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final who = ref.watch(staffProvider)!;
@@ -149,6 +185,9 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
         key: ValueKey(('leads', who.uid, _stage)),
         empty: 'No leads at this stage.',
         reload: _reload,
+        onLoaded: () {
+          if (_saved.isNotEmpty && mounted) setState(_saved.clear);
+        },
         load: (after) => repo.leads(who, stage: _stage, after: after, limit: pageSize),
         columns: [
           TableColumn('Received', (r) => Text(shortDateTime(r.createdAt))),
@@ -158,20 +197,17 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
           TableColumn('Channel', (r) => Text(label(r.channel))),
           TableColumn(
             'Stage',
-            (r) => _MenuCell(
-              text: label(r.stage),
-              tooltip: 'Move ${r.contactName ?? 'lead'} on',
-              options: nextLeadStages(r.stage),
-              labelOf: label,
-              onSelected: (to) async {
-                final ok = await _act(
-                  context,
-                  () => ref.read(adminActionsProvider).moveLead(who, leadId: r.id, stage: to),
-                  '${r.contactName ?? 'Lead'} moved to ${label(to)}',
-                );
-                if (ok && mounted) setState(() => _reload++);
-              },
-            ),
+            (r) {
+              final stage = _saving[r.id] ?? _saved[r.id] ?? r.stage;
+              return _MenuCell(
+                text: label(stage),
+                tooltip: 'Move ${r.contactName ?? 'lead'} on',
+                options: nextLeadStages(stage),
+                labelOf: label,
+                saving: _saving.containsKey(r.id),
+                onSelected: (to) => _move(who, r, to),
+              );
+            },
           ),
           if (who.isManager) TableColumn('Agent', (r) => Text(r.agentName)),
         ],
@@ -190,18 +226,31 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
   String? _status;
   var _reload = 0;
 
+  /// Listing id -> status being saved, and statuses saved but not yet reloaded.
+  final _saving = <String, String>{}, _saved = <String, String>{};
+
   Future<void> _moderate(StaffUser who, StaffListingRow r, String action) async {
     String? reason;
     if (action == 'reject') {
       reason = await _askReason(context, '${moderationLabel(action, r.status).replaceAll('…', '')} "${r.title}"');
       if (reason == null || !mounted) return;
     }
+    if (_saving.containsKey(r.id)) return;
+    final to = moderationTargets[action]!;
+    setState(() => _saving[r.id] = to);
     final ok = await _act(
       context,
       () => ref.read(adminActionsProvider).moderateListing(who, listingId: r.id, action: action, reason: reason),
-      '${r.title}: ${label(moderationTargets[action]!)}',
+      '${r.title}: ${label(to)}',
     );
-    if (ok && mounted) setState(() => _reload++);
+    if (!mounted) return;
+    setState(() {
+      _saving.remove(r.id);
+      if (ok) {
+        _saved[r.id] = to;
+        _reload++;
+      }
+    });
   }
 
   @override
@@ -222,6 +271,9 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
         key: ValueKey(('listings', who.uid, _status)),
         empty: 'No listings with this status.',
         reload: _reload,
+        onLoaded: () {
+          if (_saved.isNotEmpty && mounted) setState(_saved.clear);
+        },
         load: (after) => repo.listings(who, status: _status, after: after, limit: pageSize),
         columns: [
           TableColumn('Title', (r) => Text(r.title)),
@@ -229,14 +281,18 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
           TableColumn('Price', (r) => Text(formatKes(r.priceKES)), numeric: true),
           TableColumn(
             'Status',
-            (r) => _MenuCell(
-              text: label(r.status),
-              tooltip: 'Change ${r.title}',
-              // Only owners and managers moderate; the Functions refuse anyone else.
-              options: who.isManager ? moderationsFor(r.status) : const [],
-              labelOf: (a) => moderationLabel(a, r.status),
-              onSelected: (a) => _moderate(who, r, a),
-            ),
+            (r) {
+              final status = _saving[r.id] ?? _saved[r.id] ?? r.status;
+              return _MenuCell(
+                text: label(status),
+                tooltip: 'Change ${r.title}',
+                // Only owners and managers moderate; the Functions refuse anyone else.
+                options: who.isManager ? moderationsFor(status) : const [],
+                labelOf: (a) => moderationLabel(a, status),
+                saving: _saving.containsKey(r.id),
+                onSelected: (a) => _moderate(who, r, a),
+              );
+            },
           ),
           TableColumn('Leads', (r) => Text('${r.leads}'), numeric: true),
           TableColumn('Calls', (r) => Text('${r.calls}'), numeric: true),
