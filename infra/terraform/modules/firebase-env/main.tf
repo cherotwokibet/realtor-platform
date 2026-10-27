@@ -162,6 +162,15 @@ data "google_storage_project_service_account" "gcs" {
   depends_on = [google_project_service.apis]
 }
 
+# Eventarc's agent validates the media bucket when the storage trigger is
+# created; its role arrives late on a fresh project, so grant it up front.
+resource "google_project_service_identity" "eventarc" {
+  provider   = google-beta
+  project    = google_project.this.project_id
+  service    = "eventarc.googleapis.com"
+  depends_on = [google_project_service.apis]
+}
+
 resource "google_project_service_identity" "pubsub" {
   provider   = google-beta
   project    = google_project.this.project_id
