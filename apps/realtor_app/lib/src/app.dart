@@ -6,6 +6,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 import 'package:realtor_core/realtor_core.dart';
 
 import 'home_screen.dart';
+import 'listing/listing_screen.dart';
 import 'providers.dart';
 import 'search/purpose.dart';
 import 'search/results_screen.dart';
@@ -43,7 +44,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // them from shared links: keep them in step with appLinkPaths.
       GoRoute(
         path: '/listing/:slug',
-        builder: (context, state) => PlaceholderScreen(title: 'Listing ${state.pathParameters['slug']}'),
+        builder: (context, state) => ListingScreen(slug: state.pathParameters['slug']!),
       ),
       GoRoute(
         path: '/area/:slug',
