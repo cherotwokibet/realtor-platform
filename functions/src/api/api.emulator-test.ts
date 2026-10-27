@@ -11,6 +11,7 @@ import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
 import { moderateListing, submitListing } from './listings';
 import { bookViewing } from './viewings';
+import { bootstrapOwner, setStaffRole, type StaffAuth } from './staff';
 
 let db: Firestore;
 const visitor: Caller = { uid: null, role: null, agentId: null };
@@ -31,7 +32,7 @@ before(() => {
 });
 
 beforeEach(async () => {
-  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings', 'audit']) {
+  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings', 'audit', 'staff']) {
     const all = await db.collection(c).get();
     await Promise.all(all.docs.map((d) => d.ref.delete()));
   }
@@ -144,7 +145,7 @@ describe('updateLeadStage', () => {
     assert.equal(log.length, 1);
     assert.deepEqual(
       { ...log[0], at: log[0].at.toDate() },
-      { at: now, actor: { uid: 'u1', role: 'agent', agentId: 'agent-wanjiku' }, action: 'lead.stage', target: { collection: 'leads', id: 'lead-001' }, from: 'new', to: 'contacted' },
+      { at: now, actor: { uid: 'u1', role: 'agent', agentId: 'agent-wanjiku', name: null }, action: 'lead.stage', target: { collection: 'leads', id: 'lead-001' }, from: 'new', to: 'contacted' },
     );
   });
 });
@@ -182,5 +183,73 @@ describe('listings', () => {
   test("agents can't edit each other's listings", async () => {
     const { listingId } = await submitListing(db, wanjiku, newListing, now);
     await rejectsWith(submitListing(db, otieno, { ...newListing, listingId, priceKES: 1 }), 'permission-denied');
+  });
+});
+
+/** In-memory accounts, standing in for firebase-admin's Auth. */
+class FakeAuth implements StaffAuth {
+  users = new Map<string, { uid: string; email: string; displayName?: string; customClaims?: Record<string, unknown> }>();
+  add(uid: string, email: string, customClaims?: Record<string, unknown>) {
+    this.users.set(email, { uid, email, displayName: uid, customClaims });
+  }
+  async getUserByEmail(email: string) {
+    const u = this.users.get(email);
+    if (!u) throw Object.assign(new Error('no user'), { code: 'auth/user-not-found' });
+    return u;
+  }
+  async setCustomUserClaims(uid: string, claims: Record<string, unknown> | null) {
+    for (const u of this.users.values()) if (u.uid === uid) u.customClaims = claims ?? undefined;
+  }
+  claims(email: string) {
+    return this.users.get(email)?.customClaims;
+  }
+}
+
+describe('staff roles', () => {
+  const owner: Caller = { uid: 'o1', role: 'owner', agentId: null, name: 'Owner One' };
+
+  test('the first owner comes from the bootstrap script, once', async () => {
+    const auth = new FakeAuth();
+    auth.add('o1', 'owner@example.com');
+    auth.add('o2', 'other@example.com');
+    await rejectsWith(bootstrapOwner(db, auth, 'nobody@example.com', now), 'not-found');
+    assert.deepEqual(await bootstrapOwner(db, auth, 'owner@example.com', now), { uid: 'o1' });
+    assert.deepEqual(auth.claims('owner@example.com'), { role: 'owner' });
+    await rejectsWith(bootstrapOwner(db, auth, 'other@example.com', now), 'failed-precondition');
+    const entry = (await db.collection('audit').get()).docs[0].data();
+    assert.deepEqual([entry.action, entry.actor.name, entry.to], ['staff.role', 'owner bootstrap script', 'owner']);
+  });
+
+  test('owners give, change and take away roles; claims, staff list and audit agree', async () => {
+    const auth = new FakeAuth();
+    auth.add('o1', 'owner@example.com', { role: 'owner' });
+    auth.add('u9', 'new@example.com', { beta: true });
+    await setStaffRole(db, auth, owner, { email: 'new@example.com', role: 'agent', agentId: 'agent-wanjiku' }, now);
+    assert.deepEqual(auth.claims('new@example.com'), { beta: true, role: 'agent', agentId: 'agent-wanjiku' });
+    const s = (await db.collection('staff').doc('u9').get()).data()!;
+    assert.deepEqual([s.email, s.role, s.agentId], ['new@example.com', 'agent', 'agent-wanjiku']);
+
+    await setStaffRole(db, auth, owner, { email: 'new@example.com', role: 'manager' }, now);
+    assert.deepEqual(auth.claims('new@example.com'), { beta: true, role: 'manager' });
+    await setStaffRole(db, auth, owner, { email: 'new@example.com', role: null }, now);
+    assert.deepEqual(auth.claims('new@example.com'), { beta: true });
+    assert.equal((await db.collection('staff').doc('u9').get()).exists, false);
+
+    const log = (await db.collection('audit').get()).docs.map((d) => d.data()).map((e) => `${e.from}->${e.to}`).sort();
+    assert.deepEqual(log, ['agent->manager', 'manager->none', 'null->agent']);
+  });
+
+  test('only owners; no lock-out; agents need a real agent record; unknown emails refused', async () => {
+    const auth = new FakeAuth();
+    auth.add('o1', 'owner@example.com', { role: 'owner' });
+    auth.add('u9', 'new@example.com');
+    await rejectsWith(setStaffRole(db, auth, manager, { email: 'new@example.com', role: 'manager' }), 'permission-denied');
+    await rejectsWith(setStaffRole(db, auth, wanjiku, { email: 'new@example.com', role: 'owner' }), 'permission-denied');
+    await rejectsWith(setStaffRole(db, auth, owner, { email: 'owner@example.com', role: 'manager' }), 'failed-precondition');
+    await rejectsWith(setStaffRole(db, auth, owner, { email: 'new@example.com', role: 'agent' }), 'invalid-argument');
+    await rejectsWith(setStaffRole(db, auth, owner, { email: 'new@example.com', role: 'agent', agentId: 'agent-ghost' }), 'invalid-argument');
+    await rejectsWith(setStaffRole(db, auth, owner, { email: 'nobody@example.com', role: 'manager' }), 'not-found');
+    assert.equal(auth.claims('new@example.com'), undefined);
+    assert.equal((await db.collection('audit').get()).size, 0);
   });
 });
