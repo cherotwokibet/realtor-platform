@@ -1,7 +1,7 @@
 /**
  * Loads the demo seed, then checks it reads back.
  *   Emulator: firebase emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed"
- *   Dev project: SEED_PROJECT=rte-realtor-dev npm --prefix functions run seed   (Application Default Credentials)
+ *   Dev project: SEED_PROJECT=<project-id-ending-in-dev> npm --prefix functions run seed   (Application Default Credentials)
  * Stage and prod are refused (see target.ts).
  */
 import { initializeApp } from 'firebase-admin/app';

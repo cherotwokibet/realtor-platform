@@ -7,9 +7,9 @@ test('the emulator is always allowed', () => {
 });
 
 test('a real project only when named and ending in -dev', () => {
-  assert.deepEqual(seedTarget({ SEED_PROJECT: 'rte-realtor-dev' }), { projectId: 'rte-realtor-dev', emulator: false });
+  assert.deepEqual(seedTarget({ SEED_PROJECT: 'acme-realty-dev' }), { projectId: 'acme-realty-dev', emulator: false });
   assert.ok('error' in seedTarget({}));
-  assert.ok('error' in seedTarget({ SEED_PROJECT: 'rte-realtor-prod' }));
-  assert.ok('error' in seedTarget({ SEED_PROJECT: 'rte-realtor-stage' }));
-  assert.ok('error' in seedTarget({ SEED_PROJECT: 'rte-realtor-dev-but-prod' }));
+  assert.ok('error' in seedTarget({ SEED_PROJECT: 'acme-realty-prod' }));
+  assert.ok('error' in seedTarget({ SEED_PROJECT: 'acme-realty-stage' }));
+  assert.ok('error' in seedTarget({ SEED_PROJECT: 'acme-realty-dev-but-prod' }));
 });
