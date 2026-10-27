@@ -18,16 +18,25 @@ import 'seo.dart';
 final _slug = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
 final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 
-/// Routes: `/`, `/listing/<slug>` (+ POST `/listing/<slug>/enquire`),
+/// Routes: `/`, `/listing/<slug>` (+ POST `/listing/<slug>/enquire` and
+/// `/listing/<slug>/viewing`),
 /// `/go/whatsapp/<slug>`, `/area/<slug>`, `/agent/<id>`, `/sitemap.xml`,
 /// `/robots.txt` and the App Links / Universal Links files in `/.well-known/`. Without [leads] there is no enquiry form and WhatsApp
 /// taps are not counted.
-shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? leads}) {
-  Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing, {EnquiryFormState? form, int status = 200}) async {
+shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? leads, DateTime Function()? now}) {
+  final clock = now ?? DateTime.now;
+  Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
+      {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {
     final agent = listing.agentId == null || !_docId.hasMatch(listing.agentId!) ? null : await source.agent(listing.agentId!);
-    final enquiry = leads == null ? null : form ?? EnquiryFormState(sent: req.url.queryParameters['sent'] == '1');
-    final r = await renderComponent(ListingPage(tenant: tenant, listing: listing, agent: agent, enquiry: enquiry), request: req);
-    return _html(r, status: status, private: enquiry != null && (enquiry.sent || enquiry.values.isNotEmpty));
+    final q = req.url.queryParameters;
+    final enquiry = leads == null ? null : form ?? EnquiryFormState(sent: q['sent'] == '1');
+    final viewing = leads == null ? null : viewingForm ?? EnquiryFormState(sent: q['booked'] == '1');
+    final r = await renderComponent(
+      ListingPage(tenant: tenant, listing: listing, agent: agent, enquiry: enquiry, viewing: viewing, viewingDays: viewingDays(clock())),
+      request: req,
+    );
+    bool own(EnquiryFormState? f) => f != null && (f.sent || f.values.isNotEmpty);
+    return _html(r, status: status, private: own(enquiry) || own(viewing));
   }
 
   final router = Router()
@@ -65,6 +74,38 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
         return listingPage(req, listing, form: EnquiryFormState(values: values, failed: true), status: 503);
       }
       return thanks;
+    })
+    ..post('/listing/<slug>/viewing', (shelf.Request req, String slug) async {
+      if (leads == null || !_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);
+      final listing = await source.bySlug(slug);
+      if (listing == null) return _notFound(tenant);
+      final body = await _formBody(req);
+      if (body == null) return shelf.Response(413, body: 'form too large');
+      final booked = shelf.Response.seeOther('/listing/$slug?booked=1#viewing', headers: {'cache-control': 'no-store'});
+      if ((body['website'] ?? '').isNotEmpty) return booked; // honeypot: a bot
+      final (:request, :errors) = ViewingRequest.parse(body);
+      final values = {for (final k in const ['day', 'time', 'name', 'phone', 'consent']) k: body[k] ?? ''};
+      EnquiryFormState again({String? notice, bool failed = false}) => EnquiryFormState(values: values, notice: notice, failed: failed);
+      if (request == null) {
+        return listingPage(req, listing, viewingForm: EnquiryFormState(values: values, errors: errors), status: 400);
+      }
+      try {
+        await leads.bookViewing(listingId: listing.id, slot: request.slot, name: request.name, phone: request.phone, message: request.message);
+      } on LeadApiException catch (e) {
+        stderr.writeln('bookViewing failed: ${e.status}');
+        return switch (e.status) {
+          'NOT_FOUND' => _notFound(tenant),
+          'ALREADY_EXISTS' => listingPage(req, listing, viewingForm: again(notice: 'That time is taken. Please pick another.'), status: 409),
+          // The Function explains which slot rule failed ("slot: book at least 2 hours ahead").
+          'INVALID_ARGUMENT' when e.message.startsWith('slot: ') =>
+            listingPage(req, listing, viewingForm: again(notice: 'Please pick another time: ${e.message.substring(6)}.'), status: 400),
+          _ => listingPage(req, listing, viewingForm: again(failed: true), status: 503),
+        };
+      } on Exception catch (e) {
+        stderr.writeln('bookViewing failed: ${e.runtimeType}');
+        return listingPage(req, listing, viewingForm: again(failed: true), status: 503);
+      }
+      return booked;
     })
     ..get('/go/whatsapp/<slug>', (shelf.Request req, String slug) async {
       if (!_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);

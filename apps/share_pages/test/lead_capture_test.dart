@@ -21,7 +21,14 @@ final tenant = () {
 class FakeLeads implements LeadApi {
   final leads = <Map<String, String?>>[];
   final taps = <String>[];
+  final viewings = <Map<String, String?>>[];
   LeadApiException? fail;
+
+  @override
+  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message}) async {
+    if (fail != null) throw fail!;
+    viewings.add({'listingId': listingId, 'slot': slot, 'name': name, 'phone': phone, 'message': message});
+  }
 
   @override
   Future<void> createLead({required String listingId, required String phone, String? name, String? message}) async {
@@ -38,8 +45,11 @@ class FakeLeads implements LeadApi {
 
 late FakeLeads fake;
 
+// Monday 26 Oct 2026, 09:00 in Nairobi.
+final now = DateTime.utc(2026, 10, 26, 6);
+
 Future<shelf.Response> send(String method, String path, {String? form, bool withLeads = true}) async {
-  final handler = shareHandler(tenant, InMemoryListingSource(const [flat]), leads: withLeads ? fake : null);
+  final handler = shareHandler(tenant, InMemoryListingSource(const [flat]), leads: withLeads ? fake : null, now: () => now);
   return handler(shelf.Request(method, Uri.parse('https://x$path'),
       body: form, headers: form == null ? null : {'content-type': 'application/x-www-form-urlencoded'}));
 }
@@ -131,6 +141,68 @@ void main() {
     expect(await (await send('GET', '/robots.txt')).readAsString(), contains('Disallow: /go/'));
   });
 
+  group('book a viewing', () {
+    const viewing = '/listing/2-bedroom-apartment-kilimani/viewing';
+    const ok = 'day=2026-10-27&time=10%3A30&name=Amina&phone=0712+345+678&consent=yes&website=';
+
+    test('the form offers the next 12 viewing days (no Sundays) and half-hour slots 08:00-17:30', () async {
+      final html = await (await send('GET', '/listing/2-bedroom-apartment-kilimani')).readAsString();
+      expect(html, contains('action="/listing/2-bedroom-apartment-kilimani/viewing#viewing"'));
+      expect(html, contains('<option value="2026-10-26">Mon 26 Oct</option>'));
+      expect(html, isNot(contains('value="2026-11-01"')), reason: 'Sunday');
+      expect(html, contains('<option value="2026-11-07">Sat 7 Nov</option>'), reason: '12th viewing day');
+      expect(html, contains('<option value="08:00">08:00</option>'));
+      expect(html, contains('<option value="17:30">17:30</option>'));
+      expect(html, isNot(contains('value="18:00"')));
+    });
+
+    test('a valid request books the slot in Nairobi time and redirects to a confirmation', () async {
+      final r = await send('POST', viewing, form: ok);
+      expect(r.statusCode, 303);
+      expect(r.headers['location'], '/listing/2-bedroom-apartment-kilimani?booked=1#viewing');
+      expect(fake.viewings.single, {
+        'listingId': 'listing-001',
+        'slot': '2026-10-27T10:30:00+03:00',
+        'name': 'Amina',
+        'phone': '+254712345678',
+        'message': null,
+      });
+      final page = await send('GET', '/listing/2-bedroom-apartment-kilimani?booked=1');
+      expect(page.headers['cache-control'], 'private, no-store');
+      expect(await page.readAsString(), contains('Viewing requested.'));
+    });
+
+    test('missing name, bad phone or no consent: nothing is booked and the form keeps the choice', () async {
+      final r = await send('POST', viewing, form: 'day=2026-10-27&time=10%3A30&phone=020+123');
+      expect(r.statusCode, 400);
+      final html = await r.readAsString();
+      expect(html, contains('Enter your name'));
+      expect(html, contains('Enter a Kenyan mobile number'));
+      expect(html, contains('Tick the box'));
+      expect(html, contains('<option value="2026-10-27" selected>'));
+      expect((await send('POST', viewing, form: ok.replaceFirst('time=10%3A30', 'time=10%3A15'))).statusCode, 400);
+      expect(fake.viewings, isEmpty);
+    });
+
+    test('a taken slot or a slot rule from the Function is explained; outages fall back to WhatsApp', () async {
+      fake.fail = LeadApiException('ALREADY_EXISTS', 'that time is taken, pick another');
+      final taken = await send('POST', viewing, form: ok);
+      expect(taken.statusCode, 409);
+      expect(await taken.readAsString(), contains('That time is taken. Please pick another.'));
+      fake.fail = LeadApiException('INVALID_ARGUMENT', 'slot: book at least 2 hours ahead');
+      expect(await (await send('POST', viewing, form: ok)).readAsString(), contains('Please pick another time: book at least 2 hours ahead.'));
+      fake.fail = LeadApiException('UNAVAILABLE', 'down');
+      final down = await send('POST', viewing, form: ok);
+      expect(down.statusCode, 503);
+      expect(await down.readAsString(), contains('Please try again or ask on WhatsApp'));
+    });
+
+    test('bots get a confirmation and book nothing', () async {
+      expect((await send('POST', viewing, form: '${ok}spam')).statusCode, 303);
+      expect(fake.viewings, isEmpty);
+    });
+  });
+
   group('CallableLeadApi', () {
     test('speaks the callable protocol', () async {
       late http.Request seen;
@@ -146,6 +218,16 @@ void main() {
       await api.logTap(listingId: 'listing-001', channel: 'whatsapp');
       expect(seen.url.path, '/logContactTap');
       expect(jsonDecode(seen.body), {'data': {'listingId': 'listing-001', 'channel': 'whatsapp'}});
+      await api.bookViewing(listingId: 'listing-001', slot: '2026-10-27T10:30:00+03:00', name: 'Amina', phone: '+254712345678');
+      expect(seen.url.path, '/bookViewing');
+      expect(jsonDecode(seen.body), {
+        'data': {
+          'listingId': 'listing-001',
+          'slot': '2026-10-27T10:30:00+03:00',
+          'client': {'name': 'Amina', 'phone': '+254712345678'},
+          'consent': true,
+        },
+      });
     });
 
     test('turns callable errors into LeadApiException', () async {

@@ -30,7 +30,7 @@ h2{font-family:var(--font-display);font-size:var(--text-title);color:var(--color
 .cards a{display:block;padding:12px 16px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);text-decoration:none;color:var(--color-ink)}
 .cards .price{font-size:var(--text-body-large);margin:4px 0 0}
 .enquire label{display:block;margin:12px 0 4px;font-weight:600}
-.enquire input[type=text],.enquire input[type=tel],.enquire textarea{width:100%;padding:12px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);font:inherit;background:var(--color-surface);color:var(--color-text)}
+.enquire input[type=text],.enquire input[type=tel],.enquire textarea,.enquire select{width:100%;padding:12px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);font:inherit;background:var(--color-surface);color:var(--color-text)}
 .enquire .consent{display:flex;gap:8px;align-items:flex-start;font-weight:400}
 .enquire button{margin-top:16px;width:100%;padding:14px;border:0;border-radius:var(--radius-sm);background:var(--color-primary);color:var(--color-on-primary);font:inherit;font-weight:600}
 .enquire .hp{position:absolute;left:-9999px}

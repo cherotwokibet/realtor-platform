@@ -7,10 +7,14 @@ import 'listing.dart';
 import 'page_shell.dart';
 import 'seo.dart';
 
-/// The enquiry form's state: what was typed, what was wrong, how it went.
+/// A form's state (enquiry or viewing): what was typed, what was wrong,
+/// how it went.
 class EnquiryFormState {
-  const EnquiryFormState({this.values = const {}, this.errors = const {}, this.sent = false, this.failed = false});
+  const EnquiryFormState({this.values = const {}, this.errors = const {}, this.sent = false, this.failed = false, this.notice});
   final Map<String, String> values, errors;
+
+  /// A message from the Functions to show above the form, e.g. a taken slot.
+  final String? notice;
 
   /// The lead was stored (after the redirect back to the page).
   final bool sent;
@@ -20,7 +24,15 @@ class EnquiryFormState {
 }
 
 class ListingPage extends StatelessComponent {
-  const ListingPage({required this.tenant, required this.listing, this.agent, this.enquiry, super.key});
+  const ListingPage({
+    required this.tenant,
+    required this.listing,
+    this.agent,
+    this.enquiry,
+    this.viewing,
+    this.viewingDays = const [],
+    super.key,
+  });
   final TenantConfig tenant;
   final ShareListing listing;
 
@@ -30,6 +42,12 @@ class ListingPage extends StatelessComponent {
   /// Null when the server has no Functions to send leads to: no form, and
   /// the WhatsApp button links straight to wa.me without counting the tap.
   final EnquiryFormState? enquiry;
+
+  /// The book-a-viewing form; null when there are no Functions to call.
+  final EnquiryFormState? viewing;
+
+  /// Days offered in the viewing form (see `viewingDays`).
+  final List<({String value, String label})> viewingDays;
 
   @override
   Component build(BuildContext context) {
@@ -78,6 +96,7 @@ class ListingPage extends StatelessComponent {
             ),
         ]),
         if (enquiry != null) _enquiryForm(enquiry!),
+        if (viewing != null) _viewingForm(viewing!),
         if (agent != null) p([const Component.text('Listed by '), a(href: '/agent/${agent!.id}', [Component.text(agent!.name)])]),
         p([a(href: '/area/${l.area}', [Component.text('More homes in ${ListingSeo.placeName(l.area)}')])]),
       ],
@@ -125,6 +144,66 @@ class ListingPage extends StatelessComponent {
         ]),
         ?error('consent'),
         const button(type: ButtonType.submit, [Component.text('Send')]),
+      ]),
+    ]);
+  }
+
+  Component _viewingForm(EnquiryFormState f) {
+    Component? error(String field) => f.errors[field] == null ? null : p(classes: 'error', [Component.text(f.errors[field]!)]);
+    if (f.sent) {
+      return section(id: 'viewing', [
+        p(classes: 'notice', [Component.text('Viewing requested. ${tenant.name} will call or WhatsApp you to confirm the time.')]),
+      ]);
+    }
+    Component select_(String name, String id, List<({String value, String label})> options) => select(
+          name: name,
+          id: id,
+          [
+            for (final o in options) option(value: o.value, selected: f.values[name] == o.value, [Component.text(o.label)]),
+          ],
+        );
+    return section(id: 'viewing', classes: 'enquire', [
+      const h2([Component.text('Book a viewing')]),
+      if (f.notice != null) p(classes: 'notice', [Component.text(f.notice!)]),
+      if (f.failed)
+        const p(classes: 'notice', [Component.text('Sorry, we could not book that just now. Please try again or ask on WhatsApp.')]),
+      form(action: '/listing/${listing.slug}/viewing#viewing', method: FormMethod.post, [
+        const label(htmlFor: 'v-day', [Component.text('Day')]),
+        select_('day', 'v-day', viewingDays),
+        const label(htmlFor: 'v-time', [Component.text('Time')]),
+        select_('time', 'v-time', [for (final t in viewingTimes) (value: t, label: t)]),
+        ?error('slot'),
+        const label(htmlFor: 'v-name', [Component.text('Your name')]),
+        input(
+          type: InputType.text,
+          name: 'name',
+          id: 'v-name',
+          value: f.values['name'],
+          attributes: const {'autocomplete': 'name', 'maxlength': '80', 'required': ''},
+        ),
+        ?error('name'),
+        const label(htmlFor: 'v-phone', [Component.text('Phone number')]),
+        input(
+          type: InputType.tel,
+          name: 'phone',
+          id: 'v-phone',
+          value: f.values['phone'],
+          attributes: const {'autocomplete': 'tel', 'inputmode': 'tel', 'placeholder': '0712 345 678', 'required': ''},
+        ),
+        ?error('phone'),
+        const div(classes: 'hp', attributes: {'aria-hidden': 'true'}, [
+          label(htmlFor: 'v-website', [Component.text('Leave this empty')]),
+          input(type: InputType.text, name: 'website', id: 'v-website', attributes: {'tabindex': '-1', 'autocomplete': 'off'}),
+        ]),
+        label(classes: 'consent', [
+          input(type: InputType.checkbox, name: 'consent', value: 'yes', checked: f.values['consent'] == 'yes'),
+          Component.text(
+            'I agree that ${tenant.name} may contact me about this viewing and keep my details for up to $leadRetentionMonths months '
+            '(Data Protection Act 2019).',
+          ),
+        ]),
+        ?error('consent'),
+        const button(type: ButtonType.submit, [Component.text('Request viewing')]),
       ]),
     ]);
   }
