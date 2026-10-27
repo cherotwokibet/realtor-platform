@@ -71,6 +71,10 @@ String location() => container.read(routerProvider).routerDelegate.currentConfig
 
 Finder field(String label) => find.widgetWithText(TextField, label);
 
+/// Typed into the password field: built here, never a literal that looks
+/// like a credential (secret scanners flag those, rightly).
+String typed(int length) => List.filled(length, 'x').join();
+
 void main() {
   testWidgets('signs in with email and password', (tester) async {
     final auth = FakeAuth();
@@ -79,11 +83,11 @@ void main() {
     final signIn = find.widgetWithText(FilledButton, 'Sign in');
     expect(tester.widget<FilledButton>(signIn).onPressed, isNull);
     await tester.enterText(field('Work email'), ' boss@example.com ');
-    await tester.enterText(field('Password'), 'pa55word');
+    await tester.enterText(field('Password'), typed(9));
     await tester.pump();
     await tester.tap(signIn);
     await tester.pumpAndSettle();
-    expect(auth.calls, ['signIn boss@example.com pa55word']);
+    expect(auth.calls, ['signIn boss@example.com ${typed(9)}']);
     auth.emit(const SignedIn(StaffUser(uid: 'u', name: 'Boss', role: StaffRole.owner)));
     await tester.pumpAndSettle();
     expect(location(), '/leads');
@@ -95,15 +99,15 @@ void main() {
     await tester.tap(find.text('New here? Create an account'));
     await tester.pump();
     await tester.enterText(field('Work email'), 'new@example.com');
-    await tester.enterText(field('Password'), 'short');
+    await tester.enterText(field('Password'), typed(7));
     await tester.pump();
     final create = find.widgetWithText(FilledButton, 'Create account');
     expect(tester.widget<FilledButton>(create).onPressed, isNull);
-    await tester.enterText(field('Password'), 'longer-pass');
+    await tester.enterText(field('Password'), typed(8));
     await tester.pump();
     await tester.tap(create);
     await tester.pumpAndSettle();
-    expect(auth.calls, ['create new@example.com longer-pass']);
+    expect(auth.calls, ['create new@example.com ${typed(8)}']);
   });
 
   testWidgets('sends a password reset once an email is typed', (tester) async {
@@ -131,7 +135,7 @@ void main() {
     final auth = FakeAuth(failWith: 'That email and password do not match an account.');
     await open(tester, auth);
     await tester.enterText(field('Work email'), 'boss@example.com');
-    await tester.enterText(field('Password'), 'secret-typed');
+    await tester.enterText(field('Password'), typed(10));
     await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
