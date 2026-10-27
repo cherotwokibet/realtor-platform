@@ -1,0 +1,7 @@
+# Written by `melos run app:prepare`; never commit a tenant's files here.
+assets/tenant/*
+!assets/tenant/.gitkeep
+
+# Platform folder is generated (flutter create --platforms=web). Never committed.
+/web/
+/.metadata

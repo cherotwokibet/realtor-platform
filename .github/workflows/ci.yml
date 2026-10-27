@@ -22,6 +22,7 @@ jobs:
       functions: ${{ steps.f.outputs.functions }}
       dart: ${{ steps.f.outputs.dart }}
       app: ${{ steps.f.outputs.app }}
+      admin: ${{ steps.f.outputs.admin }}
       infra: ${{ steps.f.outputs.infra }}
       share: ${{ steps.f.outputs.share }}
       emulator: ${{ steps.f.outputs.emulator }}
@@ -45,8 +46,8 @@ jobs:
           shared='^(packages/core|packages/tokens|tenants|brand|fonts|tools/tenant-cli)/|^pubspec\.'
           out functions '^functions/|^(firestore|storage)\.rules$'
           out dart "$shared|^(packages|apps)/|^analysis_options\.yaml$"
-          if [ "$DRAFT" = true ]; then echo "app=false" >> "$GITHUB_OUTPUT"
-          else out app "$shared|^(packages/ui|apps/realtor_app)/"; fi
+          if [ "$DRAFT" = true ]; then echo "app=false" >> "$GITHUB_OUTPUT"; echo "admin=false" >> "$GITHUB_OUTPUT"
+          else out app "$shared|^(packages/ui|apps/realtor_app)/"; out admin "$shared|^(packages/ui|apps/admin)/"; fi
           out infra '^infra/|^tenants/|^(firestore|storage)\.rules$'
           out share '^(packages/core|packages/tokens|tenants|apps/share_pages)/|^\.dockerignore$'
           out emulator '^(functions|apps/share_pages|packages/core)/|^(firestore|storage)\.rules$|^firestore\.indexes\.json$|^firebase\.json$'
@@ -130,6 +131,7 @@ jobs:
         run: |
           (cd packages/ui && flutter test)
           (cd apps/realtor_app && flutter test)
+          (cd apps/admin && flutter test)
       - name: Dart and TS emit identical CSS
         run: |
           for t in realtime-estates demo-homes; do
@@ -180,6 +182,34 @@ jobs:
           name: web-${{ matrix.tenant }}
           path: apps/realtor_app/build/web
           retention-days: 7
+
+  admin:
+    name: Admin web build
+    runs-on: ubuntu-latest
+    needs: [changes, dart]
+    if: needs.changes.outputs.admin == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/tenant-cli/package-lock.json
+      - run: npm ci
+        working-directory: tools/tenant-cli
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: node tools/tenant-cli/src/cli.ts prepare realtime-estates
+      - name: Build web
+        working-directory: apps/admin
+        run: |
+          flutter create . --platforms=web --project-name realtor_admin >/dev/null
+          rm -f test/widget_test.dart
+          flutter build web --release
+          test -f build/web/main.dart.js
 
   android:
     name: Android flavors (every tenant, side by side)
