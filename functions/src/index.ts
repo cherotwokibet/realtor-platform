@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing.
+ * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing, setStaffRole.
  *
  * Planned (see tracker):
  *   P2  onMediaUpload   -> ffmpeg HLS for video (photos done: onListingPhoto)
@@ -11,6 +11,7 @@
  *   P6  verifyListing / expireListings (scheduled, 30-day re-verification)
  */
 import { initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onCall, onRequest } from 'firebase-functions/v2/https';
@@ -24,6 +25,7 @@ import { handleListingUpload } from './media/upload';
 import { callerFrom } from './api/auth';
 import * as leads from './api/leads';
 import * as listings from './api/listings';
+import * as staff from './api/staff';
 import * as viewings from './api/viewings';
 import { REGION, verificationExpiry } from './listing-rules';
 
@@ -43,6 +45,7 @@ export const bookViewing = onCall((req) => viewings.bookViewing(getFirestore(), 
 export const updateLeadStage = onCall((req) => leads.updateLeadStage(getFirestore(), callerFrom(req.auth), req.data));
 export const submitListing = onCall((req) => listings.submitListing(getFirestore(), callerFrom(req.auth), req.data));
 export const moderateListing = onCall((req) => listings.moderateListing(getFirestore(), callerFrom(req.auth), req.data));
+export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 
 // Media pipeline (D6): raw listing photos -> WebP variants + blurhash.
 export const onListingPhoto = onObjectFinalized({ memory: '1GiB', timeoutSeconds: 120 }, async (event) => {

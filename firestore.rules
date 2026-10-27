@@ -53,6 +53,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Staff roles (mirror of the custom claims, set by setStaffRole).
+    match /staff/{uid} {
+      allow read: if isManager() || (signedIn() && request.auth.uid == uid);
+      allow write: if false;
+    }
+
     // Staff actions, written by Functions in the same transaction as the change.
     match /audit/{id} {
       allow read: if isManager();
