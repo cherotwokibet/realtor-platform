@@ -31,7 +31,7 @@ before(() => {
 });
 
 beforeEach(async () => {
-  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings']) {
+  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings', 'audit']) {
     const all = await db.collection(c).get();
     await Promise.all(all.docs.map((d) => d.ref.delete()));
   }
@@ -137,6 +137,16 @@ describe('updateLeadStage', () => {
     await rejectsWith(updateLeadStage(db, wanjiku, { leadId: 'lead-001', stage: 'new' }), 'failed-precondition');
     await updateLeadStage(db, manager, { leadId: 'lead-001', stage: 'lost' });
   });
+  test('each move is in the audit log, refusals are not', async () => {
+    await updateLeadStage(db, wanjiku, { leadId: 'lead-001', stage: 'contacted' }, now);
+    await rejectsWith(updateLeadStage(db, otieno, { leadId: 'lead-001', stage: 'viewing' }), 'permission-denied');
+    const log = (await db.collection('audit').get()).docs.map((d) => d.data());
+    assert.equal(log.length, 1);
+    assert.deepEqual(
+      { ...log[0], at: log[0].at.toDate() },
+      { at: now, actor: { uid: 'u1', role: 'agent', agentId: 'agent-wanjiku' }, action: 'lead.stage', target: { collection: 'leads', id: 'lead-001' }, from: 'new', to: 'contacted' },
+    );
+  });
 });
 
 describe('listings', () => {
@@ -163,6 +173,11 @@ describe('listings', () => {
     assert.equal(l.status, 'live');
     assert.equal(l.expiresAt.toDate().getTime() - l.verifiedAt.toDate().getTime(), 30 * 86_400_000);
     await rejectsWith(moderateListing(db, manager, { listingId, action: 'approve' }), 'failed-precondition');
+    const log = (await db.collection('audit').orderBy('action').get()).docs.map((d) => d.data());
+    assert.deepEqual(log.map((e) => [e.action, e.actor.uid, e.target.id, e.from, e.to]), [
+      ['listing.approve', 'm1', listingId, 'pending', 'live'],
+      ['listing.submit', 'u1', listingId, null, 'pending'],
+    ]);
   });
   test("agents can't edit each other's listings", async () => {
     const { listingId } = await submitListing(db, wanjiku, newListing, now);

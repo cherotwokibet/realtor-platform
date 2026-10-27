@@ -25,6 +25,7 @@ One Firestore database per tenant project (D1), so documents carry no tenant id.
 | `viewings/{id}` | listingId, agentId, slot, client {name, phone}, status (requested / confirmed / done / no-show / cancelled), feeKES, paymentId, createdAt | Requested by clients via `bookViewing`; status *Functions* |
 | `payments/{id}` | purpose (viewing-fee / deposit / featured-ad), amountKES, phone, listingId, checkoutRequestId, status (pending / paid / failed / cancelled), receipt | *Functions only* (Daraja, P6) |
 | `savedSearches/{id}` | userId, filters {purpose, types, areas, minBeds, maxPriceKES}, channels (push / email / whatsapp), lastNotifiedAt | The signed-in user; lastNotifiedAt *Functions* |
+| `audit/{id}` | at, actor {uid, role, agentId}, action (lead.stage / listing.submit / listing.approve / …), target {collection, id}, from, to, reason | *Functions only*, in the same transaction as the change; owners and managers read. Ids and states only, no personal data |
 | `areas/{slug}` | name, county, centre (geo), guide, amenities[], stats {medianRentKES, listings} | Admin; stats *Functions* |
 | `config/tenant` | Read-only copy of the tenant file for runtime flags | Deploy step |
 

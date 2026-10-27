@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { canMove, type ListingStatus, verificationExpiry } from '../listing-rules';
 import { geohash, slugify } from '../model/geo';
 import { docId, kes, listing, listingPurpose, listingType, mediaItem, slug } from '../model/schema';
+import { audit } from './audit';
 import { type Caller, isManager, parseInput, requireManager, requireStaff } from './auth';
 
 /** What an agent may send. Status, verification, slug, geohash and stats are set here. */
@@ -64,6 +65,8 @@ export async function submitListing(db: Firestore, caller: Caller, input: unknow
     };
     parseInput(listing, doc);
     tx.set(ref, doc);
+    const from = existing.exists ? (existing.get('status') as ListingStatus) : null;
+    audit(tx, db, caller, { action: 'listing.submit', target: { collection: 'listings', id: ref.id }, from, to: 'pending' }, now);
   });
   return { listingId: ref.id, slug: finalSlug };
 }
@@ -102,6 +105,7 @@ export async function moderateListing(db: Firestore, caller: Caller, input: unkn
       ...(to === 'live' ? { verifiedAt: now, expiresAt: verificationExpiry(now) } : {}),
       ...(req.action === 'reject' ? { rejection: { reason: req.reason, at: now, by: caller.uid } } : {}),
     });
+    audit(tx, db, caller, { action: `listing.${req.action}`, target: { collection: 'listings', id: ref.id }, from, to, reason: req.reason }, now);
   });
   return { status: to };
 }
