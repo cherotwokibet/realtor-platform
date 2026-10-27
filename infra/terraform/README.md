@@ -24,6 +24,14 @@ terraform plan  -var tenant_id=acme-realty -var env=dev -var billing_account=XXX
 terraform apply -var tenant_id=acme-realty -var env=dev -var billing_account=XXXXXX-XXXXXX-XXXXXX
 ```
 
+If the GCP project already exists (for example you created `rte-realtor-dev` in the console), import it before the first plan, or apply will fail with "already exists":
+
+```sh
+terraform import -var tenant_id=<id> -var env=dev -var billing_account=XXXXXX-XXXXXX-XXXXXX module.env.google_project.this <project-id>
+```
+
+Do the same for anything else that already exists, such as Firebase on the project (`module.env.google_firebase_project.this projects/<project-id>`) or the Firestore database (`module.env.google_firestore_database.default projects/<project-id>/databases/(default)`).
+
 Repeat with `env=stage` and `env=prod` (each has its own state prefix). The state bucket `realtor-platform-tfstate` must exist first (one per operator, versioned, in a project you own).
 
 Not yet covered: Firestore indexes (none defined yet), the Typesense collection (P2 search), and custom domains on Hosting (needs DNS access, P8).

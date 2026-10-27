@@ -192,7 +192,7 @@ resource "google_cloud_run_v2_service" "share_pages" {
 
 # Public pages: anyone (and Hosting) may call the service.
 resource "google_cloud_run_v2_service_iam_member" "share_pages_public" {
-  count    = length(google_cloud_run_v2_service.share_pages)
+  count    = var.share_pages_image == null ? 0 : 1
   project  = google_project.this.project_id
   location = local.region
   name     = google_cloud_run_v2_service.share_pages[0].name
