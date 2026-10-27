@@ -49,8 +49,9 @@ class _PagedTableState<T> extends State<PagedTable<T>> {
           );
         }
         final page = snap.data;
-        if (page == null)
+        if (page == null) {
           return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
