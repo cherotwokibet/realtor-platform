@@ -3,6 +3,7 @@
  * verification or commissions happens here, never in a client.
  *
  * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing, setStaffRole.
+ * Scheduled: purgeExpiredLeads (D12 retention, nightly).
  *
  * Planned (see tracker):
  *   P2  onMediaUpload   -> ffmpeg HLS for video (photos done: onListingPhoto)
@@ -17,6 +18,7 @@ import { setGlobalOptions } from 'firebase-functions/v2';
 import { onCall, onRequest } from 'firebase-functions/v2/https';
 import { onObjectFinalized } from 'firebase-functions/v2/storage';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineSecret } from 'firebase-functions/params';
 import { Client as Typesense } from 'typesense';
 import { type SearchConfig, searchConfig } from './search/config';
@@ -29,6 +31,7 @@ import * as leads from './api/leads';
 import * as listings from './api/listings';
 import * as staff from './api/staff';
 import * as viewings from './api/viewings';
+import { purgeExpired } from './api/retention';
 import { REGION, verificationExpiry } from './listing-rules';
 
 initializeApp();
@@ -48,6 +51,13 @@ export const updateLeadStage = onCall((req) => leads.updateLeadStage(getFirestor
 export const submitListing = onCall((req) => listings.submitListing(getFirestore(), callerFrom(req.auth), req.data));
 export const moderateListing = onCall((req) => listings.moderateListing(getFirestore(), callerFrom(req.auth), req.data));
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
+
+// Retention (D12): every night, delete leads and viewings past their date.
+// Only counts are logged, never what was deleted.
+export const purgeExpiredLeads = onSchedule({ schedule: '15 3 * * *', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
+  const r = await purgeExpired(getFirestore(), new Date());
+  console.log(`retention: deleted ${r.leads} leads, ${r.viewings} viewings`);
+});
 
 // Media pipeline (D6): raw listing photos -> WebP variants + blurhash.
 export const onListingPhoto = onObjectFinalized({ bucket: mediaBucketName(process.env), memory: '1GiB', timeoutSeconds: 120 }, async (event) => {

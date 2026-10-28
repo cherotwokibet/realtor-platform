@@ -10,6 +10,7 @@ locals {
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "cloudfunctions.googleapis.com",
+    "cloudscheduler.googleapis.com",
     "compute.googleapis.com",
     "eventarc.googleapis.com",
     "firebase.googleapis.com",
@@ -75,6 +76,17 @@ resource "google_firebase_storage_bucket" "media" {
 
 # Composite indexes from the repo's firestore.indexes.json (the same file
 # the Firebase CLI and the emulator read), keyed by collection and fields.
+# Rate-limit counters (P6-s05) expire on their own: Firestore's TTL policy
+# deletes each one after its `expiresAt`. No query needs the field indexed.
+resource "google_firestore_field" "rate_limit_ttl" {
+  project    = google_project.this.project_id
+  database   = google_firestore_database.default.name
+  collection = "rateLimits"
+  field      = "expiresAt"
+  ttl_config {}
+  index_config {}
+}
+
 resource "google_firestore_index" "composite" {
   for_each = {
     for ix in var.firestore_indexes.indexes :

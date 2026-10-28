@@ -112,6 +112,7 @@ class ListingPage extends StatelessComponent {
     }
     return section(id: 'enquire', classes: 'enquire', [
       const h2([Component.text('Ask about this home')]),
+      if (f.notice != null) p(classes: 'notice', [Component.text(f.notice!)]),
       if (f.failed)
         const p(classes: 'notice', [Component.text('Sorry, we could not send that just now. Please try again or ask on WhatsApp.')]),
       form(action: '/listing/${listing.slug}/enquire#enquire', method: FormMethod.post, [

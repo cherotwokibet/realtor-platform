@@ -175,4 +175,9 @@ describe('everything else', () => {
     await assertFails(getDoc(doc(manager(), 'secrets', 'x')));
     await assertFails(setDoc(doc(manager(), 'commissions', 'x'), { amountKES: 1 }));
   });
+
+  test('rate-limit counters are Functions-only', async () => {
+    await assertFails(getDoc(doc(manager(), 'rateLimits', 'x')));
+    await assertFails(setDoc(doc(manager(), 'rateLimits', 'x'), { count: 0 }));
+  });
 });
