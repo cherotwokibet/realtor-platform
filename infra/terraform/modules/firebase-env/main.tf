@@ -244,6 +244,11 @@ resource "google_identity_platform_config" "auth" {
       enabled           = true
       password_required = true
     }
+    # Off, but stated: the API always returns this block, so leaving it out
+    # shows up as a change on every plan.
+    phone_number {
+      enabled = false
+    }
   }
   depends_on = [google_project_service.apis, google_firebase_project.this]
 }
