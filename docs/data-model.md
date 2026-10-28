@@ -26,7 +26,7 @@ One Firestore database per tenant project (D1), so documents carry no tenant id.
 | `payments/{id}` | purpose (viewing-fee / deposit / featured-ad), amountKES, phone, listingId, checkoutRequestId, status (pending / paid / failed / cancelled), receipt | *Functions only* (Daraja, P6) |
 | `savedSearches/{id}` | userId, filters {purpose, types, areas, minBeds, maxPriceKES}, channels (push / email / whatsapp), lastNotifiedAt | The signed-in user; lastNotifiedAt *Functions* |
 | `staff/{uid}` | email, name, role (owner / manager / agent), agentId, updatedAt | *Functions only* (`setStaffRole`, mirror of the custom claims); managers read all, staff read their own |
-| `audit/{id}` | at, actor {uid, role, agentId}, action (lead.stage / listing.submit / listing.approve / …), target {collection, id}, from, to, reason | *Functions only*, in the same transaction as the change; owners and managers read. Ids and states only, no personal data |
+| `audit/{id}` | at, actor {uid, role, agentId}, action (lead.stage / listing.submit / listing.approve / …), target {collection, id, label}, from, to, reason | *Functions only*, in the same transaction as the change; owners and managers read. Ids, states and a label (listing title, staff email); no client personal data |
 | `areas/{slug}` | name, county, centre (geo), guide, amenities[], stats {medianRentKES, listings} | Admin; stats *Functions* |
 | `config/tenant` | Read-only copy of the tenant file for runtime flags | Deploy step |
 
@@ -62,11 +62,11 @@ Variants under `media/` are public and cached for a year. Video (ffmpeg → HLS)
 
 ## Search (P2-s05, D4)
 
-Live listings are mirrored into a Typesense collection named `<TENANT_ID>_listings` by the `onListingWrite` trigger. Anything that stops being live (pending, expired, let, sold, deleted) is removed. The search document carries the facet fields (type, beds, area, amenities, verified, priceKES), a geopoint, `featured`, and the thumb and blurhash of the first photo.
+Live listings are mirrored into a Typesense collection named `<TENANT_ID>_listings` by the `search-onListingWrite` trigger. Anything that stops being live (pending, expired, let, sold, deleted) is removed. The search document carries the facet fields (type, beds, area, amenities, verified, priceKES), a geopoint, `featured`, and the thumb and blurhash of the first photo.
 
 `functions/src/search/schema.ts` → `toSearchParams()` turns the shared filter model into a Typesense query: purpose, types, areas, minimum beds, price range, amenities, verified only, radius around a point, sort (newest with featured first, price ascending or descending, nearest) and paging. The share-page URLs and app deep links use the same model. Values are quoted so user input can't widen a filter.
 
-Deploy settings per tenant project: `TENANT_ID` and `TYPESENSE_HOST` (params in `functions/.env.<project>`), and the `TYPESENSE_API_KEY` secret in Secret Manager. CI runs the integration test against a Typesense container: facets, filters, a 2 km radius, typo tolerance, and under 100 ms.
+Search is off for a project until it is set up, and then the trigger deploys with the rest: `TENANT_ID` and `TYPESENSE_HOST` in `functions/.env.<project-id>` (local, not committed) and the `TYPESENSE_API_KEY` secret in Secret Manager. Without them a deploy skips the trigger and asks for nothing (`functions/src/search/config.ts`). CI runs the integration test against a Typesense container: facets, filters, a 2 km radius, typo tolerance, and under 100 ms.
 
 ## Indexes
 

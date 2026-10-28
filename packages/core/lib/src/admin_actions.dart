@@ -57,4 +57,8 @@ abstract interface class AdminActions {
 
   /// `moderateListing`: approve, reject (needs [reason]), expire, let or sold. Managers only.
   Future<void> moderateListing(StaffUser who, {required String listingId, required String action, String? reason});
+
+  /// `setStaffRole`, owners only: give an account that has signed in once a
+  /// role (an agent needs [agentId]), or take it away with a null [role].
+  Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId});
 }

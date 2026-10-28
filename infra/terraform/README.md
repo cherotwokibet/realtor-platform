@@ -36,4 +36,62 @@ Repeat with `env=stage` and `env=prod` (each has its own state prefix). The stat
 
 Firestore composite indexes come from the repo's `firestore.indexes.json`, the same file the emulator reads.
 
+Cloud Functions (2nd gen) service agents get the roles a first Functions deploy needs (`google_project_iam_member.functions_agents`): without them `firebase deploy --only functions` stops with "We failed to modify the IAM policy for the project", or `onListingPhoto` fails with *Permission "storage.buckets.get" denied … the Eventarc service account* (the Eventarc agent's own role, which Google grants late on a fresh project). The bindings are additive, so granting them by hand with the `gcloud` commands the CLI prints is safe; a later apply just finds them in place.
+
+**Quota project.** Identity Platform (`google_identity_platform_config.auth`) refuses user credentials without a quota project: *"identitytoolkit.googleapis.com API requires a quota project"*. For an existing project, set it for the session before `plan`/`apply`, and clear it afterwards (it must not point at a project that does not exist yet when you create a new one):
+
+```sh
+export GOOGLE_BILLING_PROJECT=<project-id> USER_PROJECT_OVERRIDE=true
+terraform plan ... && terraform apply ...
+unset GOOGLE_BILLING_PROJECT USER_PROJECT_OVERRIDE
+```
+
+For a brand-new project, the first apply creates the project and everything but the sign-in config; run the same plan/apply again with the two variables set to finish it.
+
+### Staff admin (P5, D14)
+
+Terraform registers an admin web app, an admin Hosting site (`<project-id>-admin`, output `admin_url`) and email + password sign-in (Identity Platform, free tier up to 50,000 monthly users).
+
+Google sign-in is switched on once per project by hand, so its client secret never enters Terraform state: Firebase console → Authentication → Sign-in method → Add new provider → Google → Enable, pick a support email, Save.
+
+To put the admin online and make the first owner:
+
+```sh
+melos run app:prepare -- <tenant-id>
+(cd apps/admin && flutter create . --platforms=web --project-name realtor_admin && rm -f test/widget_test.dart && flutter build web --release)
+firebase target:apply hosting admin <project-id>-admin --project <project-id>   # once per project
+firebase deploy --only hosting:admin,functions --project <project-id>
+```
+
+Open `admin_url` and either create an account (email + password) or continue with Google; the account then exists, with no role. Then, once per project:
+
+```sh
+PROJECT=<project-id> OWNER_EMAIL=<that email> npm --prefix functions run staff:owner
+```
+
+Press *Check again* (or sign out and in) to pick up the owner role. From then on the owner adds staff with `setStaffRole`.
+
+### Share pages (D2)
+
+Terraform makes an Artifact Registry repo (`share-pages`, output `share_pages_repo`; it keeps the newest 5 images) and a Hosting site (`<project-id>-share`, output `share_url`) whose every path is rewritten to the `share-pages` Cloud Run service. The service exists only once `share_pages_image` is set, so it takes two applies. In Cloud Shell, from `~/realtor-platform`:
+
+```sh
+cd infra/terraform/tenant
+terraform apply -var tenant_id=<id> -var env=dev -var billing_account=XXXXXX-XXXXXX-XXXXXX   # makes the repo
+REPO=$(terraform output -raw share_pages_repo)
+cd ../../..
+TAG=$(git rev-parse --short HEAD)
+gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+docker build -f apps/share_pages/Dockerfile --build-arg TENANT=<id> -t "$REPO/share-pages:$TAG" .
+docker push "$REPO/share-pages:$TAG"
+cd infra/terraform/tenant
+terraform apply -var tenant_id=<id> -var env=dev -var billing_account=XXXXXX-XXXXXX-XXXXXX \
+  -var share_pages_image="$REPO/share-pages:$TAG"
+cd ../../..
+firebase target:apply hosting share <project-id>-share --project <project-id>   # once per project
+firebase deploy --only hosting:share --project <project-id>
+```
+
+Open `share_url`: `/` lists live homes, `/robots.txt` and `/sitemap.xml` answer. Re-deploying is the same build, push and second apply with a new tag; the Hosting deploy is needed only when the `share` block of `firebase.json` changes. Use a new tag every time (the commit), never `latest`, so the Cloud Run revision always changes.
+
 Not yet covered: the Typesense collection (P2 search), and custom domains on Hosting (needs DNS access, P8).

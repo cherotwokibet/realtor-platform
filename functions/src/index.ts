@@ -16,10 +16,12 @@ import { setGlobalOptions } from 'firebase-functions/v2';
 import { onCall, onRequest } from 'firebase-functions/v2/https';
 import { onObjectFinalized } from 'firebase-functions/v2/storage';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
-import { defineSecret, defineString } from 'firebase-functions/params';
+import { defineSecret } from 'firebase-functions/params';
 import { Client as Typesense } from 'typesense';
+import { type SearchConfig, searchConfig } from './search/config';
 import { searchRelevantChange, syncListing } from './search/sync';
 import { getStorage } from 'firebase-admin/storage';
+import { mediaBucketName } from './media/bucket';
 import { handleListingUpload, handleListingVideo } from './media/upload';
 import { callerFrom } from './api/auth';
 import * as leads from './api/leads';
@@ -47,31 +49,35 @@ export const moderateListing = onCall((req) => listings.moderateListing(getFires
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 
 // Media pipeline (D6): raw listing photos -> WebP variants + blurhash.
-export const onListingPhoto = onObjectFinalized({ memory: '1GiB', timeoutSeconds: 120 }, async (event) => {
+export const onListingPhoto = onObjectFinalized({ bucket: mediaBucketName(process.env), memory: '1GiB', timeoutSeconds: 120 }, async (event) => {
   const r = await handleListingUpload(getStorage().bucket(event.data.bucket), getFirestore(), event.data.name);
   if (r.status === 'rejected') console.warn(`rejected ${event.data.name}: ${r.reason}`);
 });
 
 // Same paths, video files: ffmpeg -> HLS ladder + poster. Needs an ffmpeg
-// binary at FFMPEG_PATH (or on PATH); see docs/decisions.md D14.
-export const onListingVideo = onObjectFinalized({ memory: '2GiB', cpu: 2, timeoutSeconds: 540 }, async (event) => {
+// binary at FFMPEG_PATH (or on PATH); see docs/decisions.md D15.
+export const onListingVideo = onObjectFinalized({ bucket: mediaBucketName(process.env), memory: '2GiB', cpu: 2, timeoutSeconds: 540 }, async (event) => {
   const r = await handleListingVideo(getStorage().bucket(event.data.bucket), getFirestore(), event.data.name);
   if (r.status === 'rejected') console.warn(`rejected ${event.data.name}: ${r.reason}`);
 });
 
 // Search (D4): live listings mirrored into <TENANT_ID>_listings on Typesense.
-const TENANT_ID = defineString('TENANT_ID');
-const TYPESENSE_HOST = defineString('TYPESENSE_HOST');
-const TYPESENSE_API_KEY = defineSecret('TYPESENSE_API_KEY');
+// Deployed as search-onListingWrite only when the project has search set up
+// (see search/config.ts); otherwise the group is empty and needs no secret.
+const searchCfg = searchConfig(process.env);
+export const search = searchCfg ? { onListingWrite: listingSearchTrigger(searchCfg) } : {};
 
-export const onListingWrite = onDocumentWritten({ document: 'listings/{id}', secrets: [TYPESENSE_API_KEY] }, async (event) => {
-  if (!searchRelevantChange(event.data?.before.data(), event.data?.after.data())) return;
-  const client = new Typesense({
-    nodes: [{ host: TYPESENSE_HOST.value(), port: 443, protocol: 'https' }],
-    apiKey: TYPESENSE_API_KEY.value(),
-    connectionTimeoutSeconds: 5,
+function listingSearchTrigger(cfg: SearchConfig) {
+  const apiKey = defineSecret('TYPESENSE_API_KEY');
+  return onDocumentWritten({ document: 'listings/{id}', secrets: [apiKey] }, async (event) => {
+    if (!searchRelevantChange(event.data?.before.data(), event.data?.after.data())) return;
+    const client = new Typesense({
+      nodes: [{ host: cfg.host, port: 443, protocol: 'https' }],
+      apiKey: apiKey.value(),
+      connectionTimeoutSeconds: 5,
+    });
+    await syncListing(client, cfg.tenantId, event.params.id, event.data?.after.data());
   });
-  await syncListing(client, TENANT_ID.value(), event.params.id, event.data?.after.data());
-});
+}
 
 export { verificationExpiry };

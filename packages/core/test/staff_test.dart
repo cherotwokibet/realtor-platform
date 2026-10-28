@@ -19,11 +19,13 @@ void main() {
     });
   });
 
-  test('only owners and managers open the audit log', () {
+  test('only owners and managers open the team and audit log; only owners manage staff', () {
     const agent = StaffUser(uid: 'a', name: 'A', role: StaffRole.agent, agentId: 'agent-a');
     const manager = StaffUser(uid: 'm', name: 'M', role: StaffRole.manager);
+    const owner = StaffUser(uid: 'o', name: 'O', role: StaffRole.owner);
     expect(AdminSection.values.where(agent.canOpen), [AdminSection.leads, AdminSection.listings]);
     expect(AdminSection.values.where(manager.canOpen), AdminSection.values);
+    expect([agent, manager, owner].map((u) => u.canManageStaff), [false, false, true]);
   });
 
   group('scopedTo', () {

@@ -12,7 +12,8 @@ export interface AuditEvent {
     | 'listing.let'
     | 'listing.sold'
     | 'staff.role';
-  target: { collection: 'leads' | 'listings' | 'staff'; id: string };
+  /** label: what the admin shows for it (a listing title, a staff email), kept as it was then. */
+  target: { collection: 'leads' | 'listings' | 'staff'; id: string; label?: string };
   from?: string | null;
   to?: string;
   reason?: string;
@@ -32,7 +33,7 @@ export function audit(tx: Writer, db: Firestore, caller: Caller, event: AuditEve
     at,
     actor: { uid: caller.uid, role: caller.role, agentId: caller.agentId, name: caller.name ?? null },
     action: event.action,
-    target: event.target,
+    target: { collection: event.target.collection, id: event.target.id, label: event.target.label ?? null },
     from: event.from ?? null,
     to: event.to ?? null,
     ...(event.reason ? { reason: event.reason } : {}),

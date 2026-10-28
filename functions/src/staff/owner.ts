@@ -17,6 +17,9 @@ async function main(): Promise<void> {
     console.error('set PROJECT=<project-id> and OWNER_EMAIL=<email of an account that has signed in once>');
     process.exit(1);
   }
+  // Auth (Identity Toolkit) refuses user credentials without a quota
+  // project; the project being set up is the right one to bill.
+  process.env.GOOGLE_CLOUD_QUOTA_PROJECT ??= projectId;
   initializeApp({ projectId });
   const { uid } = await bootstrapOwner(getFirestore(), getAuth(), email);
   console.log(`✓ ${email} (${uid}) is the owner of ${projectId}; they get the role on their next sign-in`);

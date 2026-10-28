@@ -93,9 +93,25 @@ class AuditRow {
     this.reason,
   });
   final String id, actorName, action, target;
-  final StaffRole actorRole;
+
+  /// Null for a trusted script (the first-owner bootstrap).
+  final StaffRole? actorRole;
   final DateTime at;
   final String? from, to, reason;
+}
+
+/// One person on the team (staff/{uid}, the mirror of their role claims).
+class StaffMember {
+  const StaffMember({required this.uid, required this.role, this.email, this.name, this.agentId, this.agentName});
+  final String uid;
+  final StaffRole role;
+  final String? email, name, agentId, agentName;
+}
+
+/// An agent record staff accounts can act as.
+class AgentOption {
+  const AgentOption(this.id, this.name);
+  final String id, name;
 }
 
 /// What the admin reads. Firestore once the admin has Firebase, demo data
@@ -111,6 +127,12 @@ abstract interface class AdminRepository {
 
   /// Newest first. Throws [StaffAccessException] for agents.
   Future<RowPage<AuditRow>> audit(StaffUser who, {String? after, int limit = 25});
+
+  /// The team, by email. Throws [StaffAccessException] for agents.
+  Future<List<StaffMember>> team(StaffUser who);
+
+  /// Agent records, by name, to pick from when giving someone the agent role.
+  Future<List<AgentOption>> agents(StaffUser who);
 }
 
 /// The rows [who] may see: an agent's own, everyone's for managers.

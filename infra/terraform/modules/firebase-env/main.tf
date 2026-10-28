@@ -10,12 +10,16 @@ locals {
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "cloudfunctions.googleapis.com",
+    "compute.googleapis.com",
     "eventarc.googleapis.com",
     "firebase.googleapis.com",
     "firebaseappcheck.googleapis.com",
+    "firebasehosting.googleapis.com",
     "firebaserules.googleapis.com",
     "firebasestorage.googleapis.com",
     "firestore.googleapis.com",
+    "identitytoolkit.googleapis.com",
+    "pubsub.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "storage.googleapis.com",
@@ -149,6 +153,89 @@ resource "google_firebase_web_app" "app" {
   depends_on   = [google_firebase_project.this]
 }
 
+# Cloud Functions (2nd gen) needs these service agents to hold roles before
+# the first deploy: storage events reach Eventarc through Pub/Sub, and the
+# functions run as the Compute default service account. The Firebase CLI
+# tries to grant them itself and fails without project-owner rights.
+data "google_storage_project_service_account" "gcs" {
+  project    = google_project.this.project_id
+  depends_on = [google_project_service.apis]
+}
+
+# Eventarc's agent validates the media bucket when the storage trigger is
+# created; its role arrives late on a fresh project, so grant it up front.
+resource "google_project_service_identity" "eventarc" {
+  provider   = google-beta
+  project    = google_project.this.project_id
+  service    = "eventarc.googleapis.com"
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_project_service_identity" "pubsub" {
+  provider   = google-beta
+  project    = google_project.this.project_id
+  service    = "pubsub.googleapis.com"
+  depends_on = [google_project_service.apis]
+}
+
+locals {
+  compute_sa = "serviceAccount:${google_project.this.number}-compute@developer.gserviceaccount.com"
+  functions_agent_roles = {
+    gcs_publishes_events = { member = "serviceAccount:${data.google_storage_project_service_account.gcs.email_address}", role = "roles/pubsub.publisher" }
+    pubsub_signs_tokens  = { member = "serviceAccount:${google_project_service_identity.pubsub.email}", role = "roles/iam.serviceAccountTokenCreator" }
+    functions_invoke_run = { member = local.compute_sa, role = "roles/run.invoker" }
+    functions_get_events = { member = local.compute_sa, role = "roles/eventarc.eventReceiver" }
+  }
+}
+
+resource "google_project_iam_member" "functions_agents" {
+  for_each   = local.functions_agent_roles
+  project    = google_project.this.project_id
+  role       = each.value.role
+  member     = each.value.member
+  depends_on = [google_project_service.apis]
+}
+
+# Staff admin (P5): its own web app and Hosting site. Hosting serves the
+# linked app's config at /__/firebase/init.json, so no config is committed.
+resource "google_firebase_web_app" "admin" {
+  provider     = google-beta
+  project      = google_project.this.project_id
+  display_name = "${local.t.name} admin (${var.env})"
+  depends_on   = [google_firebase_project.this]
+}
+
+resource "google_firebase_hosting_site" "admin" {
+  provider = google-beta
+  project  = google_project.this.project_id
+  # Site ids are at most 30 characters.
+  site_id = "${trimsuffix(substr(local.project_id, 0, 24), "-")}-admin"
+  app_id  = google_firebase_web_app.admin.app_id
+}
+
+# Sign-in (D14): email + password here. Google is switched on once in the
+# Firebase console (Authentication > Sign-in method > Google), which makes
+# its OAuth client without a client secret ever entering this state. Staff
+# roles are custom claims set by the setStaffRole Function, never here.
+resource "google_identity_platform_config" "auth" {
+  project = google_project.this.project_id
+  authorized_domains = [
+    "localhost",
+    "${local.project_id}.firebaseapp.com",
+    "${local.project_id}.web.app",
+    "${google_firebase_hosting_site.admin.site_id}.web.app",
+    "${google_firebase_hosting_site.admin.site_id}.firebaseapp.com",
+  ]
+  sign_in {
+    allow_duplicate_emails = false
+    email {
+      enabled           = true
+      password_required = true
+    }
+  }
+  depends_on = [google_project_service.apis, google_firebase_project.this]
+}
+
 # Empty secrets only. Values are added in Secret Manager by the realtor's
 # admin; Terraform state never holds them.
 resource "google_secret_manager_secret" "refs" {
@@ -175,6 +262,43 @@ resource "google_project_iam_member" "share_pages_firestore" {
   project = google_project.this.project_id
   role    = "roles/datastore.viewer"
   member  = "serviceAccount:${google_service_account.share_pages.email}"
+}
+
+# Where the share pages image is pushed. Keeps the newest 5 images and drops
+# untagged ones after a week, so storage stays inside the free 0.5 GB.
+resource "google_artifact_registry_repository" "share_pages" {
+  project                = google_project.this.project_id
+  location               = local.region
+  repository_id          = "share-pages"
+  format                 = "DOCKER"
+  labels                 = local.labels
+  cleanup_policy_dry_run = false
+
+  cleanup_policies {
+    id     = "keep-newest"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = 5
+    }
+  }
+  cleanup_policies {
+    id     = "drop-untagged"
+    action = "DELETE"
+    condition {
+      tag_state  = "UNTAGGED"
+      older_than = "604800s"
+    }
+  }
+  depends_on = [google_project_service.apis]
+}
+
+# The Hosting site in front of the service. Its public folder is empty, so
+# every path is rewritten to Cloud Run (firebase.json target "share").
+# A custom share domain is attached by hand later (DNS).
+resource "google_firebase_hosting_site" "share" {
+  provider = google-beta
+  project  = google_project.this.project_id
+  site_id  = "${trimsuffix(substr(local.project_id, 0, 24), "-")}-share"
 }
 
 resource "google_cloud_run_v2_service" "share_pages" {

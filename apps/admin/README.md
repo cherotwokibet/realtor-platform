@@ -24,4 +24,12 @@ flutter create . --platforms=web          # once; web/ is not committed
 flutter run -d chrome
 ```
 
-Until Firebase Auth is wired, the sign-in screen offers demo accounts over demo data (`lib/src/demo_admin.dart`).
+Served by anything but Firebase Hosting (`flutter run`, a plain web server), the admin offers demo accounts over demo data (`lib/src/demo_admin.dart`).
+
+On Firebase Hosting it reads the admin web app's config from `/__/firebase/init.json` (D14), so none is committed, and switches to:
+
+- **Sign-in:** email + password (with *Forgot password?*) or Google (`lib/src/firebase/firebase_auth.dart`). New staff create their own account; it has no role and waits on a screen until an owner adds it. The role comes from the ID token's claims.
+- **Tables:** Firestore, scoped by role, paged with `startAfterDocument` (`lib/src/firebase/firestore_admin.dart`; indexes in `firestore.indexes.json`).
+- **Changes:** the callable Functions (`lib/src/firebase/callable_actions.dart`).
+
+Deploying and making the first owner: see `infra/terraform/README.md`.
