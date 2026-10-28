@@ -92,6 +92,10 @@ firebase target:apply hosting share <project-id>-share --project <project-id>   
 firebase deploy --only hosting:share --project <project-id>
 ```
 
+The share pages send enquiries, viewing requests and taps to the Functions' twins (`shareCreateLead`, `shareBookViewing`, `shareLogContactTap`, D16), which only the `share-pages` service account may call. Deploy the Functions before a share pages image that expects them.
+
+App Check (D16) starts in watch mode: each public callable logs `{"appCheck":"verified"|"missing"}`. To enforce, put `ENFORCE_APP_CHECK=createLead,bookViewing,logContactTap` (or `all`) in `functions/.env.<project-id>` and deploy the Functions; delete the line to switch back.
+
 Open `share_url`: `/` lists live homes, `/robots.txt` and `/sitemap.xml` answer. Re-deploying is the same build, push and second apply with a new tag; the Hosting deploy is needed only when the `share` block of `firebase.json` changes. Use a new tag every time (the commit), never `latest`, so the Cloud Run revision always changes.
 
 ### Video transcoder (D15)
