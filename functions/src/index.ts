@@ -6,7 +6,6 @@
  * Scheduled, nightly: purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
- *   P2  onMediaUpload   -> ffmpeg HLS for video (photos done: onListingPhoto)
  *   P4  sendPush        -> FCM HTTP v1 (replaces the legacy server key)
  *   P6  mpesaStkPush / mpesaCallback -> Daraja
  */
@@ -24,7 +23,7 @@ import { type SearchConfig, searchConfig } from './search/config';
 import { searchRelevantChange, syncListing } from './search/sync';
 import { getStorage } from 'firebase-admin/storage';
 import { mediaBucketName } from './media/bucket';
-import { handleListingUpload } from './media/upload';
+import { handleListingUpload, handleListingVideo } from './media/upload';
 import { callerFrom } from './api/auth';
 import * as leads from './api/leads';
 import * as listings from './api/listings';
@@ -81,6 +80,13 @@ export const agentResponseTimes = onSchedule({ schedule: '30 3 * * *', timeZone:
 // Media pipeline (D6): raw listing photos -> WebP variants + blurhash.
 export const onListingPhoto = onObjectFinalized({ bucket: mediaBucketName(process.env), memory: '1GiB', timeoutSeconds: 120 }, async (event) => {
   const r = await handleListingUpload(getStorage().bucket(event.data.bucket), getFirestore(), event.data.name);
+  if (r.status === 'rejected') console.warn(`rejected ${event.data.name}: ${r.reason}`);
+});
+
+// Same paths, video files: ffmpeg -> HLS ladder + poster. Needs an ffmpeg
+// binary at FFMPEG_PATH (or on PATH); see docs/decisions.md D15.
+export const onListingVideo = onObjectFinalized({ bucket: mediaBucketName(process.env), memory: '2GiB', cpu: 2, timeoutSeconds: 540 }, async (event) => {
+  const r = await handleListingVideo(getStorage().bucket(event.data.bucket), getFirestore(), event.data.name);
   if (r.status === 'rejected') console.warn(`rejected ${event.data.name}: ${r.reason}`);
 });
 
