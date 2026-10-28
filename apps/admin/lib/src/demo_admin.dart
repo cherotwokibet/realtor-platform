@@ -465,10 +465,52 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   /// Drafts saved in the editor; seeded listings get one made up on first open.
   final _drafts = <String, ListingDraft>{};
 
+  /// Guides for the demo areas, editable in the demo.
+  late final _guides = {
+    for (final e in _areaCentres.entries)
+      e.key: AreaGuide(
+        slug: e.key,
+        name: _areaName(e.key),
+        county: 'Nairobi',
+        lat: e.value.$1,
+        lng: e.value.$2,
+        guide: 'A demo guide for ${_areaName(e.key)}.',
+        listings: _listings.where((l) => l.area == e.key && l.status == 'live').length,
+      ),
+  };
+
   @override
   Future<List<AreaOption>> areas() async => [
-        for (final e in _areaCentres.entries) (slug: e.key, name: _areaName(e.key), lat: e.value.$1, lng: e.value.$2),
+        for (final g in _guides.values) (slug: g.slug!, name: g.name, lat: g.lat, lng: g.lng),
       ]..sort((a, b) => a.name.compareTo(b.name));
+
+  @override
+  Future<List<AreaGuide>> areaGuides() async => _guides.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+
+  @override
+  Future<String> saveArea(StaffUser who, AreaGuide area) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final problems = area.problems();
+    if (problems.isNotEmpty) throw AdminActionException('invalid-argument', problems.entries.map((e) => '${e.key}: ${e.value}').join('; '));
+    final slug = area.slug ?? area.name.trim().toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-|-$'), '');
+    if (area.slug == null && _guides.containsKey(slug)) throw AdminActionException('already-exists', 'there is already an area "$slug"');
+    if (area.slug != null && !_guides.containsKey(slug)) throw AdminActionException('not-found', 'no area "$slug"');
+    final before = _guides[slug];
+    final input = area.toCallable();
+    _guides[slug] = AreaGuide(
+      slug: slug,
+      name: input['name']! as String,
+      county: input['county']! as String,
+      lat: area.lat,
+      lng: area.lng,
+      guide: input['guide']! as String,
+      amenities: [for (final a in input['amenities']! as List) '$a'],
+      medianRentKES: before?.medianRentKES,
+      listings: before?.listings ?? 0,
+    );
+    _log(who, 'area.save', area.name.trim(), before == null ? 'none' : 'saved', 'saved');
+    return slug;
+  }
 
   @override
   Future<ListingDraft?> listingDraft(StaffUser who, String listingId) async {

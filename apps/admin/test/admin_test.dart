@@ -88,6 +88,9 @@ class SlowActions implements AdminActions {
   Future<MonthlyReport> monthlyReport(StaffUser who, String month) => inner.monthlyReport(who, month);
 
   @override
+  Future<String> saveArea(StaffUser who, AreaGuide area) => inner.saveArea(who, area);
+
+  @override
   Future<String> saveAgent(StaffUser who, AgentProfile profile) async {
     calls++;
     await gate.future;
@@ -901,6 +904,35 @@ void main() {
     expect(find.text('Reports'), findsNothing);
     await expectLater(container.read(adminActionsProvider).monthlyReport(wanjiku, '2026-10'),
         throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'permission-denied')));
+  });
+
+  testWidgets('a manager adds an area guide; it is offered in the listing form', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Areas…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add area'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Muthaiga North');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('A position in Kenya, e.g. -1.2921, 36.7856.'), findsNWidgets(2));
+    await tester.enterText(find.widgetWithText(TextField, 'Centre latitude'), '-1.23');
+    await tester.enterText(find.widgetWithText(TextField, 'Centre longitude'), '36.84');
+    await tester.enterText(find.widgetWithText(TextField, 'Guide: what living there is like'), 'Quiet and leafy.');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Muthaiga North'), findsOneWidget);
+    final options = await container.read(adminRepositoryProvider).areas();
+    expect(options.map((a) => a.slug), contains('muthaiga-north'));
+  });
+
+  testWidgets('agents get no area editor', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Areas…'), findsNothing);
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

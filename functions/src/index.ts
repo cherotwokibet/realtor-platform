@@ -2,8 +2,8 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, setStaffRole, dataRequest.
- * Scheduled, nightly: purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
+ * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, setStaffRole, dataRequest.
+ * Scheduled, nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
  *   P4  sendPush        -> FCM HTTP v1 (replaces the legacy server key)
@@ -33,6 +33,8 @@ import * as viewings from './api/viewings';
 import * as availability from './api/availability';
 import * as agents from './api/agents';
 import * as reports from './api/reports';
+import * as areas from './api/areas';
+import { refreshAreaStats } from './api/areas';
 import { dataRequest as runDataRequest } from './api/privacy';
 import { purgeExpired } from './api/retention';
 import { callableTwin, enforced, logAppCheck, type PublicCallable, sharePagesInvoker } from './api/appcheck';
@@ -85,8 +87,15 @@ export const featureListing = onCall((req) => listings.featureListing(getFiresto
 export const importListings = onCall({ timeoutSeconds: 120 }, (req) => listings.importListings(getFirestore(), callerFrom(req.auth), req.data));
 export const saveAgent = onCall((req) => agents.saveAgent(getFirestore(), callerFrom(req.auth), req.data));
 export const monthlyReport = onCall((req) => reports.monthlyReport(getFirestore(), callerFrom(req.auth), req.data));
+export const saveArea = onCall((req) => areas.saveArea(getFirestore(), callerFrom(req.auth), req.data));
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 export const dataRequest = onCall((req) => runDataRequest(getFirestore(), callerFrom(req.auth), req.data));
+
+// Area guides (P3-s05): every night, each area's live listings and median rent.
+export const areaStats = onSchedule({ schedule: '0 4 * * *', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
+  const r = await refreshAreaStats(getFirestore());
+  console.log(`area stats: ${r.areas} areas refreshed`);
+});
 
 // Retention (D12): every night, delete leads and viewings past their date.
 // Only counts are logged, never what was deleted.

@@ -1,4 +1,5 @@
 import 'agent_profile.dart';
+import 'area_guide.dart';
 import 'listing_draft.dart';
 import 'monthly_report.dart';
 import 'staff.dart';
@@ -117,6 +118,10 @@ abstract interface class AdminActions {
 
   /// `monthlyReport` (P5-s08), managers: [month] is `YYYY-MM`.
   Future<MonthlyReport> monthlyReport(StaffUser who, String month);
+
+  /// `saveArea` (P3-s05), managers: adds or edits an area guide. Completes
+  /// with its slug.
+  Future<String> saveArea(StaffUser who, AreaGuide area);
 
   /// `saveAgent` (P5-s04), managers: adds or edits an agent's profile.
   /// Completes with the agent's id.

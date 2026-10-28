@@ -187,6 +187,12 @@ class FirestoreAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<List<AreaGuide>> areaGuides() async {
+    final snap = await _db.collection('areas').get();
+    return [for (final d in snap.docs) AreaGuide.fromDoc(d.id, d.data())]..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  @override
   Future<List<AgentProfile>> agentProfiles(StaffUser who) async {
     if (!who.isManager) throw StaffAccessException('agent profiles are for owners and managers');
     final snap = await _db.collection('agents').get();

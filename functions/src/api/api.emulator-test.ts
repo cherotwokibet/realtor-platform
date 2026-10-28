@@ -14,6 +14,7 @@ import { bookViewing, rescheduleViewing, updateViewingStatus } from './viewings'
 import { addAgentBlock, removeAgentBlock } from './availability';
 import { saveAgent } from './agents';
 import { monthlyReport } from './reports';
+import { MIN_RENTALS, refreshAreaStats, saveArea } from './areas';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
@@ -673,5 +674,34 @@ describe('monthly report (P5-s08)', () => {
     assert.equal(typeof w.replyMins, 'number');
     assert.ok(!JSON.stringify(r).includes('Report Client') && !JSON.stringify(r).includes('700001401'));
     assert.equal((await monthlyReport(db, manager, { month: '2025-01' })).leads.total, 0);
+  });
+});
+
+describe('area guides (P3-s05)', () => {
+  const guide = { name: 'Muthaiga North', county: 'Nairobi', lat: -1.23, lng: 36.84, guide: 'Quiet, leafy, near Runda.', amenities: ['Village Market'] };
+
+  test('managers add and edit an area; agents cannot; stats stay with the nightly job', async () => {
+    await rejectsWith(saveArea(db, wanjiku, guide, now), 'permission-denied');
+    const { slug } = await saveArea(db, manager, guide, now);
+    assert.equal(slug, 'muthaiga-north');
+    await rejectsWith(saveArea(db, manager, guide, now), 'already-exists');
+    await saveArea(db, manager, { ...guide, slug, guide: 'Updated guide.', amenities: [] }, now);
+    const a = (await db.collection('areas').doc(slug).get()).data()!;
+    assert.deepEqual([a.guide, a.amenities, a.stats], ['Updated guide.', [], { medianRentKES: null, listings: 0 }]);
+    await rejectsWith(saveArea(db, manager, { ...guide, slug: 'nowhere' }, now), 'not-found');
+    await rejectsWith(saveArea(db, manager, { ...guide, lat: 51.5, lng: -0.1 }, now), 'invalid-argument');
+  });
+
+  test('nightly stats: live listings per area, median rent once there are enough rentals', async () => {
+    await refreshAreaStats(db);
+    const areas = await db.collection('areas').get();
+    const live = await db.collection('listings').where('status', '==', 'live').get();
+    for (const a of areas.docs) {
+      const here = live.docs.filter((l) => l.get('area') === a.id);
+      const rents = here.filter((l) => l.get('purpose') === 'rent').map((l) => l.get('priceKES') as number).sort((x, y) => x - y);
+      assert.equal(a.get('stats.listings'), here.length, a.id);
+      if (rents.length < MIN_RENTALS) assert.equal(a.get('stats.medianRentKES'), null, a.id);
+      else assert.ok(a.get('stats.medianRentKES') >= rents[0] && a.get('stats.medianRentKES') <= rents.at(-1)!, a.id);
+    }
   });
 });

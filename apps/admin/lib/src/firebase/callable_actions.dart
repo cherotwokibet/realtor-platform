@@ -57,6 +57,12 @@ class CallableAdminActions implements AdminActions {
       MonthlyReport.fromJson(await _run('monthlyReport', {'month': month}) as Map<Object?, Object?>);
 
   @override
+  Future<String> saveArea(StaffUser who, AreaGuide area) async {
+    final r = await _run('saveArea', area.toCallable()) as Map<Object?, Object?>;
+    return r['slug'] as String;
+  }
+
+  @override
   Future<String> saveAgent(StaffUser who, AgentProfile profile) async {
     final r = await _run('saveAgent', profile.toCallable()) as Map<Object?, Object?>;
     return r['agentId'] as String;
