@@ -6,6 +6,7 @@ import { tenantCss } from './css.ts';
 import { generateIcons } from './icons.ts';
 import { flutterConfigs } from './flutter-config.ts';
 import { createTenant } from './create.ts';
+import { rebrandTenant } from './rebrand.ts';
 import { patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
 import { tenantFontFiles } from './fonts.ts';
 import {
@@ -34,6 +35,9 @@ function usage(): never {
                      (title, description, theme colour, Open Graph); run after flutter create
   create <id> <name>  Scaffold tenants/<id>.json and placeholder brand/<id>/ art for a new realtor
                      (provisioning: infra/terraform/README.md)
+  rebrand <id> <name> --from <demo-id> --primary <hex> [--accent <hex>]
+                     Sales demo (P8-s05): the demo tenant under a prospect's name and colours,
+                     with a readable palette and placeholder art; see docs/sales-demo.md
 
 Coming later: deploy <id> <env>, build <id> <platform>, iOS flavors`);
   process.exit(cmd ? 1 : 0);
@@ -123,6 +127,30 @@ next:
   1. replace TBC / example.com values, colours, fonts and the SVGs in brand/${id}/
   2. node tools/tenant-cli/src/cli.ts validate ${id}
   3. provision (Boniface, with billing): see infra/terraform/README.md`);
+    break;
+  }
+  case 'rebrand': {
+    const flag = (n: string) => {
+      const i = args.indexOf(`--${n}`);
+      return i >= 0 ? args.splice(i, 2)[1] : undefined;
+    };
+    const primary = flag('primary');
+    const accent = flag('accent');
+    const from = flag('from');
+    const [id, ...nameParts] = args;
+    if (!id || !nameParts.length || !primary || !from) usage();
+    try {
+      const { notes } = rebrandTenant(repoRoot(), id, nameParts.join(' '), { primary, accent, from });
+      loadValid(id);
+      for (const n of notes) console.log(`  adjusted: ${n}`);
+    } catch (e) {
+      console.error(`✗ ${(e as Error).message}`);
+      process.exit(1);
+    }
+    console.log(`demo tenant ${id} ready (do not commit tenants/${id}.json or brand/${id}/)
+next:
+  node tools/tenant-cli/src/cli.ts prepare ${id}
+  cd apps/realtor_app && flutter run -d chrome     (and apps/admin for the staff side)`);
     break;
   }
   case 'web': {

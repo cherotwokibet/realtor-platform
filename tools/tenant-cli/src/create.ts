@@ -8,7 +8,7 @@ import { join } from 'node:path';
 const ID = /^[a-z][a-z0-9-]{2,23}$/; // leaves room for "-stage" in GCP project ids
 
 /** Placeholder art: a house mark and plain bars where the name will go. No <text>. */
-function placeholderSvgs(primary: string, accent: string, onDark: string): Record<string, string> {
+export function placeholderSvgs(primary: string, accent: string, onDark: string): Record<string, string> {
   const mark = (fill: string, door: string) =>
     `<path fill="${fill}" d="M20 150 150 20l130 130h-34L150 54 54 150z"/><rect fill="${door}" x="126" y="92" width="48" height="58" rx="4"/>`;
   const bars = (fill: string, x: number, y: number, w: number) =>
