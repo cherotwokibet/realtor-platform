@@ -66,6 +66,7 @@ Status: ✅ holds · ⚠️ gap, with plan · ➖ not applicable. Grouped by ASV
 ## V14 Data protection
 - ✅ Personal data (`leads`, `viewings`, `payments`) is staff-only. The audit log holds no names or phones, and the share pages never log form contents.
 - ✅ Personal pages (a visitor's own form input) are `private, no-store`.
+- ✅ Subject requests: owners and managers export or delete one person's data by phone or email (`dataRequest`, admin *Privacy* page); the audit entry keeps counts, not the person.
 - ✅ Leads past `retainUntil`, and viewings 24 months after their slot, are deleted nightly by `purgeExpiredLeads` (D12, DPA 2019).
 
 ## V15 Secure coding and architecture

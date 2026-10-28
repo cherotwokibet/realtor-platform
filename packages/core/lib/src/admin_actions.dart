@@ -73,4 +73,23 @@ abstract interface class AdminActions {
   /// `setStaffRole`, owners only: give an account that has signed in once a
   /// role (an agent needs [agentId]), or take it away with a null [role].
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId});
+
+  /// `dataRequest`, owners and managers (DPA 2019): everything held about
+  /// one person, found by an E.164 [phone] or an [email], exported or deleted.
+  Future<DataRequestResult> dataRequest(StaffUser who, {required DataRequestKind kind, String? phone, String? email});
+}
+
+enum DataRequestKind { export, delete }
+
+/// What a data request found (export) or removed (delete).
+class DataRequestResult {
+  const DataRequestResult({required this.kind, required this.leads, required this.viewings, this.exportJson});
+
+  final DataRequestKind kind;
+  final int leads, viewings;
+
+  /// The person's records as indented JSON, for an export; null for a delete.
+  final String? exportJson;
+
+  bool get foundNothing => leads == 0 && viewings == 0;
 }

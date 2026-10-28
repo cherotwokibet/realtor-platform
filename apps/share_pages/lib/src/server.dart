@@ -9,6 +9,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'agent_page.dart';
 import 'app_links.dart';
 import 'area_page.dart';
+import 'fonts.dart';
 import 'home_page.dart';
 import 'lead_api.dart';
 import 'listing.dart';
@@ -22,8 +23,9 @@ final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 /// `/listing/<slug>/viewing`),
 /// `/go/whatsapp/<slug>`, `/area/<slug>`, `/agent/<id>`, `/sitemap.xml`,
 /// `/robots.txt` and the App Links / Universal Links files in `/.well-known/`. Without [leads] there is no enquiry form and WhatsApp
-/// taps are not counted.
-shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? leads, DateTime Function()? now}) {
+/// taps are not counted. With [fontsDir] the tenant's bundled fonts are served
+/// at `/fonts/<Family>-<Weight>.ttf`, which the pages' `@font-face` rules use.
+shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? leads, DateTime Function()? now, String? fontsDir}) {
   final clock = now ?? DateTime.now;
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
       {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {
@@ -152,6 +154,7 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
           'User-agent: *\nAllow: /\nDisallow: /go/\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n',
           headers: {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400'},
         ));
+  if (fontsDir != null) router.get('/fonts/<file>', (shelf.Request _, String file) => serveFont(tenant, fontsDir, file));
   return (shelf.Request req) async => _secured(await router.call(req));
 }
 
@@ -160,10 +163,10 @@ String _tooMany(TenantConfig tenant) =>
     'We already have a few requests from you this hour. ${tenant.name} will be in touch; you can also ask on WhatsApp.';
 
 /// Headers on every response. The pages run no script (JSON-LD is a data
-/// block), load styles inline and images from the media CDN, post forms only
-/// to themselves and are never framed.
+/// block), load styles inline, fonts from `/fonts/` and images from the media
+/// CDN, post forms only to themselves and are never framed.
 const securityHeaders = {
-  'content-security-policy': "default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline'; "
+  'content-security-policy': "default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline'; font-src 'self'; "
       "form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',

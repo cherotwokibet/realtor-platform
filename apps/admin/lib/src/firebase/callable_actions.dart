@@ -1,9 +1,11 @@
+import 'dart:convert';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:realtor_core/realtor_core.dart';
 
-/// Calls one callable Function by name with [data].
-typedef CallFunction = Future<void> Function(String name, Map<String, Object?> data);
+/// Calls one callable Function by name with [data]; completes with what it returns.
+typedef CallFunction = Future<Object?> Function(String name, Map<String, Object?> data);
 
 /// The admin's changes as Functions calls (D7). The signed-in user travels
 /// in the ID token, so [StaffUser] is not sent: the Functions read the claims.
@@ -11,7 +13,7 @@ class CallableAdminActions implements AdminActions {
   CallableAdminActions(this._call);
 
   factory CallableAdminActions.firebase(FirebaseFunctions functions) =>
-      CallableAdminActions((name, data) => functions.httpsCallable(name).call<Object?>(data));
+      CallableAdminActions((name, data) async => (await functions.httpsCallable(name).call<Object?>(data)).data);
 
   final CallFunction _call;
 
@@ -37,9 +39,29 @@ class CallableAdminActions implements AdminActions {
         if (role == StaffRole.agent) 'agentId': agentId,
       });
 
-  Future<void> _run(String name, Map<String, Object?> data) async {
+  @override
+  Future<DataRequestResult> dataRequest(StaffUser who, {required DataRequestKind kind, String? phone, String? email}) async {
+    final r = await _run('dataRequest', {
+      'kind': kind.name,
+      if (phone != null) 'phone': phone,
+      if (email != null) 'email': email.trim(),
+    }) as Map<Object?, Object?>;
+    if (kind == DataRequestKind.export) {
+      final data = r['data'] as Map<Object?, Object?>;
+      return DataRequestResult(
+        kind: kind,
+        leads: (data['leads'] as List).length,
+        viewings: (data['viewings'] as List).length,
+        exportJson: const JsonEncoder.withIndent('  ').convert(data),
+      );
+    }
+    final deleted = r['deleted'] as Map<Object?, Object?>;
+    return DataRequestResult(kind: kind, leads: deleted['leads'] as int, viewings: deleted['viewings'] as int);
+  }
+
+  Future<Object?> _run(String name, Map<String, Object?> data) async {
     try {
-      await _call(name, data);
+      return await _call(name, data);
     } on FirebaseException catch (e) {
       // FirebaseFunctionsException is one of these; its code is the callable
       // status. On the web the code can carry a "functions/" prefix and the

@@ -13,6 +13,7 @@ import { confirmListing, expireListings, moderateListing, submitListing } from '
 import { bookViewing } from './viewings';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
+import { dataRequest } from './privacy';
 import { bootstrapOwner, setStaffRole, type StaffAuth } from './staff';
 
 let db: Firestore;
@@ -410,3 +411,53 @@ describe('verification (P6-s02)', () => {
   });
 });
 
+describe('data requests (DPA 2019, P6-s04)', () => {
+  const slot = '2026-10-26T10:30:00+03:00';
+  const amina = { name: 'Amina', phone: '+254700000901' };
+
+  async function aminaAsked() {
+    await createLead(db, { listingId: 'listing-001', channel: 'form', contact: { phone: amina.phone, email: 'Amina@Example.com' }, message: 'Is it furnished?', consent: true }, now);
+    await createLead(db, { listingId: 'listing-002', channel: 'form', contact: { email: 'amina@example.com' }, consent: true }, now);
+    await bookViewing(db, { listingId: 'listing-003', slot, client: amina, consent: true }, now);
+    await createLead(db, { listingId: 'listing-001', channel: 'form', contact: { phone: '+254700000902' }, consent: true }, now); // someone else
+  }
+
+  test('export finds a person by phone or email, as plain JSON, and is audited without their details', async () => {
+    await aminaAsked();
+    const byPhone = await dataRequest(db, manager, { kind: 'export', phone: amina.phone }, now);
+    assert.equal(byPhone.kind, 'export');
+    if (byPhone.kind !== 'export') return;
+    assert.equal(byPhone.data.leads.length, 2); // her form lead and the viewing's lead
+    assert.equal(byPhone.data.viewings.length, 1);
+    assert.equal(typeof byPhone.data.leads[0].consentAt, 'string');
+    JSON.parse(JSON.stringify(byPhone.data));
+
+    const byEmail = await dataRequest(db, manager, { kind: 'export', email: 'amina@example.com' }, now);
+    if (byEmail.kind !== 'export') return assert.fail();
+    assert.equal(byEmail.data.leads.length, 2); // stored as typed and lowercased
+
+    const log = (await db.collection('audit').where('action', '==', 'privacy.export').get()).docs.map((d) => d.data());
+    assert.equal(log.length, 2);
+    assert.ok(!JSON.stringify(log).includes('700000901') && !JSON.stringify(log).toLowerCase().includes('amina'));
+  });
+
+  test('delete removes everything held about the person and nothing else', async () => {
+    await aminaAsked();
+    const before = (await db.collection('leads').count().get()).data().count;
+    const r = await dataRequest(db, manager, { kind: 'delete', phone: amina.phone }, now);
+    assert.deepEqual(r, { kind: 'delete', deleted: { leads: 2, viewings: 1 } });
+    const r2 = await dataRequest(db, manager, { kind: 'delete', email: 'amina@example.com' }, now);
+    assert.deepEqual(r2, { kind: 'delete', deleted: { leads: 1, viewings: 0 } });
+    assert.equal((await db.collection('leads').count().get()).data().count, before - 3);
+    assert.equal((await db.collection('leads').where('contact.phone', '==', '+254700000902').get()).size, 1);
+    const entry = (await db.collection('audit').where('action', '==', 'privacy.delete').get()).docs.map((d) => d.data().target.label);
+    assert.deepEqual(entry.sort(), ['1 leads, 0 viewings', '2 leads, 1 viewings']);
+  });
+
+  test('owners and managers only; needs a phone or an email', async () => {
+    await rejectsWith(dataRequest(db, wanjiku, { kind: 'export', phone: amina.phone }, now), 'permission-denied');
+    await rejectsWith(dataRequest(db, visitor, { kind: 'delete', phone: amina.phone }, now), 'permission-denied');
+    await rejectsWith(dataRequest(db, manager, { kind: 'delete' }, now), 'invalid-argument');
+    await rejectsWith(dataRequest(db, manager, { kind: 'export', phone: '0712345678' }, now), 'invalid-argument');
+  });
+});

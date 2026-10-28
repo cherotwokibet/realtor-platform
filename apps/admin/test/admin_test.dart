@@ -64,6 +64,14 @@ class SlowActions implements AdminActions {
     await gate.future;
     return inner.setStaffRole(who, email: email, role: role, agentId: agentId);
   }
+
+  @override
+  Future<DataRequestResult> dataRequest(StaffUser who,
+      {required DataRequestKind kind, String? phone, String? email}) async {
+    calls++;
+    await gate.future;
+    return inner.dataRequest(who, kind: kind, phone: phone, email: email);
+  }
 }
 
 late SlowActions slow;
@@ -313,16 +321,16 @@ void main() {
     expect(confirmable, isNotEmpty);
     expect(find.byType(PopupMenuButton<String>), findsNWidgets(confirmable.length));
 
-    final expired = mine.firstWhere((r) => r.status == 'expired');
-    await tapVisible(tester, find.byTooltip('Change ${expired.title}'));
+    final picked = confirmable.first;
+    await tapVisible(tester, find.byTooltip('Change ${picked.title}'));
     expect(find.text('Approve'), findsNothing);
     expect(find.text('Mark expired'), findsNothing);
     await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Confirm still available'));
     await tester.pumpAndSettle();
-    expect(find.text('${expired.title}: confirmed, verified for 30 days'), findsOneWidget);
+    expect(find.text('${picked.title}: confirmed, verified for 30 days'), findsOneWidget);
     final after = (await container.read(adminRepositoryProvider).listings(wanjiku, limit: 50))
         .rows
-        .firstWhere((r) => r.id == expired.id);
+        .firstWhere((r) => r.id == picked.id);
     expect(after.status, 'live');
     expect(after.expiresAt!.isAfter(DateTime.now().add(const Duration(days: 29))), isTrue);
   });
@@ -423,6 +431,52 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Team'), findsNothing);
     container.read(routerProvider).go('/team');
+    await tester.pumpAndSettle();
+    expect(location(), '/leads');
+  });
+
+  testWidgets('a manager exports what is held about a phone, then deletes it; the audit log keeps no number',
+      (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Privacy'));
+    await tester.pumpAndSettle();
+    expect(location(), '/privacy');
+    final export = find.widgetWithText(FilledButton, 'Export');
+    expect(tester.widget<FilledButton>(export).onPressed, isNull, reason: 'nothing typed yet');
+    await tester.enterText(find.widgetWithText(TextField, 'Phone'), '0712');
+    await tester.pump();
+    expect(find.text('Enter a Kenyan mobile number'), findsOneWidget);
+    expect(tester.widget<FilledButton>(export).onPressed, isNull);
+
+    // Demo leads carry phones +254700000200 to +254700000299.
+    await tester.enterText(find.widgetWithText(TextField, 'Phone'), '0700 000 201');
+    await tester.pump();
+    await tester.tap(export);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Found 1 enquiries and 0 viewing requests'), findsOneWidget);
+    expect(find.textContaining('"phone": "+254700000201"'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Delete…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete everything held about +254700000201?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Deleted 1 enquiries and 0 viewing requests.'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Export'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing is held for +254700000201.'), findsOneWidget);
+
+    await tester.tap(find.text('Audit log'));
+    await tester.pumpAndSettle();
+    expect(find.text('Privacy delete'), findsOneWidget);
+    expect(find.textContaining('700000201'), findsNothing);
+  });
+
+  testWidgets('agents have no privacy page', (tester) async {
+    await open(tester, as: wanjiku);
+    expect(find.text('Privacy'), findsNothing);
+    container.read(routerProvider).go('/privacy');
     await tester.pumpAndSettle();
     expect(location(), '/leads');
   });

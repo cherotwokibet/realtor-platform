@@ -5,6 +5,7 @@ import 'package:jaspr/server.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_tokens/realtor_tokens.dart';
 
+import 'fonts.dart';
 import 'listing.dart';
 
 /// Layout only; every colour, font and radius comes from the tenant's CSS
@@ -76,7 +77,7 @@ Component sharePage({
         meta(attributes: {'property': k}, content: v),
       const meta(name: 'twitter:card', content: 'summary_large_image'),
       RawText(jsonLdScript(jsonLd)),
-      RawText('<style>${Tokens(tenant).toCss()}$pageCss</style>'),
+      RawText('<style>${fontFaceCss(tenant)}\n${Tokens(tenant).toCss()}$pageCss</style>'),
     ],
     body: Component.fragment([
       header([
