@@ -23,6 +23,7 @@ Future<void> main() async {
   final port = int.parse(Platform.environment['PORT'] ?? '8080');
   final env = Platform.environment;
   final projectId = env['FIRESTORE_PROJECT'] ?? tenant.firebaseProjects[FirebaseEnv.prod]!;
+  mediaProject = projectId;
   final source = FirestoreListingSource(projectId: projectId, emulatorHost: env['FIRESTORE_EMULATOR_HOST']);
   // On Cloud Run (K_SERVICE set) the pages call the Functions' twins with
   // the service account's ID token (D16); locally, the plain callables.
