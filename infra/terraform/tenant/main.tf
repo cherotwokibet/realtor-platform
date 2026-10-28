@@ -84,3 +84,11 @@ output "share_pages_url" {
 output "admin_url" {
   value = module.env.admin_url
 }
+
+output "share_pages_repo" {
+  value = module.env.share_pages_repo
+}
+
+output "share_url" {
+  value = module.env.share_url
+}
