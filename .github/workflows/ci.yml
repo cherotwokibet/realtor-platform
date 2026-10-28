@@ -50,7 +50,7 @@ jobs:
           else out app "$shared|^(packages/ui|apps/realtor_app)/"; out admin "$shared|^(packages/ui|apps/admin)/"; fi
           out infra '^infra/|^tenants/|^(firestore|storage)\.rules$'
           out share '^(packages/core|packages/tokens|tenants|apps/share_pages)/|^\.dockerignore$'
-          out emulator '^(functions|apps/share_pages|packages/core)/|^(firestore|storage)\.rules$|^firestore\.indexes\.json$|^firebase\.json$'
+          out emulator '^(functions|apps/share_pages|packages/core|tools/load)/|^(firestore|storage)\.rules$|^firestore\.indexes\.json$|^firebase\.json$'
           out search '^functions/(src/search|src/seed|src/model|package)'
           cat "$GITHUB_OUTPUT"
 
@@ -348,6 +348,11 @@ jobs:
       - run: flutter pub get
       - name: Seed the emulator, read it back, and serve share pages from it
         run: npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed && cd apps/share_pages && dart test -t emulator"
+      - uses: grafana/setup-k6-action@v1
+      - name: Load test scripts parse, and share pages pass the k6 smoke run
+        run: |
+          k6 inspect tools/load/search.js > /dev/null
+          npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed && tools/load/smoke-share-pages.sh"
       - name: Security rules tests
         run: npx --yes firebase-tools@15 emulators:exec --only firestore,storage --project demo-realtor "npm --prefix functions run test:rules"
       - name: Callable API + media pipeline tests
