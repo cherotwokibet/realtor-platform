@@ -24,7 +24,13 @@ Future<void> main() async {
   final env = Platform.environment;
   final projectId = env['FIRESTORE_PROJECT'] ?? tenant.firebaseProjects[FirebaseEnv.prod]!;
   final source = FirestoreListingSource(projectId: projectId, emulatorHost: env['FIRESTORE_EMULATOR_HOST']);
-  final leads = CallableLeadApi(env['FUNCTIONS_BASE'] != null ? Uri.parse(env['FUNCTIONS_BASE']!) : functionsBase(projectId));
+  // On Cloud Run (K_SERVICE set) the pages call the Functions' twins with
+  // the service account's ID token (D16); locally, the plain callables.
+  final local = env['FUNCTIONS_BASE'] != null;
+  final leads = CallableLeadApi(
+    local ? Uri.parse(env['FUNCTIONS_BASE']!) : functionsBase(projectId),
+    idToken: !local && env['K_SERVICE'] != null ? MetadataIdTokens().call : null,
+  );
   final handler = shareHandler(tenant, source, leads: leads, fontsDir: env['FONTS_DIR'], brandDir: env['BRAND_DIR'], indexable: env['NOINDEX'] != '1');
   final server = await io.serve(handler, InternetAddress.anyIPv4, port);
   stdout.writeln('share pages for ${tenant.id} on :${server.port}');

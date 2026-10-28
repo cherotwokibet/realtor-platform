@@ -243,6 +243,49 @@ void main() {
       });
     });
 
+    test('on Cloud Run it calls the twins with an ID token for each URL', () async {
+      final seen = <http.Request>[];
+      final audiences = <Uri>[];
+      final api = CallableLeadApi(
+        functionsBase('rte-realtor-dev'),
+        idToken: (aud) async {
+          audiences.add(aud);
+          return 'tok';
+        },
+        client: MockClient((req) async {
+          seen.add(req);
+          return http.Response('{"result":{}}', 200);
+        }),
+      );
+      await api.createLead(listingId: 'listing-001', phone: '+254712345678');
+      await api.logTap(listingId: 'listing-001', channel: 'call');
+      await api.bookViewing(listingId: 'listing-001', slot: '2026-10-27T10:30:00+03:00', name: 'Amina', phone: '+254712345678');
+      expect([for (final r in seen) r.url.path], ['/shareCreateLead', '/shareLogContactTap', '/shareBookViewing']);
+      expect(audiences, [for (final r in seen) r.url]);
+      expect(seen.first.headers['authorization'], 'Bearer tok');
+      expect(jsonDecode(seen.first.body)['data']['consent'], true);
+    });
+
+    test('metadata ID tokens are fetched per audience and reused for 50 minutes', () async {
+      var now = DateTime(2026, 10, 28, 12);
+      final asked = <Uri>[];
+      final tokens = MetadataIdTokens(
+        now: () => now,
+        client: MockClient((req) async {
+          asked.add(req.url);
+          expect(req.headers['Metadata-Flavor'], 'Google');
+          return http.Response('t${asked.length}\n', 200);
+        }),
+      );
+      final a = Uri.parse('https://europe-west1-p.cloudfunctions.net/shareCreateLead');
+      expect(await tokens(a), 't1');
+      expect(await tokens(a), 't1');
+      expect(asked.single.queryParameters['audience'], '$a');
+      expect(asked.single.host, 'metadata.google.internal');
+      now = now.add(const Duration(minutes: 51));
+      expect(await tokens(a), 't2');
+    });
+
     test('turns callable errors into LeadApiException', () async {
       final api = CallableLeadApi(Uri.parse('http://127.0.0.1:5001/demo-realtor/europe-west1/'), client: MockClient((req) async {
         expect(req.url.path, '/demo-realtor/europe-west1/createLead');

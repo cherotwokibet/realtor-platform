@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing, updateViewingStatus, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, setStaffRole, dataRequest.
+ * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), updateViewingStatus, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, setStaffRole, dataRequest.
  * Scheduled, nightly: purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -32,6 +32,7 @@ import * as staff from './api/staff';
 import * as viewings from './api/viewings';
 import { dataRequest as runDataRequest } from './api/privacy';
 import { purgeExpired } from './api/retention';
+import { callableTwin, enforced, logAppCheck, type PublicCallable, sharePagesInvoker } from './api/appcheck';
 import { updateAgentResponseTimes } from './api/response';
 import { REGION, verificationExpiry } from './listing-rules';
 
@@ -45,9 +46,30 @@ export const health = onRequest((_req, res) => {
 
 // Callable API (P2-s03). Inputs are zod-validated in ./api; the clients
 // never write these collections directly (see firestore.rules).
-export const createLead = onCall((req) => leads.createLead(getFirestore(), req.data));
-export const logContactTap = onCall((req) => leads.logContactTap(getFirestore(), req.data));
-export const bookViewing = onCall((req) => viewings.bookViewing(getFirestore(), req.data));
+// The three public ones are App Check guarded (D16): watched, and enforced
+// per Function once ENFORCE_APP_CHECK lists it.
+const publicCalls: Record<PublicCallable, (data: unknown) => Promise<unknown>> = {
+  createLead: (data) => leads.createLead(getFirestore(), data),
+  logContactTap: (data) => leads.logContactTap(getFirestore(), data),
+  bookViewing: (data) => viewings.bookViewing(getFirestore(), data),
+};
+const enforce = enforced(process.env);
+const publicCallable = (fn: PublicCallable) =>
+  onCall({ enforceAppCheck: enforce.has(fn) }, (req) => {
+    logAppCheck(fn, req.app !== undefined);
+    return publicCalls[fn](req.data);
+  });
+export const createLead = publicCallable('createLead');
+export const logContactTap = publicCallable('logContactTap');
+export const bookViewing = publicCallable('bookViewing');
+
+// Their twins for the share pages' server, which cannot attest: only the
+// share-pages service account may invoke them (Cloud Run IAM).
+const twin = (fn: PublicCallable) =>
+  onRequest({ invoker: sharePagesInvoker(process.env.GCLOUD_PROJECT ?? 'local') }, callableTwin(publicCalls[fn]));
+export const shareCreateLead = twin('createLead');
+export const shareLogContactTap = twin('logContactTap');
+export const shareBookViewing = twin('bookViewing');
 export const updateViewingStatus = onCall((req) => viewings.updateViewingStatus(getFirestore(), callerFrom(req.auth), req.data));
 export const updateLeadStage = onCall((req) => leads.updateLeadStage(getFirestore(), callerFrom(req.auth), req.data));
 export const submitListing = onCall((req) => listings.submitListing(getFirestore(), callerFrom(req.auth), req.data));
