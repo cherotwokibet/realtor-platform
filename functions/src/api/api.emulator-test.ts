@@ -12,6 +12,7 @@ import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from 
 import { moderateListing, submitListing } from './listings';
 import { bookViewing } from './viewings';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
+import { purgeExpired } from './retention';
 import { bootstrapOwner, setStaffRole, type StaffAuth } from './staff';
 
 let db: Firestore;
@@ -314,5 +315,34 @@ describe('rate limits (P6-s05)', () => {
     for (let i = 0; i < 2; i++) await db.runTransaction(async (tx) => (await checkLimits(tx, db, limits, now))());
     await rejectsWith(db.runTransaction(async (tx) => (await checkLimits(tx, db, limits, now))()), 'resource-exhausted');
     await logContactTap(db, { listingId: 'listing-001', channel: 'whatsapp' }, now);
+  });
+});
+
+describe('retention (D12)', () => {
+  const day = 86_400_000;
+  const slot = '2026-10-26T10:30:00+03:00';
+
+  test('deletes leads and viewings once retention has passed, and not a day before', async () => {
+    const seededLeads = (await db.collection('leads').count().get()).data().count;
+    const { viewingId, leadId } = await bookViewing(db, { listingId: 'listing-001', slot, client: { name: 'Amina', phone: '+254700000401' }, consent: true }, now);
+
+    // A day before the lead's retainUntil nothing new goes.
+    const retainUntil = (await db.collection('leads').doc(leadId).get()).get('retainUntil').toDate() as Date;
+    const early = await purgeExpired(db, new Date(retainUntil.getTime() - day), 2);
+    assert.equal((await db.collection('leads').doc(leadId).get()).exists, true);
+    assert.equal(early.viewings, 0);
+
+    // Past the viewing slot's retention both are gone, in pages smaller than the set.
+    const late = await purgeExpired(db, new Date(new Date(slot).getTime() + LEAD_RETENTION_DAYS * day), 2);
+    assert.equal((await db.collection('leads').doc(leadId).get()).exists, false);
+    assert.equal((await db.collection('viewings').doc(viewingId).get()).exists, false);
+    assert.equal(late.viewings, 1);
+    // Seeded leads (retained 365 days from the seed date) went too, so the count is what was there.
+    assert.equal(early.leads + late.leads, seededLeads + 1);
+    assert.equal((await db.collection('leads').count().get()).data().count, 0);
+  });
+
+  test('does nothing while everything is within retention', async () => {
+    assert.deepEqual(await purgeExpired(db, now), { leads: 0, viewings: 0 });
   });
 });
