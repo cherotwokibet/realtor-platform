@@ -22,3 +22,11 @@ output "admin_url" {
 output "share_pages_url" {
   value = one(google_cloud_run_v2_service.share_pages[*].uri)
 }
+
+output "share_pages_repo" {
+  value = "${local.region}-docker.pkg.dev/${google_project.this.project_id}/${google_artifact_registry_repository.share_pages.repository_id}"
+}
+
+output "share_url" {
+  value = google_firebase_hosting_site.share.default_url
+}

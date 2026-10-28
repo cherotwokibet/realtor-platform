@@ -46,6 +46,6 @@ TENANT_FILE=../../tenants/demo-homes.json PORT=8080 ./build/server
 docker build -f apps/share_pages/Dockerfile --build-arg TENANT=<id> -t share-pages .
 ```
 
-Terraform (`infra/terraform/modules/firebase-env`) creates a `share-pages` service account with `roles/datastore.viewer` only, and, once `share_pages_image` is set, a Cloud Run service (scale 0 to 3, 1 CPU, 256 MiB, `/healthz` startup probe, `FIRESTORE_PROJECT` set to the environment's project) that `allUsers` may invoke. Pushing the image to Artifact Registry, and the Hosting rewrite from the share domain, happen at deploy time, which Boniface runs.
+Terraform (`infra/terraform/modules/firebase-env`) creates a `share-pages` service account with `roles/datastore.viewer` only, and, once `share_pages_image` is set, a Cloud Run service (scale 0 to 3, 1 CPU, 256 MiB, `/healthz` startup probe, `FIRESTORE_PROJECT` set to the environment's project) that `allUsers` may invoke. It also makes the `share-pages` Artifact Registry repo and a `<project-id>-share` Hosting site that rewrites every path to the service (`firebase.json` target `share`). The deploy steps, which Boniface runs, are in `infra/terraform/README.md` under *Share pages*. A custom share domain needs DNS and comes later.
 
 The home page's "newest first" query needs the `(status, updatedAt desc)` index in `firestore.indexes.json`. Every other query is equality-only, sorted in Dart.

@@ -138,6 +138,23 @@
           ]
         }
       ]
+    },
+    {
+      "target": "share",
+      "public": "apps/share_pages/hosting",
+      "ignore": [
+        "firebase.json",
+        "**/.*"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "run": {
+            "serviceId": "share-pages",
+            "region": "europe-west1"
+          }
+        }
+      ]
     }
   ],
   "functions": [
