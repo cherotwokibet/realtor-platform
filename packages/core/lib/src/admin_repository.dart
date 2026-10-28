@@ -59,12 +59,16 @@ class StaffListingRow {
     this.leads = 0,
     this.calls = 0,
     this.whatsapps = 0,
+    this.expiresAt,
   });
   final String id, slug, title, area, status, agentId, agentName;
   final int priceKES, leads, calls, whatsapps;
   final DateTime updatedAt;
 
-  StaffListingRow withStatus(String status, DateTime updatedAt) => StaffListingRow(
+  /// When the Verified badge runs out unless the agent confirms again (P6-s02); null when never verified.
+  final DateTime? expiresAt;
+
+  StaffListingRow withStatus(String status, DateTime updatedAt, {DateTime? expiresAt}) => StaffListingRow(
         id: id,
         slug: slug,
         title: title,
@@ -77,6 +81,7 @@ class StaffListingRow {
         leads: leads,
         calls: calls,
         whatsapps: whatsapps,
+        expiresAt: expiresAt ?? this.expiresAt,
       );
 }
 

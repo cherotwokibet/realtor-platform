@@ -64,6 +64,12 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         leads: (i * 3) % 7,
         calls: (i * 5) % 11,
         whatsapps: (i * 7) % 13,
+        // Live ones were verified some days ago; expired ones ran out.
+        expiresAt: switch (listingStatuses[(i * 5 + 2) % listingStatuses.length]) {
+          'live' => _now.add(Duration(days: 30 - i)),
+          'expired' => _now.subtract(Duration(days: i + 1)),
+          _ => null,
+        },
       ));
     }
     for (var i = 0; i < 40; i++) {
@@ -168,6 +174,22 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     final at = _clock();
     _listings[i] = listing.withStatus(to, at);
     _log(who, 'listing.$action', listing.title, listing.status, to, reason: reason?.trim(), at: at);
+  }
+
+  @override
+  Future<DateTime> confirmListing(StaffUser who, {required String listingId}) async {
+    final i = _listings.indexWhere((l) => l.id == listingId);
+    if (i < 0) throw AdminActionException('not-found', 'no such listing');
+    final listing = _listings[i];
+    if (!who.isManager && listing.agentId != who.agentId) throw AdminActionException('permission-denied', 'not your listing');
+    if (listing.status != 'live' && listing.status != 'expired') {
+      throw AdminActionException('failed-precondition', 'a ${listing.status} listing cannot be confirmed');
+    }
+    final at = _clock();
+    final expiresAt = at.add(const Duration(days: 30));
+    _listings[i] = listing.withStatus('live', at, expiresAt: expiresAt);
+    _log(who, 'listing.confirm', listing.title, listing.status, 'live', at: at);
+    return expiresAt;
   }
 
   /// How many times the team was read (tests check screens don't refetch needlessly).

@@ -11,6 +11,7 @@ export interface AuditEvent {
     | 'listing.expire'
     | 'listing.let'
     | 'listing.sold'
+    | 'listing.confirm'
     | 'staff.role';
   /** label: what the admin shows for it (a listing title, a staff email), kept as it was then. */
   target: { collection: 'leads' | 'listings' | 'staff'; id: string; label?: string };

@@ -13,7 +13,10 @@ concurrency:
 # Actions minutes are limited, so each job runs only when files it checks
 # change (pull requests: against the base; main: against the previous push).
 # Editing this file runs everything. The Android and web builds, the slowest
-# jobs, also wait until a pull request is out of draft.
+# jobs (most of a full run), run on pull requests only: not in draft, not on
+# main pushes (the pull request already built the same code), and not for
+# changes in packages/core, tokens or fonts alone, which `dart analyze
+# packages apps` already compiles every app against.
 jobs:
   changes:
     name: What changed
@@ -46,8 +49,9 @@ jobs:
           shared='^(packages/core|packages/tokens|tenants|brand|fonts|tools/tenant-cli)/|^pubspec\.'
           out functions '^functions/|^(firestore|storage)\.rules$'
           out dart "$shared|^(packages|apps)/|^analysis_options\.yaml$|^functions/src/model/transitions\.json$"
-          if [ "$DRAFT" = true ]; then echo "app=false" >> "$GITHUB_OUTPUT"; echo "admin=false" >> "$GITHUB_OUTPUT"
-          else out app "$shared|^(packages/ui|apps/realtor_app)/"; out admin "$shared|^(packages/ui|apps/admin)/"; fi
+          builds='^(tenants|brand|tools/tenant-cli)/|^pubspec\.'
+          if [ "$DRAFT" = true ] || [ "$GITHUB_EVENT_NAME" = push ]; then echo "app=false" >> "$GITHUB_OUTPUT"; echo "admin=false" >> "$GITHUB_OUTPUT"
+          else out app "$builds|^(packages/ui|apps/realtor_app)/"; out admin "$builds|^(packages/ui|apps/admin)/"; fi
           out infra '^infra/|^tenants/|^(firestore|storage)\.rules$'
           out share '^(packages/core|packages/tokens|tenants|apps/share_pages)/|^\.dockerignore$'
           out emulator '^(functions|apps/share_pages|packages/core|tools/load)/|^(firestore|storage)\.rules$|^firestore\.indexes\.json$|^firebase\.json$'

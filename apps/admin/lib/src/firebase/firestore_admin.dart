@@ -61,6 +61,7 @@ class FirestoreAdminRepository implements AdminRepository {
             leads: (_map(d, 'stats')['leads'] as num?)?.toInt() ?? 0,
             calls: (_map(d, 'stats')['calls'] as num?)?.toInt() ?? 0,
             whatsapps: (_map(d, 'stats')['whatsapps'] as num?)?.toInt() ?? 0,
+            expiresAt: d.data()['expiresAt'] == null ? null : _date(d.data()['expiresAt']),
           ),
       ];
     });

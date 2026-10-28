@@ -93,6 +93,7 @@ String moderationLabel(String action, String status) => switch ((action, status)
       ('expire', _) => 'Mark expired',
       ('let', _) => 'Mark let',
       ('sold', _) => 'Mark sold',
+      ('confirm', _) => 'Confirm still available',
       _ => label(action),
     };
 
@@ -236,12 +237,15 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
       if (reason == null || !mounted) return;
     }
     if (_saving.containsKey(r.id)) return;
-    final to = moderationTargets[action]!;
+    final to = action == 'confirm' ? 'live' : moderationTargets[action]!;
     setState(() => _saving[r.id] = to);
+    final actions = ref.read(adminActionsProvider);
     final ok = await _act(
       context,
-      () => ref.read(adminActionsProvider).moderateListing(who, listingId: r.id, action: action, reason: reason),
-      '${r.title}: ${label(to)}',
+      () => action == 'confirm'
+          ? actions.confirmListing(who, listingId: r.id)
+          : actions.moderateListing(who, listingId: r.id, action: action, reason: reason),
+      action == 'confirm' ? '${r.title}: confirmed, verified for 30 days' : '${r.title}: ${label(to)}',
     );
     if (!mounted) return;
     setState(() {
@@ -286,8 +290,8 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
               return _MenuCell(
                 text: label(status),
                 tooltip: 'Change ${r.title}',
-                // Only owners and managers moderate; the Functions refuse anyone else.
-                options: who.isManager ? moderationsFor(status) : const [],
+                // Managers moderate; agents confirm their own. The Functions refuse anything else.
+                options: listingActionsFor(who, status: status, agentId: r.agentId),
                 labelOf: (a) => moderationLabel(a, status),
                 saving: _saving.containsKey(r.id),
                 onSelected: (a) => _moderate(who, r, a),
@@ -298,6 +302,12 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
           TableColumn('Calls', (r) => Text('${r.calls}'), numeric: true),
           TableColumn('WhatsApp', (r) => Text('${r.whatsapps}'), numeric: true),
           if (who.isManager) TableColumn('Agent', (r) => Text(r.agentName)),
+          TableColumn('Verified until', (r) {
+            final e = r.expiresAt;
+            if (e == null || (r.status != 'live' && r.status != 'expired')) return const Text('—');
+            final lapsed = e.isBefore(DateTime.now());
+            return Text(shortDateTime(e), style: lapsed ? TextStyle(color: Theme.of(context).colorScheme.error) : null);
+          }),
           TableColumn('Updated', (r) => Text(shortDateTime(r.updatedAt))),
         ],
       ),

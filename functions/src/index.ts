@@ -2,14 +2,13 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing, setStaffRole.
- * Scheduled: purgeExpiredLeads (D12 retention, nightly).
+ * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing, confirmListing, setStaffRole.
+ * Scheduled: purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), nightly.
  *
  * Planned (see tracker):
  *   P2  onMediaUpload   -> ffmpeg HLS for video (photos done: onListingPhoto)
  *   P4  sendPush        -> FCM HTTP v1 (replaces the legacy server key)
  *   P6  mpesaStkPush / mpesaCallback -> Daraja
- *   P6  verifyListing / expireListings (scheduled, 30-day re-verification)
  */
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -50,6 +49,7 @@ export const bookViewing = onCall((req) => viewings.bookViewing(getFirestore(), 
 export const updateLeadStage = onCall((req) => leads.updateLeadStage(getFirestore(), callerFrom(req.auth), req.data));
 export const submitListing = onCall((req) => listings.submitListing(getFirestore(), callerFrom(req.auth), req.data));
 export const moderateListing = onCall((req) => listings.moderateListing(getFirestore(), callerFrom(req.auth), req.data));
+export const confirmListing = onCall((req) => listings.confirmListing(getFirestore(), callerFrom(req.auth), req.data));
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 
 // Retention (D12): every night, delete leads and viewings past their date.
@@ -57,6 +57,12 @@ export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), g
 export const purgeExpiredLeads = onSchedule({ schedule: '15 3 * * *', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
   const r = await purgeExpired(getFirestore(), new Date());
   console.log(`retention: deleted ${r.leads} leads, ${r.viewings} viewings`);
+});
+
+// Verification (P6-s02): every night, live listings not re-confirmed within
+// 30 days lose the Verified badge and leave search (status expired).
+export const expireListings = onSchedule({ schedule: '45 2 * * *', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
+  console.log(`verification: expired ${await listings.expireListings(getFirestore(), new Date())} listings`);
 });
 
 // Media pipeline (D6): raw listing photos -> WebP variants + blurhash.

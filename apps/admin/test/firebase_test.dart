@@ -188,6 +188,18 @@ void main() {
       expect(calls[5].$2, {'email': 'c@example.com', 'role': null});
     });
 
+    test('confirmListing sends the id and reads the new expiry', () async {
+      final calls = <(String, Map<String, Object?>)>[];
+      final actions = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return {'expiresAt': '2026-11-27T09:00:00.000Z'};
+      });
+      final until = await actions.confirmListing(agent, listingId: 'l2');
+      expect(calls.single.$1, 'confirmListing');
+      expect(calls.single.$2, {'listingId': 'l2'});
+      expect(until, DateTime.utc(2026, 11, 27, 9));
+    });
+
     test('a refusal becomes an AdminActionException with the callable code', () async {
       final actions = CallableAdminActions(
         (name, data) async => throw FirebaseException(

@@ -52,6 +52,13 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<DateTime> confirmListing(StaffUser who, {required String listingId}) async {
+    calls++;
+    await gate.future;
+    return inner.confirmListing(who, listingId: listingId);
+  }
+
+  @override
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) async {
     calls++;
     await gate.future;
@@ -107,6 +114,20 @@ void main() {
 
   group('DemoAdminRepository', () {
     final repo = DemoAdminRepository();
+
+    test('confirming: own or manager, live or expired only', () async {
+      final otieno = demoStaff.firstWhere((s) => s.agentId == 'agent-otieno');
+      final all = (await repo.listings(manager, limit: 50)).rows;
+      final wanjikus = all.firstWhere((r) => r.agentId == 'agent-wanjiku' && r.status == 'live');
+      await expectLater(repo.confirmListing(otieno, listingId: wanjikus.id),
+          throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'permission-denied')));
+      final pending = all.firstWhere((r) => r.status == 'pending');
+      await expectLater(repo.confirmListing(manager, listingId: pending.id),
+          throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'failed-precondition')));
+      expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-otieno'), ['confirm']);
+      expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-wanjiku'), isEmpty);
+      expect(listingActionsFor(manager, status: 'live', agentId: 'x'), [...moderationsFor('live'), 'confirm']);
+    });
 
     test('agents get only their own leads and listings, and no audit log', () async {
       final leads = await repo.leads(wanjiku, limit: 100);
@@ -282,11 +303,28 @@ void main() {
     expect(slow.calls, 1);
   });
 
-  testWidgets('agents get no moderation menu on listings', (tester) async {
+  testWidgets('agents get no moderation, only "Confirm still available" on their live or expired listings',
+      (tester) async {
     await open(tester, as: wanjiku);
     await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
-    expect(find.byType(PopupMenuButton<String>), findsNothing);
+    final mine = (await container.read(adminRepositoryProvider).listings(wanjiku, limit: 50)).rows;
+    final confirmable = mine.where((r) => r.status == 'live' || r.status == 'expired').toList();
+    expect(confirmable, isNotEmpty);
+    expect(find.byType(PopupMenuButton<String>), findsNWidgets(confirmable.length));
+
+    final expired = mine.firstWhere((r) => r.status == 'expired');
+    await tapVisible(tester, find.byTooltip('Change ${expired.title}'));
+    expect(find.text('Approve'), findsNothing);
+    expect(find.text('Mark expired'), findsNothing);
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Confirm still available'));
+    await tester.pumpAndSettle();
+    expect(find.text('${expired.title}: confirmed, verified for 30 days'), findsOneWidget);
+    final after = (await container.read(adminRepositoryProvider).listings(wanjiku, limit: 50))
+        .rows
+        .firstWhere((r) => r.id == expired.id);
+    expect(after.status, 'live');
+    expect(after.expiresAt!.isAfter(DateTime.now().add(const Duration(days: 29))), isTrue);
   });
 
   testWidgets('a manager rejects a pending listing with a reason, and the audit log shows it', (tester) async {

@@ -131,3 +131,50 @@ export async function moderateListing(db: Firestore, caller: Caller, input: unkn
   });
   return { status: to };
 }
+
+export const confirmListingInput = z.object({ listingId: docId });
+
+/**
+ * P6-s02: the listing's agent (or a manager) confirms it is still available
+ * and its photos are current. A live or expired listing becomes live again,
+ * verified for another VERIFICATION_DAYS.
+ */
+export async function confirmListing(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ expiresAt: string }> {
+  requireStaff(caller);
+  const req = parseInput(confirmListingInput, input);
+  const ref = db.collection('listings').doc(req.listingId);
+  const expiresAt = verificationExpiry(now);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'no such listing');
+    if (!isManager(caller) && snap.get('agentId') !== caller.agentId) throw new HttpsError('permission-denied', 'not your listing');
+    const from = snap.get('status') as ListingStatus;
+    if (from !== 'live' && from !== 'expired') throw new HttpsError('failed-precondition', `a ${from} listing cannot be confirmed`);
+    tx.update(ref, { status: 'live', verifiedAt: now, expiresAt, updatedAt: now });
+    audit(tx, db, caller, { action: 'listing.confirm', target: { collection: 'listings', id: ref.id, label: snap.get('title') as string | undefined }, from, to: 'live' }, now);
+  });
+  return { expiresAt: expiresAt.toISOString() };
+}
+
+/** The nightly job's name in the audit log. */
+const NIGHTLY: Caller = { uid: null, role: null, agentId: null, name: 'Nightly expiry' };
+
+/**
+ * P6-s02: live listings whose verification has run out (expiresAt passed)
+ * become expired, in pages; each move is audited. Returns how many moved.
+ */
+export async function expireListings(db: Firestore, now = new Date(), page = 200): Promise<number> {
+  let moved = 0;
+  for (;;) {
+    const snap = await db.collection('listings').where('status', '==', 'live').where('expiresAt', '<=', now).limit(page).get();
+    if (snap.empty) return moved;
+    const batch = db.batch();
+    for (const d of snap.docs) {
+      batch.update(d.ref, { status: 'expired', updatedAt: now });
+      audit(batch, db, NIGHTLY, { action: 'listing.expire', target: { collection: 'listings', id: d.id, label: d.get('title') as string | undefined }, from: 'live', to: 'expired' }, now);
+    }
+    await batch.commit();
+    moved += snap.size;
+  }
+}
+

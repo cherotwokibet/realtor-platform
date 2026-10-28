@@ -9,7 +9,7 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
-import { moderateListing, submitListing } from './listings';
+import { confirmListing, expireListings, moderateListing, submitListing } from './listings';
 import { bookViewing } from './viewings';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
@@ -373,3 +373,40 @@ describe('retention (D12)', () => {
     assert.deepEqual(await purgeExpired(db, now), { leads: 0, viewings: 0 });
   });
 });
+
+describe('verification (P6-s02)', () => {
+  const day = 86_400_000;
+
+  test('a live listing not confirmed for 30 days expires overnight; its agent confirms it back to live', async () => {
+    const { listingId } = await submitListing(db, wanjiku, newListing, now);
+    await moderateListing(db, manager, { listingId, action: 'approve' }, now);
+    const ref = db.collection('listings').doc(listingId);
+
+    await expireListings(db, new Date(now.getTime() + 29 * day)); // seeded listings may go; this one is in date
+    assert.equal((await ref.get()).get('status'), 'live');
+    const later = new Date(now.getTime() + 31 * day);
+    const moved = await expireListings(db, later, 2);
+    assert.ok(moved >= 1);
+    assert.equal((await ref.get()).get('status'), 'expired');
+    const entry = (await db.collection('audit').where('action', '==', 'listing.expire').get()).docs.map((d) => d.data()).find((e) => e.target.id === listingId)!;
+    assert.deepEqual([entry.actor.name, entry.actor.role, entry.from, entry.to], ['Nightly expiry', null, 'live', 'expired']);
+
+    await rejectsWith(confirmListing(db, otieno, { listingId }, later), 'permission-denied');
+    const r = await confirmListing(db, wanjiku, { listingId }, later);
+    const l = (await ref.get()).data()!;
+    assert.equal(l.status, 'live');
+    assert.equal(l.verifiedAt.toDate().getTime(), later.getTime());
+    assert.equal(l.expiresAt.toDate().toISOString(), r.expiresAt);
+    assert.equal(new Date(r.expiresAt).getTime() - later.getTime(), 30 * day);
+    await expireListings(db, new Date(later.getTime() + day));
+    assert.equal((await ref.get()).get('status'), 'live', 'confirmed again: in date for 30 more days');
+  });
+
+  test('only live or expired listings can be confirmed; visitors cannot', async () => {
+    const { listingId } = await submitListing(db, wanjiku, newListing, now); // pending
+    await rejectsWith(confirmListing(db, wanjiku, { listingId }, now), 'failed-precondition');
+    await rejectsWith(confirmListing(db, visitor, { listingId }, now), 'permission-denied');
+    await rejectsWith(confirmListing(db, manager, { listingId: 'no-such' }, now), 'not-found');
+  });
+});
+
