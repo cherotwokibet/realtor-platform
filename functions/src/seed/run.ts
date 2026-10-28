@@ -2,7 +2,8 @@
  * Loads the demo seed, then checks it reads back.
  *   Emulator: firebase emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed"
  *   Dev project: SEED_PROJECT=<project-id-ending-in-dev> npm --prefix functions run seed   (Application Default Credentials)
- *   SEED_TENANT=<id> picks the tenant file for config/tenant (default demo-homes).
+ *   SEED_TENANT=<id> picks the tenant file for config/tenant on the emulator (default demo-homes);
+ *   real projects get config/tenant from Terraform.
  * Stage and prod are refused (see target.ts).
  */
 import { initializeApp } from 'firebase-admin/app';
@@ -28,10 +29,11 @@ async function main(): Promise<void> {
   const batch = db.batch();
   for (const d of docs) batch.set(db.collection(d.collection).doc(d.id), d.data);
   // D17: the tenant's switches, read by Functions (lib/seed -> repo root).
-  const tenant = tenantConfigDoc(join(__dirname, '..', '..', '..'), seedTenantId(process.env));
-  batch.set(db.collection('config').doc('tenant'), tenant);
+  // Emulator only: on real projects Terraform owns config/tenant.
+  const tenant = target.emulator ? tenantConfigDoc(join(__dirname, '..', '..', '..'), seedTenantId(process.env)) : null;
+  if (tenant) batch.set(db.collection('config').doc('tenant'), tenant);
   await batch.commit();
-  console.log(`✓ config/tenant: ${tenant.id}`);
+  if (tenant) console.log(`✓ config/tenant: ${tenant.id}`);
 
   const expected = new Map<string, number>();
   for (const d of docs) expected.set(d.collection, (expected.get(d.collection) ?? 0) + 1);
