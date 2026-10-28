@@ -66,11 +66,23 @@ service cloud.firestore {
     }
 
     match /savedSearches/{id} {
+      // The shape functions/src/model/schema.ts expects, with bounded sizes:
+      // the saved search sweep reads these, so junk must not get in.
+      function validFilters(f) {
+        return f is map
+          && f.keys().hasOnly(['purpose', 'types', 'areas', 'minBeds', 'maxPriceKES'])
+          && f.purpose in ['rent', 'sale', 'short-stay']
+          && (!('types' in f) || (f.types is list && f.types.size() <= 12))
+          && (!('areas' in f) || (f.areas is list && f.areas.size() <= 20))
+          && (!('minBeds' in f) || (f.minBeds is int && f.minBeds >= 0 && f.minBeds <= 20))
+          && (!('maxPriceKES' in f) || (f.maxPriceKES is int && f.maxPriceKES >= 0));
+      }
       function valid(d) {
         return d.keys().hasOnly(['userId', 'filters', 'channels', 'lastNotifiedAt', 'createdAt'])
           && d.userId == request.auth.uid
-          && d.filters is map
-          && d.channels is list && d.channels.size() > 0 && d.channels.size() <= 3;
+          && validFilters(d.filters)
+          && d.channels is list && d.channels.size() > 0 && d.channels.size() <= 3
+          && d.channels.hasOnly(['push', 'email', 'whatsapp']);
       }
       allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
       allow create: if signedIn() && valid(request.resource.data)

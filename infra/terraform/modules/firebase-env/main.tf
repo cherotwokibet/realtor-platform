@@ -264,6 +264,43 @@ resource "google_project_iam_member" "share_pages_firestore" {
   member  = "serviceAccount:${google_service_account.share_pages.email}"
 }
 
+# Where the share pages image is pushed. Keeps the newest 5 images and drops
+# untagged ones after a week, so storage stays inside the free 0.5 GB.
+resource "google_artifact_registry_repository" "share_pages" {
+  project                = google_project.this.project_id
+  location               = local.region
+  repository_id          = "share-pages"
+  format                 = "DOCKER"
+  labels                 = local.labels
+  cleanup_policy_dry_run = false
+
+  cleanup_policies {
+    id     = "keep-newest"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = 5
+    }
+  }
+  cleanup_policies {
+    id     = "drop-untagged"
+    action = "DELETE"
+    condition {
+      tag_state  = "UNTAGGED"
+      older_than = "604800s"
+    }
+  }
+  depends_on = [google_project_service.apis]
+}
+
+# The Hosting site in front of the service. Its public folder is empty, so
+# every path is rewritten to Cloud Run (firebase.json target "share").
+# A custom share domain is attached by hand later (DNS).
+resource "google_firebase_hosting_site" "share" {
+  provider = google-beta
+  project  = google_project.this.project_id
+  site_id  = "${trimsuffix(substr(local.project_id, 0, 24), "-")}-share"
+}
+
 resource "google_cloud_run_v2_service" "share_pages" {
   count               = var.share_pages_image == null ? 0 : 1
   project             = google_project.this.project_id

@@ -110,4 +110,10 @@ void main() {
       );
     },
   );
+
+  test('the CSP lets the page load its own fonts and nothing else', () {
+    final csp = securityHeaders['content-security-policy']!;
+    expect(csp, contains("font-src 'self'"));
+    expect(csp, contains("default-src 'none'"));
+  });
 }
