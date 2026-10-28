@@ -4,6 +4,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { docId, kenyanPhone, lead, viewing } from '../model/schema';
 import { parseInput } from './auth';
+import { checkLimits, LIMITS } from './ratelimit';
 import { LEAD_RETENTION_DAYS } from './leads';
 
 /**
@@ -73,6 +74,15 @@ export async function bookViewing(db: Firestore, input: unknown, now = new Date(
     const viewingRef = db.collection('viewings').doc(viewingId);
     const existing = await tx.get(viewingRef);
     if (existing.exists && ACTIVE.has(existing.get('status'))) throw new HttpsError('already-exists', 'that time is taken, pick another');
+    const count = await checkLimits(
+      tx,
+      db,
+      [
+        { key: `viewing:phone:${req.client.phone}`, max: LIMITS.viewingPerPhone },
+        { key: `viewing:listing:${req.listingId}`, max: LIMITS.viewingPerListing },
+      ],
+      now,
+    );
 
     const v = {
       listingId: req.listingId,
@@ -97,6 +107,7 @@ export async function bookViewing(db: Firestore, input: unknown, now = new Date(
     };
     parseInput(viewing, v);
     parseInput(lead, l);
+    count();
     tx.set(viewingRef, v);
     tx.create(leadRef, l);
     tx.update(listingRef, { 'stats.leads': FieldValue.increment(1) });

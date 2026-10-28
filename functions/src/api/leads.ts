@@ -6,6 +6,7 @@ import { docId, kenyanPhone, lead, leadChannel, leadStage } from '../model/schem
 import transitions from '../model/transitions.json';
 import { audit } from './audit';
 import { type Caller, isManager, parseInput, requireStaff } from './auth';
+import { checkLimits, contactKey, LIMITS, type Limit } from './ratelimit';
 
 /** How long a lead's personal data is kept (Data Protection Act 2019). Proposed: 24 months. */
 export const LEAD_RETENTION_DAYS = 730;
@@ -25,9 +26,13 @@ export async function createLead(db: Firestore, input: unknown, now = new Date()
   const req = parseInput(createLeadInput, input);
   const listingRef = db.collection('listings').doc(req.listingId);
   const leadRef = db.collection('leads').doc();
+  const contact = contactKey(req.contact);
+  const limits: Limit[] = [{ key: `lead:listing:${req.listingId}`, max: LIMITS.leadPerListing }];
+  if (contact) limits.push({ key: `lead:${contact}`, max: LIMITS.leadPerContact });
   await db.runTransaction(async (tx) => {
     const listing = await tx.get(listingRef);
     if (!listing.exists || listing.get('status') !== 'live') throw new HttpsError('not-found', 'listing is not available');
+    const count = await checkLimits(tx, db, limits, now);
     const doc = {
       listingId: req.listingId,
       agentId: listing.get('agentId') as string,
@@ -40,6 +45,7 @@ export async function createLead(db: Firestore, input: unknown, now = new Date()
       createdAt: now,
     };
     parseInput(lead, doc); // e.g. needs a phone or an email
+    count();
     tx.create(leadRef, doc);
     tx.update(listingRef, { 'stats.leads': FieldValue.increment(1) });
   });
@@ -53,12 +59,16 @@ export const contactTapInput = z.object({ listingId: docId, channel: z.enum(['ca
  * counted on the listing instead of stored as a lead; the conversation
  * itself happens on the phone or in WhatsApp.
  */
-export async function logContactTap(db: Firestore, input: unknown): Promise<{ counted: true }> {
+export async function logContactTap(db: Firestore, input: unknown, now = new Date()): Promise<{ counted: true }> {
   const req = parseInput(contactTapInput, input);
   const ref = db.collection('listings').doc(req.listingId);
-  const snap = await ref.get();
-  if (!snap.exists || snap.get('status') !== 'live') throw new HttpsError('not-found', 'listing is not available');
-  await ref.update({ [`stats.${req.channel === 'call' ? 'calls' : 'whatsapps'}`]: FieldValue.increment(1) });
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists || snap.get('status') !== 'live') throw new HttpsError('not-found', 'listing is not available');
+    const count = await checkLimits(tx, db, [{ key: `tap:listing:${req.listingId}`, max: LIMITS.tapPerListing }], now);
+    count();
+    tx.update(ref, { [`stats.${req.channel === 'call' ? 'calls' : 'whatsapps'}`]: FieldValue.increment(1) });
+  });
   return { counted: true };
 }
 
