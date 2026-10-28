@@ -125,7 +125,7 @@ class FirestoreListingSource implements ListingSource {
   @override
   Future<List<SitemapEntry>> sitemapEntries() async {
     final listings = await _query({
-      'select': {'fields': [{'fieldPath': 'slug'}, {'fieldPath': 'updatedAt'}]},
+      'select': {'fields': [{'fieldPath': 'slug'}, {'fieldPath': 'updatedAt'}, {'fieldPath': 'purpose'}]},
       'from': [{'collectionId': 'listings'}],
       'where': _liveWhere([]),
       'limit': 10000,
@@ -143,10 +143,9 @@ class FirestoreListingSource implements ListingSource {
     });
     String id(Map<String, Object?> doc) => (doc['name']! as String).split('/').last;
     return [
-      for (final a in areas) (path: '/area/${id(a)}', lastModified: null),
-      for (final a in agents) (path: '/agent/${id(a)}', lastModified: null),
-      for (final l in listings)
-        (path: '/listing/${_decodeFields(_map(l['fields']))['slug']}', lastModified: _decodeFields(_map(l['fields']))['updatedAt'] as DateTime?),
+      for (final a in areas) (path: '/area/${id(a)}', lastModified: null, purpose: null),
+      for (final a in agents) (path: '/agent/${id(a)}', lastModified: null, purpose: null),
+      for (final l in listings) _listingEntry(_decodeFields(_map(l['fields']))),
     ];
   }
 
@@ -233,6 +232,11 @@ ShareListing listingFromDocument(Map<String, Object?> doc, DateTime now) {
 }
 
 Map<String, Object?> _map(Object? o) => (o! as Map).cast<String, Object?>();
+
+SitemapEntry _listingEntry(Map<String, Object?> f) {
+  final purpose = Purpose.values.where((p) => p.value == f['purpose']).firstOrNull;
+  return (path: '/listing/${f['slug']}', lastModified: f['updatedAt'] as DateTime?, purpose: purpose);
+}
 
 Map<String, Object?> _decodeFields(Map<String, Object?> fields) =>
     {for (final e in fields.entries) e.key: _decodeValue(_map(e.value))};

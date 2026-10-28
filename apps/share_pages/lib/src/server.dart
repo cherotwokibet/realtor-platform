@@ -25,7 +25,8 @@ final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 /// `/robots.txt` and the App Links / Universal Links files in `/.well-known/`. Without [leads] there is no enquiry form and WhatsApp
 /// taps are not counted. With [fontsDir] the tenant's bundled fonts are served
 /// at `/fonts/<Family>-<Weight>.ttf`, which the pages' `@font-face` rules use.
-shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? leads, DateTime Function()? now, String? fontsDir}) {
+shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner, {LeadApi? leads, DateTime Function()? now, String? fontsDir}) {
+  final source = FeatureFilteredSource(inner, tenant.features);
   final clock = now ?? DateTime.now;
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
       {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {

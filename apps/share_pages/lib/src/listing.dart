@@ -80,7 +80,7 @@ class ShareAgent {
 }
 
 /// One URL in sitemap.xml.
-typedef SitemapEntry = ({String path, DateTime? lastModified});
+typedef SitemapEntry = ({String path, DateTime? lastModified, Purpose? purpose});
 
 /// Where share pages read from: Firestore in production, fixed lists in
 /// tests and local runs.
@@ -153,8 +153,49 @@ class InMemoryListingSource implements ListingSource {
 
   @override
   Future<List<SitemapEntry>> sitemapEntries() async => [
-        for (final a in _areas) (path: '/area/${a.slug}', lastModified: null),
-        for (final a in agents) (path: '/agent/${a.id}', lastModified: null),
-        for (final l in listings) (path: '/listing/${l.slug}', lastModified: l.updatedAt),
+        for (final a in _areas) (path: '/area/${a.slug}', lastModified: null, purpose: null),
+        for (final a in agents) (path: '/agent/${a.id}', lastModified: null, purpose: null),
+        for (final l in listings) (path: '/listing/${l.slug}', lastModified: l.updatedAt, purpose: l.purpose),
+      ];
+}
+
+/// Hides what the tenant has switched off: listings for a purpose whose
+/// feature is off are not found, not listed, and not in the sitemap.
+class FeatureFilteredSource implements ListingSource {
+  FeatureFilteredSource(this._inner, this._features);
+  final ListingSource _inner;
+  final Features _features;
+
+  List<ShareListing> _on(List<ShareListing> ls) => [for (final l in ls) if (_features.allowsPurpose(l.purpose)) l];
+
+  @override
+  Future<ShareListing?> bySlug(String slug) async {
+    final l = await _inner.bySlug(slug);
+    return l != null && _features.allowsPurpose(l.purpose) ? l : null;
+  }
+
+  @override
+  Future<ShareArea?> area(String slug) => _inner.area(slug);
+
+  @override
+  Future<ShareAgent?> agent(String id) => _inner.agent(id);
+
+  @override
+  Future<List<ShareArea>> areas() => _inner.areas();
+
+  @override
+  Future<List<ShareListing>> liveInArea(String slug, {int limit = 24}) async => _on(await _inner.liveInArea(slug, limit: limit));
+
+  @override
+  Future<List<ShareListing>> liveByAgent(String agentId, {int limit = 24}) async =>
+      _on(await _inner.liveByAgent(agentId, limit: limit));
+
+  @override
+  Future<List<ShareListing>> latestLive({int limit = 12}) async => _on(await _inner.latestLive(limit: limit));
+
+  @override
+  Future<List<SitemapEntry>> sitemapEntries() async => [
+        for (final e in await _inner.sitemapEntries())
+          if (e.purpose == null || _features.allowsPurpose(e.purpose!)) e
       ];
 }

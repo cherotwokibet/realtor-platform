@@ -2,6 +2,8 @@
 // source of truth; CI validates every tenant file against it before this
 // parser ever sees one, so the parser stays strict and simple.
 
+import 'listing_filters.dart';
+
 /// Thrown when a tenant file is missing a field or has the wrong type.
 class TenantConfigException implements Exception {
   TenantConfigException(this.message);
@@ -174,6 +176,14 @@ class Features {
         Feature.ads => ads,
         Feature.aiSearch => aiSearch,
         Feature.chat => chat,
+      };
+
+  /// Whether listings for [purpose] are offered: rent and sale have their
+  /// own switch, short stays follow [shortStay].
+  bool allowsPurpose(Purpose purpose) => switch (purpose) {
+        Purpose.rent => rent,
+        Purpose.sale => sale,
+        Purpose.shortStay => shortStay,
       };
 
   /// A copy with some switches changed (tests, admin previews).
