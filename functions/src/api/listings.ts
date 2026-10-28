@@ -6,6 +6,7 @@ import { geohash, slugify } from '../model/geo';
 import { docId, kes, listing, listingPurpose, listingType, mediaItem, slug } from '../model/schema';
 import transitions from '../model/transitions.json';
 import { audit } from './audit';
+import { requirePurposeOn, tenantFeatures } from './features';
 import { type Caller, isManager, parseInput, requireManager, requireStaff } from './auth';
 
 /** What an agent may send. Status, verification, slug, geohash and stats are set here. */
@@ -44,6 +45,7 @@ export async function submitListing(db: Firestore, caller: Caller, input: unknow
   const agentId = isManager(caller) ? req.agentId ?? caller.agentId : caller.agentId;
   if (!agentId) throw new HttpsError('invalid-argument', 'agentId is required');
   if (!(await db.collection('areas').doc(req.area).get()).exists) throw new HttpsError('invalid-argument', `unknown area ${req.area}`);
+  requirePurposeOn(await tenantFeatures(db), req.purpose);
 
   const ref = req.listingId ? db.collection('listings').doc(req.listingId) : db.collection('listings').doc();
   const base = slugify(req.title);
@@ -116,11 +118,14 @@ export async function moderateListing(db: Firestore, caller: Caller, input: unkn
   const req = parseInput(moderateListingInput, input);
   const ref = db.collection('listings').doc(req.listingId);
   const to = ACTION_TO[req.action];
+  const features = to === 'live' ? await tenantFeatures(db) : null;
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'no such listing');
     const from = snap.get('status') as ListingStatus;
     if (!canMove(from, to)) throw new HttpsError('failed-precondition', `a ${from} listing cannot be set to ${to}`);
+    // A listing sent in before its purpose was switched off cannot go live.
+    if (to === 'live') requirePurposeOn(features, snap.get('purpose'));
     tx.update(ref, {
       status: to,
       updatedAt: now,
