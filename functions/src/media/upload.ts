@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import type { Bucket } from '@google-cloud/storage';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { LowResolutionError, processImage, VARIANTS } from './image';
+import { findDuplicates, type PhotoMatch } from './duplicates';
 
 export const UPLOAD_PATH = /^uploads\/(agents|staff)\/([A-Za-z0-9_-]{1,128})\/listings\/([A-Za-z0-9_-]{1,128})\/[^/]+$/;
 /** The tenant's mark, uploaded by the deploy step. Optional. */
@@ -17,7 +18,7 @@ export const WATERMARK_PATH = 'brand/watermark.png';
 export type UploadResult =
   | { status: 'ignored' }
   | { status: 'rejected'; reason: string }
-  | { status: 'processed'; mediaId: string; variants: Record<string, string> };
+  | { status: 'processed'; mediaId: string; variants: Record<string, string>; duplicates: PhotoMatch[] };
 
 export async function handleListingUpload(bucket: Bucket, db: Firestore, path: string, now = new Date()): Promise<UploadResult> {
   const m = UPLOAD_PATH.exec(path);
@@ -55,15 +56,20 @@ export async function handleListingUpload(bucket: Bucket, db: Firestore, path: s
       variants[name] = dest;
     }
 
-    const entry = { kind: 'photo', variants, blurhash: out.blurhash, width: out.width, height: out.height };
+    const entry = { kind: 'photo', variants, blurhash: out.blurhash, width: out.width, height: out.height, phash: out.phash };
+    let duplicates: PhotoMatch[] = [];
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(listingRef);
       if (!snap.exists) return; // listing deleted meanwhile: variants stay orphaned for the cleanup job
+      const dupes = await findDuplicates(tx, db, { hash: out.phash, listingId, mediaId }, now);
+      duplicates = dupes.matches;
       const media = (snap.get('media') ?? []) as { variants?: Record<string, string> }[];
       if (media.some((x) => x.variants?.full === variants.full)) return; // retry
+      dupes.write();
       tx.update(listingRef, { media: FieldValue.arrayUnion(entry), lastMediaError: FieldValue.delete(), updatedAt: now });
     });
-    return { status: 'processed', mediaId, variants };
+    if (duplicates.length) console.warn(`listing ${listingId}: photo ${mediaId} matches ${duplicates.map((d) => d.listingId).join(', ')}`);
+    return { status: 'processed', mediaId, variants, duplicates };
   } finally {
     await raw.delete({ ignoreNotFound: true });
   }

@@ -60,6 +60,7 @@ class StaffListingRow {
     this.calls = 0,
     this.whatsapps = 0,
     this.expiresAt,
+    this.photoMatch = false,
   });
   final String id, slug, title, area, status, agentId, agentName;
   final int priceKES, leads, calls, whatsapps;
@@ -67,6 +68,9 @@ class StaffListingRow {
 
   /// When the Verified badge runs out unless the agent confirms again (P6-s02); null when never verified.
   final DateTime? expiresAt;
+
+  /// A photo here matches another listing's (`photoFlags`, P6-s05). Managers only.
+  final bool photoMatch;
 
   StaffListingRow withStatus(String status, DateTime updatedAt, {DateTime? expiresAt}) => StaffListingRow(
         id: id,
@@ -82,6 +86,7 @@ class StaffListingRow {
         calls: calls,
         whatsapps: whatsapps,
         expiresAt: expiresAt ?? this.expiresAt,
+        photoMatch: photoMatch,
       );
 }
 

@@ -137,6 +137,13 @@ void main() {
       expect(listingActionsFor(manager, status: 'live', agentId: 'x'), [...moderationsFor('live'), 'confirm']);
     });
 
+    test('photo flags are for managers: the agent gets the listing without the flag', () async {
+      final otieno = demoStaff.firstWhere((s) => s.agentId == 'agent-otieno');
+      final asManager = (await repo.listings(manager, limit: 50)).rows.firstWhere((r) => r.id == 'listing-005');
+      final asAgent = (await repo.listings(otieno, limit: 50)).rows.firstWhere((r) => r.id == 'listing-005');
+      expect((asManager.photoMatch, asAgent.photoMatch), (true, false));
+    });
+
     test('agents get only their own leads and listings, and no audit log', () async {
       final leads = await repo.leads(wanjiku, limit: 100);
       final listings = await repo.listings(wanjiku, limit: 100);
@@ -479,6 +486,23 @@ void main() {
     container.read(routerProvider).go('/privacy');
     await tester.pumpAndSettle();
     expect(location(), '/leads');
+  });
+
+  testWidgets('managers see a flag on a listing whose photo matches another; agents do not', (tester) async {
+    const why = 'A photo here matches another listing. Check it is theirs to use.';
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip(why), findsOneWidget);
+    await tester.tap(find.byTooltip('Sign out (${manager.name})'));
+    await tester.pumpAndSettle();
+    // listing-005 (the flagged one) is Brian Otieno's.
+    final otieno = demoStaff.firstWhere((s) => s.agentId == 'agent-otieno');
+    await tester.tap(find.text(otieno.name));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip(why), findsNothing);
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

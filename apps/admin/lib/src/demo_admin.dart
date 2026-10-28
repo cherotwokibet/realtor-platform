@@ -72,6 +72,8 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
           'expired' => _now.subtract(Duration(days: i + 1)),
           _ => null,
         },
+        // One demo listing reuses another's photo, so the flag shows.
+        photoMatch: i == 4,
       ));
     }
     for (var i = 0; i < 40; i++) {
@@ -135,7 +137,10 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
 
   @override
   Future<RowPage<StaffListingRow>> listings(StaffUser who, {String? status, String? after, int limit = 25}) async {
-    final rows = scopedTo(who, _listings, (r) => r.agentId).where((r) => status == null || r.status == status).toList();
+    final rows = scopedTo(who, _listings, (r) => r.agentId)
+        .where((r) => status == null || r.status == status)
+        .map((r) => who.isManager || !r.photoMatch ? r : _unflagged(r))
+        .toList();
     return pageAfter(rows, (r) => r.id, after: after, limit: limit);
   }
 
@@ -289,6 +294,23 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         ),
       );
 }
+
+/// Agents never see photo flags (the Firestore repository only reads them for managers).
+StaffListingRow _unflagged(StaffListingRow r) => StaffListingRow(
+      id: r.id,
+      slug: r.slug,
+      title: r.title,
+      area: r.area,
+      priceKES: r.priceKES,
+      status: r.status,
+      agentId: r.agentId,
+      agentName: r.agentName,
+      updatedAt: r.updatedAt,
+      leads: r.leads,
+      calls: r.calls,
+      whatsapps: r.whatsapps,
+      expiresAt: r.expiresAt,
+    );
 
 String _areaName(String slug) =>
     slug.split('-').map((w) => w.length <= 1 ? w.toUpperCase() : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');

@@ -29,6 +29,8 @@ One Firestore database per tenant project (D1), so documents carry no tenant id.
 | `audit/{id}` | at, actor {uid, role, agentId}, action (lead.stage / listing.submit / listing.approve / …), target {collection, id, label}, from, to, reason | *Functions only*, in the same transaction as the change; owners and managers read. Ids, states and a label (listing title, staff email); no client personal data |
 | `areas/{slug}` | name, county, centre (geo), guide, amenities[], stats {medianRentKES, listings} | Admin; stats *Functions* |
 | `rateLimits/{sha256}` | window, count, expiresAt (one-hour windows per contact and per listing, P6-s05; no contact details, id is a hash; Firestore TTL deletes it) | *Functions only*; no client access |
+| `photoHashes/{band}_{hex}` | entries[] {h: dHash, l: listingId, m: mediaId}: the 8×8-bit band index of every listing photo's dHash (P6-s05) | *Functions only*; no client access |
+| `photoFlags/{listingId}_{mediaId}` | listingId, mediaId, matches[] {listingId, mediaId, bits}, at: a photo within 6 bits of another listing's | *Functions only*; managers read (admin Listings shows a flag) |
 | `config/tenant` | Read-only copy of the tenant file for runtime flags | Deploy step |
 
 **Data Protection Act 2019:** every lead records when consent was given (`consentAt`) and when the record is to be deleted (`retainUntil`, after `consentAt`). A lead needs a phone or an email. The scheduled `purgeExpiredLeads` Function (03:15 Nairobi time, nightly) deletes leads past `retainUntil`, and viewings whose slot is 24 months old (a viewing's client details come with the same consent as its lead). It logs only counts. Export and delete requests go through `dataRequest` (the admin's *Privacy* page). `createLead` stores emails lowercased so one address finds all its leads.
@@ -45,6 +47,7 @@ Inputs are validated with zod in `functions/src/api/`, and the stored document i
 | `updateLeadStage` | the lead's agent, or a manager | new → contacted → viewing → offer → won, any stage → lost, and lost → contacted |
 | `submitListing` | agents (as themselves), managers (for any agent) | Create or edit → `pending`; sets slug (unique), geohash, stats and timestamps; the area must exist. `media` may only reorder or drop the listing's own pipeline-made entries (the stored copies are kept); left out, the media stay as they are |
 | `moderateListing` | managers | approve (live, verified for 30 days), reject (needs a reason), expire, let, sold; status moves from `listing-rules.ts` |
+| `confirmListing` | the listing's agent, or a manager | P6-s02: a live or expired listing is still available → live, `verifiedAt` now, `expiresAt` +30 days; audited `listing.confirm`. The nightly `expireListings` job moves live listings past `expiresAt` to expired (audited as *Nightly expiry*) |
 | `dataRequest` | owners and managers | DPA 2019 subject request: finds a person's leads and viewings by phone or email and returns them as JSON (`export`) or deletes them (`delete`); audited as `privacy.export` / `privacy.delete` with counts only. Admin: *Privacy* |
 
 Still to come: rate limits on the public callables (P6 fraud controls), confirming and cancelling viewings from admin (P5 bookings), and agent availability instead of fixed hours.

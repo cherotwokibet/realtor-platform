@@ -131,6 +131,13 @@ void main() {
       expect((l2.priceKES, l2.leads, l2.calls, l2.whatsapps, l2.agentName), (50002, 2, 4, 0, 'Agent A'));
     });
 
+    test('managers see which listings have a photo flagged; agents do not', () async {
+      await db.collection('photoFlags').doc('l2_abc').set({'listingId': 'l2', 'mediaId': 'abc', 'matches': []});
+      final rows = (await repo.listings(manager)).rows;
+      expect(rows.where((r) => r.photoMatch).map((r) => r.id), ['l2']);
+      expect((await repo.listings(agent)).rows.any((r) => r.photoMatch), isFalse);
+    });
+
     test('the team: managers only, by email, with agent names; unknown roles skipped', () async {
       await db.collection('staff').doc('u2').set({'email': 'b@example.com', 'role': 'agent', 'agentId': 'agent-a'});
       await db.collection('staff').doc('u1').set({'email': 'a@example.com', 'name': 'Boss', 'role': 'owner'});

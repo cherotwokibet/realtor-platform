@@ -281,7 +281,19 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
         },
         load: (after) => repo.listings(who, status: _status, after: after, limit: pageSize),
         columns: [
-          TableColumn('Title', (r) => Text(r.title)),
+          TableColumn(
+            'Title',
+            (r) => r.photoMatch
+                ? Row(mainAxisSize: MainAxisSize.min, children: [
+                    Flexible(child: Text(r.title)),
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: 'A photo here matches another listing. Check it is theirs to use.',
+                      child: Icon(Icons.flag_outlined, size: 18, color: Theme.of(context).colorScheme.error),
+                    ),
+                  ])
+                : Text(r.title),
+          ),
           TableColumn('Area', (r) => Text(label(r.area))),
           TableColumn('Price', (r) => Text(formatKes(r.priceKES)), numeric: true),
           TableColumn(

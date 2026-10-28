@@ -65,6 +65,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Photos that match another listing's (P6-s05), for managers to review.
+    // The hash index behind it (photoHashes) has no rule, so it stays closed.
+    match /photoFlags/{id} {
+      allow read: if isManager();
+      allow write: if false;
+    }
+
     match /savedSearches/{id} {
       // The shape functions/src/model/schema.ts expects, with bounded sizes:
       // the saved search sweep reads these, so junk must not get in.
