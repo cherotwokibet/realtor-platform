@@ -118,6 +118,15 @@ void main() {
     expect((await send('POST', enquire, form: 'phone=0712345678&consent=yes')).statusCode, 404);
   });
 
+  test('a rate-limited enquiry says so (429) instead of asking to try again', () async {
+    fake.fail = LeadApiException('RESOURCE_EXHAUSTED', 'too many requests, try again in a while');
+    final r = await send('POST', enquire, form: 'phone=0712345678&consent=yes');
+    expect(r.statusCode, 429);
+    final html = await r.readAsString();
+    expect(html, contains('We already have a few requests from you this hour.'));
+    expect(html, isNot(contains('Please try again')));
+  });
+
   test('oversized forms are refused', () async {
     expect((await send('POST', enquire, form: 'message=${'a' * 9000}&consent=yes')).statusCode, 413);
   });
@@ -191,6 +200,10 @@ void main() {
       expect(await taken.readAsString(), contains('That time is taken. Please pick another.'));
       fake.fail = LeadApiException('INVALID_ARGUMENT', 'slot: book at least 2 hours ahead');
       expect(await (await send('POST', viewing, form: ok)).readAsString(), contains('Please pick another time: book at least 2 hours ahead.'));
+      fake.fail = LeadApiException('RESOURCE_EXHAUSTED', 'too many requests, try again in a while');
+      final limited = await send('POST', viewing, form: ok);
+      expect(limited.statusCode, 429);
+      expect(await limited.readAsString(), contains('We already have a few requests from you this hour.'));
       fake.fail = LeadApiException('UNAVAILABLE', 'down');
       final down = await send('POST', viewing, form: ok);
       expect(down.statusCode, 503);

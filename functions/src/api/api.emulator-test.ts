@@ -11,6 +11,7 @@ import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
 import { moderateListing, submitListing } from './listings';
 import { bookViewing } from './viewings';
+import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { bootstrapOwner, setStaffRole, type StaffAuth } from './staff';
 
 let db: Firestore;
@@ -32,7 +33,7 @@ before(() => {
 });
 
 beforeEach(async () => {
-  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings', 'audit', 'staff']) {
+  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings', 'audit', 'staff', 'rateLimits']) {
     const all = await db.collection(c).get();
     await Promise.all(all.docs.map((d) => d.ref.delete()));
   }
@@ -265,5 +266,53 @@ describe('staff roles', () => {
     await rejectsWith(setStaffRole(db, auth, owner, { email: 'nobody@example.com', role: 'manager' }), 'not-found');
     assert.equal(auth.claims('new@example.com'), undefined);
     assert.equal((await db.collection('audit').get()).size, 0);
+  });
+});
+
+describe('rate limits (P6-s05)', () => {
+  const ask = (phone: string, listingId = 'listing-001') =>
+    createLead(db, { listingId, channel: 'form', contact: { phone }, consent: true }, now);
+  const leadCount = async () => (await db.collection('leads').count().get()).data().count;
+
+  test('one phone gets a few enquiries an hour; more are refused and store nothing', async () => {
+    for (let i = 0; i < LIMITS.leadPerContact; i++) await ask('+254700000501', i % 2 ? 'listing-001' : 'listing-002');
+    const before = await leadCount();
+    await rejectsWith(ask('+254700000501', 'listing-003'), 'resource-exhausted');
+    assert.equal(await leadCount(), before);
+    await ask('+254700000502'); // someone else is fine
+    // The next hour the same phone may ask again.
+    await createLead(db, { listingId: 'listing-001', channel: 'form', contact: { phone: '+254700000501' }, consent: true }, new Date(now.getTime() + WINDOW_MS));
+  });
+
+  test('a listing takes a capped number of enquiries an hour, whatever the phones', async () => {
+    for (let i = 0; i < LIMITS.leadPerListing; i++) await ask(`+2547000006${String(i).padStart(2, '0')}`);
+    await rejectsWith(ask('+254700000699'), 'resource-exhausted');
+    await ask('+254700000699', 'listing-002');
+  });
+
+  test('viewings are limited per phone too', async () => {
+    const client = { name: 'Amina', phone: '+254700000701' };
+    const slots = ['10:00', '10:30', '11:00', '11:30'].map((t) => `2026-10-26T${t}:00+03:00`);
+    for (const slot of slots.slice(0, LIMITS.viewingPerPhone)) await bookViewing(db, { listingId: 'listing-001', slot, client, consent: true }, now);
+    await rejectsWith(bookViewing(db, { listingId: 'listing-001', slot: slots[3], client, consent: true }, now), 'resource-exhausted');
+    assert.equal((await db.collection('viewings').count().get()).data().count, LIMITS.viewingPerPhone);
+  });
+
+  test('counters hold only a count, under a hashed id, with an expiry', async () => {
+    await ask('+254700000801');
+    const docs = (await db.collection('rateLimits').get()).docs;
+    assert.equal(docs.length, 2); // this phone + the listing
+    for (const d of docs) {
+      assert.match(d.id, /^[0-9a-f]{64}$/);
+      assert.deepEqual(Object.keys(d.data()).sort(), ['count', 'expiresAt', 'window']);
+      assert.ok(!JSON.stringify(d.data()).includes('700000801'));
+    }
+  });
+
+  test('taps are capped per listing', async () => {
+    const limits = [{ key: 'tap:listing:test', max: 2 }];
+    for (let i = 0; i < 2; i++) await db.runTransaction(async (tx) => (await checkLimits(tx, db, limits, now))());
+    await rejectsWith(db.runTransaction(async (tx) => (await checkLimits(tx, db, limits, now))()), 'resource-exhausted');
+    await logContactTap(db, { listingId: 'listing-001', channel: 'whatsapp' }, now);
   });
 });
