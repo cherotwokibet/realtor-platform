@@ -65,7 +65,7 @@ Status: ✅ holds · ⚠️ gap, with plan · ➖ not applicable. Grouped by ASV
 ## V14 Data protection
 - ✅ Personal data (`leads`, `viewings`, `payments`) is staff-only. The audit log holds no names or phones, and the share pages never log form contents.
 - ✅ Personal pages (a visitor's own form input) are `private, no-store`.
-- ⚠️ Leads past `retainUntil` are not yet deleted (D12, DPA 2019). **Plan:** P6 adds a scheduled delete.
+- ✅ Leads past `retainUntil`, and viewings 24 months after their slot, are deleted nightly by `purgeExpiredLeads` (D12, DPA 2019).
 
 ## V15 Secure coding and architecture
 - ✅ Each tenant gets its own Firebase project (D1), so one realtor's data and keys never share a database with another's.
@@ -80,7 +80,6 @@ Status: ✅ holds · ⚠️ gap, with plan · ➖ not applicable. Grouped by ASV
 ## Summary
 There are no critical findings. These gaps are open, each with an owner:
 1. Anti-automation (P6)
-2. Lead retention (P6)
-3. Server-side password policy (Boniface, console)
-4. Full CSP on the Flutter sites (before prod)
-5. Alerting (P8-s02)
+2. Server-side password policy (Boniface, console)
+3. Full CSP on the Flutter sites (before prod)
+4. Alerting (P8-s02)
