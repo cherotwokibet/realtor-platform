@@ -38,6 +38,7 @@ beforeEach(async () => {
     await setDoc(doc(db, 'audit', 'a-1'), { at: new Date(), action: 'lead.stage', actor: { uid: 'boss', role: 'manager', agentId: null } });
     await setDoc(doc(db, 'payments', 'pay-1'), { purpose: 'viewing-fee', amountKES: 500, status: 'paid' });
     await setDoc(doc(db, 'viewings', 'view-1'), { listingId: 'listing-001', agentId: 'agent-wanjiku', status: 'requested' });
+    await setDoc(doc(db, 'agentBlocks', 'block-1'), { agentId: 'agent-wanjiku', note: 'Leave' });
     await setDoc(doc(db, 'config', 'tenant'), { id: 'demo' });
     await setDoc(doc(db, 'savedSearches', 'ss-1'), { userId: 'alice', filters: { purpose: 'rent' }, channels: ['push'], lastNotifiedAt: null, createdAt: new Date() });
   });
@@ -100,6 +101,18 @@ describe('leads (personal data)', () => {
     await assertFails(setDoc(doc(visitor(), 'leads', 'spam'), { agentId: 'agent-wanjiku', stage: 'new' }));
     await assertFails(updateDoc(doc(agent('agent-wanjiku'), 'leads', 'lead-001'), { stage: 'won' }));
     await assertFails(deleteDoc(doc(manager(), 'leads', 'lead-001')));
+  });
+});
+
+describe('agent time off', () => {
+  test("staff read their own (managers all); nobody else, and nobody writes", async () => {
+    await assertFails(getDoc(doc(visitor(), 'agentBlocks', 'block-1')));
+    await assertFails(getDoc(doc(user(), 'agentBlocks', 'block-1')));
+    await assertSucceeds(getDoc(doc(agent('agent-wanjiku'), 'agentBlocks', 'block-1')));
+    await assertFails(getDoc(doc(agent('agent-otieno'), 'agentBlocks', 'block-1')));
+    await assertSucceeds(getDoc(doc(manager(), 'agentBlocks', 'block-1')));
+    await assertFails(setDoc(doc(agent('agent-wanjiku'), 'agentBlocks', 'block-2'), { agentId: 'agent-wanjiku' }));
+    await assertFails(deleteDoc(doc(manager(), 'agentBlocks', 'block-1')));
   });
 });
 

@@ -108,6 +108,14 @@ abstract interface class AdminActions {
   /// Completes with the new viewing's id.
   Future<String> rescheduleViewing(StaffUser who, {required String viewingId, required String slot});
 
+  /// `addAgentBlock` (P5-s05): blocks out [start] to [end] (ISO 8601 with
+  /// offset) so no viewing is booked then. Managers name the agent; an agent
+  /// always blocks for themself. Completes with the block's id.
+  Future<String> addTimeOff(StaffUser who, {String? agentId, required String start, required String end, String? note});
+
+  /// `removeAgentBlock`: the agent's own, or any for managers.
+  Future<void> removeTimeOff(StaffUser who, {required String blockId});
+
   /// `featureListing` (P5-s02), managers: a live listing ranks first in
   /// search for [days]; 0 stops it. Completes with the new end, or null.
   Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days});

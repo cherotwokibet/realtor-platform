@@ -11,6 +11,7 @@ import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
 import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateListing, submitListing } from './listings';
 import { bookViewing, rescheduleViewing, updateViewingStatus } from './viewings';
+import { addAgentBlock, removeAgentBlock } from './availability';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
@@ -372,7 +373,7 @@ describe('retention (D12)', () => {
   });
 
   test('does nothing while everything is within retention', async () => {
-    assert.deepEqual(await purgeExpired(db, now), { leads: 0, viewings: 0 });
+    assert.deepEqual(await purgeExpired(db, now), { leads: 0, viewings: 0, blocks: 0 });
   });
 });
 
@@ -598,3 +599,33 @@ describe('viewing status (P5-s05)', () => {
   });
 });
 
+
+describe('agent time off (P5-s05)', () => {
+  test('an agent blocks out time: no viewing can be booked or moved into it; removing it frees the time', async () => {
+    const block = await addAgentBlock(db, wanjiku, { start: '2026-10-28T08:00:00+03:00', end: '2026-10-28T13:00:00+03:00', note: 'Site visit in Thika' }, now);
+    const client = { name: 'Kamau', phone: '+254700001301' };
+    await rejectsWith(bookViewing(db, { listingId: 'listing-001', slot: '2026-10-28T12:30:00+03:00', client, consent: true }, now), 'already-exists');
+    await rejectsWith(bookViewing(db, { listingId: 'listing-001', slot: '2026-10-28T07:30:00+03:00', client, consent: true }, now), 'invalid-argument'); // before 8:00 anyway
+    const ok = await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-28T13:00:00+03:00', client, consent: true }, now); // ends at 13:00
+    await rejectsWith(rescheduleViewing(db, wanjiku, { viewingId: ok.viewingId, slot: '2026-10-28T09:00:00+03:00' }, now), 'already-exists');
+
+    await rejectsWith(removeAgentBlock(db, otieno, block, now), 'permission-denied');
+    await removeAgentBlock(db, wanjiku, block, now);
+    await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-28T12:30:00+03:00', client: { name: 'Njeri', phone: '+254700001302' }, consent: true }, now);
+
+    const log = (await db.collection('audit').where('action', 'in', ['agent.block', 'agent.unblock']).get()).docs.map((d) => d.data());
+    assert.equal(log.length, 2);
+    assert.ok(!JSON.stringify(log).includes('Thika'), 'the note stays off the audit log');
+  });
+
+  test('managers block for any agent; agents only for themselves; bad ranges refused', async () => {
+    const r = await addAgentBlock(db, manager, { agentId: 'agent-otieno', start: '2026-10-30T00:00:00+03:00', end: '2026-10-31T00:00:00+03:00' }, now);
+    assert.equal((await db.collection('agentBlocks').doc(r.blockId).get()).get('agentId'), 'agent-otieno');
+    const mine = await addAgentBlock(db, wanjiku, { agentId: 'agent-otieno', start: '2026-10-30T00:00:00+03:00', end: '2026-10-30T12:00:00+03:00' }, now);
+    assert.equal((await db.collection('agentBlocks').doc(mine.blockId).get()).get('agentId'), 'agent-wanjiku', 'an agent cannot block for someone else');
+    await rejectsWith(addAgentBlock(db, wanjiku, { start: '2026-10-30T12:00:00+03:00', end: '2026-10-30T08:00:00+03:00' }, now), 'invalid-argument');
+    await rejectsWith(addAgentBlock(db, wanjiku, { start: '2026-10-20T08:00:00+03:00', end: '2026-10-21T08:00:00+03:00' }, now), 'invalid-argument'); // past
+    await rejectsWith(addAgentBlock(db, wanjiku, { start: '2026-10-25T08:00:00+03:00', end: '2026-12-25T08:00:00+03:00' }, now), 'invalid-argument'); // > 31 days
+    await rejectsWith(addAgentBlock(db, manager, { start: '2026-10-30T08:00:00+03:00', end: '2026-10-30T09:00:00+03:00' }, now), 'invalid-argument'); // no agent
+  });
+});

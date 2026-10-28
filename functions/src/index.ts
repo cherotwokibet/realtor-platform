@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), updateViewingStatus, rescheduleViewing, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, setStaffRole, dataRequest.
+ * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, setStaffRole, dataRequest.
  * Scheduled, nightly: purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -30,6 +30,7 @@ import * as leads from './api/leads';
 import * as listings from './api/listings';
 import * as staff from './api/staff';
 import * as viewings from './api/viewings';
+import * as availability from './api/availability';
 import { dataRequest as runDataRequest } from './api/privacy';
 import { purgeExpired } from './api/retention';
 import { callableTwin, enforced, logAppCheck, type PublicCallable, sharePagesInvoker } from './api/appcheck';
@@ -72,6 +73,8 @@ export const shareLogContactTap = twin('logContactTap');
 export const shareBookViewing = twin('bookViewing');
 export const updateViewingStatus = onCall((req) => viewings.updateViewingStatus(getFirestore(), callerFrom(req.auth), req.data));
 export const rescheduleViewing = onCall((req) => viewings.rescheduleViewing(getFirestore(), callerFrom(req.auth), req.data));
+export const addAgentBlock = onCall((req) => availability.addAgentBlock(getFirestore(), callerFrom(req.auth), req.data));
+export const removeAgentBlock = onCall((req) => availability.removeAgentBlock(getFirestore(), callerFrom(req.auth), req.data));
 export const updateLeadStage = onCall((req) => leads.updateLeadStage(getFirestore(), callerFrom(req.auth), req.data));
 export const submitListing = onCall((req) => listings.submitListing(getFirestore(), callerFrom(req.auth), req.data));
 export const moderateListing = onCall((req) => listings.moderateListing(getFirestore(), callerFrom(req.auth), req.data));
@@ -85,7 +88,7 @@ export const dataRequest = onCall((req) => runDataRequest(getFirestore(), caller
 // Only counts are logged, never what was deleted.
 export const purgeExpiredLeads = onSchedule({ schedule: '15 3 * * *', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
   const r = await purgeExpired(getFirestore(), new Date());
-  console.log(`retention: deleted ${r.leads} leads, ${r.viewings} viewings`);
+  console.log(`retention: deleted ${r.leads} leads, ${r.viewings} viewings, ${r.blocks} ended time-off blocks`);
 });
 
 // Verification (P6-s02): every night, live listings not re-confirmed within

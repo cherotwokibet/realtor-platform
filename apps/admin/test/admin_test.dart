@@ -77,6 +77,20 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<String> addTimeOff(StaffUser who, {String? agentId, required String start, required String end, String? note}) async {
+    calls++;
+    await gate.future;
+    return inner.addTimeOff(who, agentId: agentId, start: start, end: end, note: note);
+  }
+
+  @override
+  Future<void> removeTimeOff(StaffUser who, {required String blockId}) async {
+    calls++;
+    await gate.future;
+    return inner.removeTimeOff(who, blockId: blockId);
+  }
+
+  @override
   Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
     calls++;
     await gate.future;
@@ -779,6 +793,40 @@ void main() {
     expect(open_.where((v) => v.id == future.id), isEmpty, reason: 'the old one is cancelled');
     final moved = open_.singleWhere((v) => v.slot == at);
     expect((moved.status, moved.clientName), ('confirmed', future.clientName));
+  });
+
+  testWidgets('an agent blocks out time off; rescheduling into it is refused; removing it frees the time', (tester) async {
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Time off…'));
+    await tester.pumpAndSettle();
+    expect(find.text('None coming up.'), findsOneWidget);
+    expect(find.widgetWithText(DropdownButtonFormField<String>, 'Agent'), findsNothing);
+    final day = viewingDays(now, count: 26)[4];
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'From'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(day.label).last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Note for the team (optional)'), 'Leave');
+    await tester.tap(find.text('Add time off').last);
+    await tester.pumpAndSettle();
+    final blocks = await container.read(adminRepositoryProvider).timeOff(wanjiku, now);
+    expect(blocks.single.start, DateTime.parse(viewingSlot(day.value, '08:00')).toLocal());
+    expect(blocks.single.end, DateTime.parse(viewingSlot(day.value, '18:00')).toLocal());
+    expect(find.text('Leave'), findsOneWidget);
+
+    final actions = container.read(adminActionsProvider);
+    final v = (await container.read(adminRepositoryProvider).viewings(wanjiku, from: from, limit: 50)).rows.firstWhere((v) => v.slot.isAfter(now));
+    await expectLater(actions.rescheduleViewing(wanjiku, viewingId: v.id, slot: viewingSlot(day.value, '10:00')),
+        throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'already-exists')));
+
+    await tester.tap(find.byTooltip('Remove this time off'));
+    await tester.pumpAndSettle();
+    expect(find.text('None coming up.'), findsOneWidget);
+    expect(await actions.rescheduleViewing(wanjiku, viewingId: v.id, slot: viewingSlot(day.value, '10:00')), isNotEmpty);
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

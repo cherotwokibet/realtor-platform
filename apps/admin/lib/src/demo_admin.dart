@@ -212,6 +212,10 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     final at = DateTime.parse(slot);
     if (!at.isAfter(_clock().add(const Duration(hours: 2)))) throw AdminActionException('invalid-argument', 'slot: book at least 2 hours ahead');
     final id = '${v.agentId}_${at.millisecondsSinceEpoch}';
+    final slotEnd = at.add(const Duration(minutes: 30));
+    if (_blocks.any((b) => b.agentId == v.agentId && b.start.isBefore(slotEnd) && b.end.isAfter(at))) {
+      throw AdminActionException('already-exists', 'the agent is not available then, pick another time');
+    }
     if (_viewings.any((o) => o.id == id && (o.status == 'requested' || o.status == 'confirmed'))) {
       throw AdminActionException('already-exists', 'the agent has another viewing then');
     }
@@ -342,6 +346,34 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
       created.add(i + 1);
     }
     return ImportOutcome(created: created, failed: failed);
+  }
+
+  final _blocks = <AgentBlock>[];
+
+  @override
+  Future<List<AgentBlock>> timeOff(StaffUser who, DateTime now) async =>
+      scopedTo(who, _blocks, (b) => b.agentId).where((b) => b.end.isAfter(now)).toList()..sort((a, b) => a.start.compareTo(b.start));
+
+  @override
+  Future<String> addTimeOff(StaffUser who, {String? agentId, required String start, required String end, String? note}) async {
+    final agent = who.isManager ? agentId : who.agentId;
+    if (agent == null || !_agents.containsKey(agent)) throw AdminActionException('invalid-argument', 'agentId: pick an agent');
+    final s = DateTime.parse(start).toLocal(), e = DateTime.parse(end).toLocal();
+    if (!e.isAfter(s)) throw AdminActionException('invalid-argument', 'end: must be after the start');
+    if (!e.isAfter(_clock())) throw AdminActionException('invalid-argument', 'end: that time has passed');
+    if (e.difference(s) > const Duration(days: 31)) throw AdminActionException('invalid-argument', 'end: at most 31 days at a time');
+    final id = 'block-${_blocks.length + 1}';
+    _blocks.add(AgentBlock(id: id, agentId: agent, agentName: _agents[agent]!, start: s, end: e, note: note));
+    _log(who, 'agent.block', _agents[agent]!, null, null);
+    return id;
+  }
+
+  @override
+  Future<void> removeTimeOff(StaffUser who, {required String blockId}) async {
+    final i = _blocks.indexWhere((b) => b.id == blockId);
+    if (i < 0) throw AdminActionException('not-found', 'no such block');
+    if (!who.isManager && _blocks[i].agentId != who.agentId) throw AdminActionException('permission-denied', 'not your time off');
+    _log(who, 'agent.unblock', _blocks.removeAt(i).agentName, null, null);
   }
 
   /// Drafts saved in the editor; seeded listings get one made up on first open.

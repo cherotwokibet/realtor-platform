@@ -8,6 +8,7 @@ import { type Caller, isManager, parseInput, requireStaff } from './auth';
 import transitions from '../model/transitions.json';
 import { checkLimits, LIMITS } from './ratelimit';
 import { LEAD_RETENTION_DAYS } from './leads';
+import { assertAgentFree } from './availability';
 
 /**
  * Viewing slots (P2-s03). Kenya is UTC+3 all year (no daylight saving), so
@@ -76,6 +77,7 @@ export async function bookViewing(db: Firestore, input: unknown, now = new Date(
     const viewingRef = db.collection('viewings').doc(viewingId);
     const existing = await tx.get(viewingRef);
     if (existing.exists && ACTIVE.has(existing.get('status'))) throw new HttpsError('already-exists', 'that time is taken, pick another');
+    await assertAgentFree(tx, db, agentId, slot, VIEWING_RULES.slotMinutes);
     const count = await checkLimits(
       tx,
       db,
@@ -196,6 +198,7 @@ export async function rescheduleViewing(db: Firestore, caller: Caller, input: un
     const newRef = db.collection('viewings').doc(viewingId);
     const taken = await tx.get(newRef);
     if (taken.exists && ACTIVE.has(taken.get('status'))) throw new HttpsError('already-exists', 'the agent has another viewing then');
+    await assertAgentFree(tx, db, agentId, slot, VIEWING_RULES.slotMinutes);
     const listing = await tx.get(db.collection('listings').doc(old.get('listingId') as string));
     const title = listing.get('title') as string | undefined;
 

@@ -48,6 +48,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Agents' time off (P5-s05): addAgentBlock / removeAgentBlock write it.
+    match /agentBlocks/{id} {
+      allow read: if isManager() || isOwnAgent(resource.data.agentId);
+      allow write: if false;
+    }
+
     match /payments/{id} {
       allow read: if isManager();
       allow write: if false;

@@ -297,6 +297,11 @@ class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
     final repo = ref.watch(adminRepositoryProvider);
     return _TablePage(
       title: 'Viewings',
+      action: OutlinedButton.icon(
+        onPressed: () => showDialog<void>(context: context, builder: (_) => const _TimeOffDialog()),
+        icon: const Icon(Icons.event_busy_outlined),
+        label: const Text('Time off…'),
+      ),
       subtitle: _status == null
           ? 'Viewings to confirm or close, earliest first: past ones still need marking done or no-show.'
           : 'Latest first.',
@@ -1057,4 +1062,151 @@ class _RescheduleDialogState extends State<_RescheduleDialog> {
           ),
         ],
       );
+}
+
+/// Time an agent blocks out (P5-s05): no viewing can be booked or moved
+/// into it. Agents manage their own; managers anyone's.
+class _TimeOffDialog extends ConsumerStatefulWidget {
+  const _TimeOffDialog();
+  @override
+  ConsumerState<_TimeOffDialog> createState() => _TimeOffDialogState();
+}
+
+class _TimeOffDialogState extends ConsumerState<_TimeOffDialog> {
+  final _days = viewingDays(DateTime.now(), count: 26);
+  final _note = TextEditingController();
+  List<AgentBlock>? _blocks;
+  List<AgentOption> _agents = const [];
+  String? _agent, _fromDay, _toDay, _error;
+  String _fromTime = '08:00', _toTime = '18:00';
+  bool _busy = false;
+
+  /// Start times, plus 18:00 to end at the close of the viewing day.
+  static final _ends = [...viewingTimes.skip(1), '18:00'];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final who = ref.read(staffProvider)!;
+    final repo = ref.read(adminRepositoryProvider);
+    final (blocks, agents) = await (repo.timeOff(who, DateTime.now()), who.isManager ? repo.agents(who) : Future.value(const <AgentOption>[])).wait;
+    if (mounted) {
+      setState(() {
+        _blocks = blocks;
+        _agents = agents;
+      });
+    }
+  }
+
+  Future<void> _run(Future<void> Function() change) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await change();
+      await _load();
+    } on AdminActionException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _add() {
+    final who = ref.read(staffProvider)!;
+    return _run(() async {
+      await ref.read(adminActionsProvider).addTimeOff(who,
+          agentId: who.isManager ? _agent : null,
+          start: viewingSlot(_fromDay!, _fromTime),
+          end: viewingSlot(_toDay ?? _fromDay!, _toTime),
+          note: _note.text);
+      _note.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final who = ref.watch(staffProvider)!;
+    final blocks = _blocks;
+    final t = Theme.of(context).textTheme;
+    DropdownButtonFormField<String> pick(String label, String? value, List<(String, String)> options, ValueChanged<String?> onChanged) =>
+        DropdownButtonFormField<String>(
+          initialValue: value,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
+          items: [for (final (v, l) in options) DropdownMenuItem(value: v, child: Text(l))],
+          onChanged: _busy ? null : onChanged,
+        );
+    final dayOptions = [for (final d in _days) (d.value, d.label)];
+    final ready = _fromDay != null && (!who.isManager || _agent != null);
+    return AlertDialog(
+      title: const Text('Time off'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+            Text('Clients cannot book a viewing in these times, and viewings cannot be moved into them.', style: t.bodyMedium),
+            const SizedBox(height: 8),
+            if (blocks == null)
+              const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()))
+            else if (blocks.isEmpty)
+              Text('None coming up.', style: t.bodySmall)
+            else
+              for (final b in blocks)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('${shortDateTime(b.start)} to ${shortDateTime(b.end)}'),
+                  subtitle: Text([if (who.isManager) b.agentName, if (b.note != null) b.note!].join(' · ')),
+                  trailing: IconButton(
+                    tooltip: 'Remove this time off',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: _busy ? null : () => _run(() => ref.read(adminActionsProvider).removeTimeOff(who, blockId: b.id)),
+                  ),
+                ),
+            const Divider(height: 24),
+            Text('Add time off', style: t.titleSmall),
+            const SizedBox(height: 8),
+            if (who.isManager) ...[
+              pick('Agent', _agent, [for (final a in _agents) (a.id, a.name)], (v) => setState(() => _agent = v)),
+              const SizedBox(height: 8),
+            ],
+            Row(children: [
+              Expanded(child: pick('From', _fromDay, dayOptions, (v) => setState(() => _fromDay = v))),
+              const SizedBox(width: 8),
+              SizedBox(width: 140, child: pick('At', _fromTime, [for (final x in viewingTimes) (x, x)], (v) => setState(() => _fromTime = v!))),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: pick('To (same day if empty)', _toDay, dayOptions, (v) => setState(() => _toDay = v))),
+              const SizedBox(width: 8),
+              SizedBox(width: 140, child: pick('Until', _toTime, [for (final x in _ends) (x, x)], (v) => setState(() => _toTime = v!))),
+            ]),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _note,
+              maxLength: 120,
+              decoration: const InputDecoration(labelText: 'Note for the team (optional)', border: OutlineInputBorder(), isDense: true),
+            ),
+            if (_error != null) Text("Couldn't save: $_error", style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        FilledButton(onPressed: _busy || !ready ? null : _add, child: const Text('Add time off')),
+      ],
+    );
+  }
 }

@@ -171,6 +171,16 @@ class StaffMember {
 }
 
 /// An agent record staff accounts can act as.
+/// Time an agent blocked out (P5-s05): no viewing can be booked in it.
+class AgentBlock {
+  const AgentBlock({required this.id, required this.agentId, required this.agentName, required this.start, required this.end, this.note});
+  final String id, agentId, agentName;
+  final DateTime start, end;
+
+  /// For the team only; clients never see it.
+  final String? note;
+}
+
 class AgentOption {
   const AgentOption(this.id, this.name);
   final String id, name;
@@ -206,6 +216,10 @@ abstract interface class AdminRepository {
 
   /// The tenant's areas, by name, for the listing form.
   Future<List<AreaOption>> areas();
+
+  /// Time off not yet over at [now], soonest first: an agent's own, or
+  /// everyone's for managers.
+  Future<List<AgentBlock>> timeOff(StaffUser who, DateTime now);
 }
 
 /// The rows [who] may see: an agent's own, everyone's for managers.

@@ -42,6 +42,20 @@ class CallableAdminActions implements AdminActions {
   }
 
   @override
+  Future<String> addTimeOff(StaffUser who, {String? agentId, required String start, required String end, String? note}) async {
+    final r = await _run('addAgentBlock', {
+      if (agentId != null) 'agentId': agentId,
+      'start': start,
+      'end': end,
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+    }) as Map<Object?, Object?>;
+    return r['blockId'] as String;
+  }
+
+  @override
+  Future<void> removeTimeOff(StaffUser who, {required String blockId}) => _run('removeAgentBlock', {'blockId': blockId});
+
+  @override
   Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
     final r = await _run('featureListing', {'listingId': listingId, 'days': days}) as Map<Object?, Object?>;
     final until = r['featuredUntil'] as String?;
