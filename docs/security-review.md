@@ -23,6 +23,6 @@ A running record of what was checked, what was found and what is still open. Rev
 | # | Finding | Risk | Plan |
 |---|---|---|---|
 | 1 | Public callables (`createLead`, `logContactTap`, `bookViewing`) have no App Check and no rate limit | Spam leads / inflated tap counts; cost | P6 fraud controls: App Check on web and app, per-IP and per-phone limits in the Functions |
-| 2 | Lead personal data is kept past `retainUntil` until the scheduled delete exists | DPA 2019 retention | P6 data protection: scheduled Function deletes expired leads (D12) |
+| 2 | ~~Lead personal data is kept past `retainUntil`~~ Fixed: `purgeExpiredLeads` deletes expired leads and viewings nightly (D12) | — | Done; confirm the job runs after the next Functions deploy (Cloud Scheduler) |
 | 3 | Load test scripts ready (`tools/load/`, CI smoke green); no run against a deployed environment yet | Unknown capacity | Boniface runs `PROFILE=load` against dev share pages once deployed, and search once the Typesense host exists (D4); record p95 and errors here |
 | 4 | ASVS L1 pass done (`docs/asvs-l1.md`): no critical findings. Open from it: server-side password policy (console, Boniface), full CSP on the Flutter sites and alerting | Low | Re-run before stage and prod; CSP report-only on dev first; alerts in P8-s02 (Dependabot is on) |
