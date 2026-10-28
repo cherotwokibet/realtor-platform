@@ -32,6 +32,12 @@ variable "folder_id" {
   default = null
 }
 
+variable "transcode_image" {
+  description = "Image for the video transcoder Cloud Run job (D15); leave unset until one is pushed."
+  type        = string
+  default     = null
+}
+
 variable "share_pages_image" {
   description = "Image for the share pages Cloud Run service; leave unset until one is pushed."
   type        = string
@@ -67,6 +73,7 @@ module "env" {
   firestore_indexes = jsondecode(file("${local.repo}/firestore.indexes.json"))
 
   share_pages_image = var.share_pages_image
+  transcode_image   = var.transcode_image
 }
 
 output "project_id" {

@@ -81,6 +81,18 @@ export async function handleListingUpload(bucket: Bucket, db: Firestore, path: s
 
 export const VIDEO_EXT = /\.(mp4|mov|m4v|3gp)$/i;
 
+/** A video that won't be transcoded: the reason goes on the listing and the raw file is deleted. */
+export async function refuseVideo(bucket: Bucket, db: Firestore, path: string, reason: string, now = new Date()): Promise<void> {
+  const m = UPLOAD_PATH.exec(path);
+  if (!m || !VIDEO_EXT.test(path)) return;
+  const listingRef = db.collection('listings').doc(m[3]);
+  try {
+    if ((await listingRef.get()).exists) await listingRef.update({ lastMediaError: { file: path.split('/').pop(), reason, at: now } });
+  } finally {
+    await bucket.file(path).delete({ ignoreNotFound: true });
+  }
+}
+
 /**
  * Same upload paths as photos; a video becomes an HLS ladder under
  * media/listings/{listingId}/{mediaId}/hls/ plus a poster, and a

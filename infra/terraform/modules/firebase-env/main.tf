@@ -370,3 +370,65 @@ resource "google_cloud_run_v2_service_iam_member" "share_pages_public" {
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
+
+# Video transcoding (D15): a Cloud Run job with Debian's ffmpeg, started per
+# upload by the onListingVideo Function. Its account may only touch the media
+# bucket and Firestore. The image goes in the same Artifact Registry repo.
+resource "google_service_account" "transcoder" {
+  project      = google_project.this.project_id
+  account_id   = "transcode-video"
+  display_name = "Video transcoder (media bucket, Firestore)"
+  depends_on   = [google_project_service.apis]
+}
+
+resource "google_storage_bucket_iam_member" "transcoder_media" {
+  bucket = google_storage_bucket.media.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.transcoder.email}"
+}
+
+resource "google_project_iam_member" "transcoder_firestore" {
+  project = google_project.this.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.transcoder.email}"
+}
+
+resource "google_cloud_run_v2_job" "transcode" {
+  count               = var.transcode_image == null ? 0 : 1
+  project             = google_project.this.project_id
+  name                = "transcode-video"
+  location            = local.region
+  labels              = local.labels
+  deletion_protection = var.env == "prod"
+
+  template {
+    task_count = 1
+    template {
+      service_account = google_service_account.transcoder.email
+      timeout         = "1800s"
+      # The raw upload is gone after the first try, so a retry can't help.
+      max_retries = 0
+      containers {
+        image = var.transcode_image
+        env {
+          name  = "GCLOUD_PROJECT"
+          value = google_project.this.project_id
+        }
+        resources {
+          limits = { cpu = "2", memory = "2Gi" }
+        }
+      }
+    }
+  }
+  depends_on = [google_storage_bucket_iam_member.transcoder_media, google_project_iam_member.transcoder_firestore]
+}
+
+# The Functions' account may start executions with the OBJECT override.
+resource "google_cloud_run_v2_job_iam_member" "functions_start_transcode" {
+  count    = var.transcode_image == null ? 0 : 1
+  project  = google_project.this.project_id
+  location = local.region
+  name     = google_cloud_run_v2_job.transcode[0].name
+  role     = "roles/run.jobsExecutorWithOverrides"
+  member   = local.compute_sa
+}

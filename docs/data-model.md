@@ -66,7 +66,7 @@ Agents upload raw photos to `uploads/agents/<agentId>/listings/<listingId>/` (ma
 - adds `{kind: 'photo', variants, blurhash, width, height}` to `media`
 - deletes the raw upload
 
-Variants under `media/` are public and cached for a year. Video (ffmpeg → HLS) comes next.
+Variants under `media/` are public and cached for a year. Videos become an HLS ladder (720p/360p) and a poster under `media/listings/<id>/<mediaId>/`, made by the Cloud Run job `transcode-video` (D15).
 
 ## Search (P2-s05, D4)
 

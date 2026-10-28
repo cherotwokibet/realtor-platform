@@ -94,4 +94,22 @@ firebase deploy --only hosting:share --project <project-id>
 
 Open `share_url`: `/` lists live homes, `/robots.txt` and `/sitemap.xml` answer. Re-deploying is the same build, push and second apply with a new tag; the Hosting deploy is needed only when the `share` block of `firebase.json` changes. Use a new tag every time (the commit), never `latest`, so the Cloud Run revision always changes.
 
+### Video transcoder (D15)
+
+Video uploads are turned into HLS by the Cloud Run job `transcode-video`; until its image is deployed they are refused with a note on the listing ("videos are not switched on for this site yet"). The image goes in the same Artifact Registry repo. In Cloud Shell, from `~/realtor-platform`:
+
+```sh
+cd infra/terraform/tenant
+REPO=$(terraform output -raw share_pages_repo)
+cd ../../..
+TAG=$(git rev-parse --short HEAD)
+docker build -f functions/transcode.Dockerfile -t "$REPO/transcode-video:$TAG" functions
+docker push "$REPO/transcode-video:$TAG"
+cd infra/terraform/tenant
+terraform apply -var tenant_id=<id> -var env=dev -var billing_account=XXXXXX-XXXXXX-XXXXXX \
+  -var share_pages_image=<current share pages image> -var transcode_image="$REPO/transcode-video:$TAG"
+```
+
+Every later apply must pass both images, or the plan removes the service and the job: read the plan for destroys first. The job has 2 CPU, 2 GiB and 30 minutes, runs only when a video arrives and costs nothing idle.
+
 Not yet covered: the Typesense collection (P2 search), and custom domains on Hosting (needs DNS access, P8).

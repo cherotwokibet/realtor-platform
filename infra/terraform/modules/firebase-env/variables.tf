@@ -39,6 +39,12 @@ variable "storage_rules" {
   type        = string
 }
 
+variable "transcode_image" {
+  description = "Video transcoder image (functions/transcode.Dockerfile, D15). Null skips the Cloud Run job; video uploads are then refused with a note."
+  type        = string
+  default     = null
+}
+
 variable "share_pages_image" {
   description = "Share pages image (apps/share_pages/Dockerfile) in Artifact Registry. Null skips the Cloud Run service."
   type        = string

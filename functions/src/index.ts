@@ -9,7 +9,7 @@
  *   P4  sendPush        -> FCM HTTP v1 (replaces the legacy server key)
  *   P6  mpesaStkPush / mpesaCallback -> Daraja
  */
-import { initializeApp } from 'firebase-admin/app';
+import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { setGlobalOptions } from 'firebase-functions/v2';
@@ -23,7 +23,8 @@ import { type SearchConfig, searchConfig } from './search/config';
 import { searchRelevantChange, syncListing } from './search/sync';
 import { getStorage } from 'firebase-admin/storage';
 import { mediaBucketName } from './media/bucket';
-import { handleListingUpload, handleListingVideo } from './media/upload';
+import { handleListingUpload, refuseVideo, UPLOAD_PATH, VIDEO_EXT } from './media/upload';
+import { startTranscode } from './media/transcode';
 import { callerFrom } from './api/auth';
 import * as leads from './api/leads';
 import * as listings from './api/listings';
@@ -83,11 +84,16 @@ export const onListingPhoto = onObjectFinalized({ bucket: mediaBucketName(proces
   if (r.status === 'rejected') console.warn(`rejected ${event.data.name}: ${r.reason}`);
 });
 
-// Same paths, video files: ffmpeg -> HLS ladder + poster. Needs an ffmpeg
-// binary at FFMPEG_PATH (or on PATH); see docs/decisions.md D15.
-export const onListingVideo = onObjectFinalized({ bucket: mediaBucketName(process.env), memory: '2GiB', cpu: 2, timeoutSeconds: 540 }, async (event) => {
-  const r = await handleListingVideo(getStorage().bucket(event.data.bucket), getFirestore(), event.data.name);
-  if (r.status === 'rejected') console.warn(`rejected ${event.data.name}: ${r.reason}`);
+// Same paths, video files (D15): the Cloud Run job transcode-video makes
+// the HLS ladder and poster; this only starts it for the uploaded object.
+export const onListingVideo = onObjectFinalized({ bucket: mediaBucketName(process.env) }, async (event) => {
+  const path = event.data.name;
+  if (!UPLOAD_PATH.test(path) || !VIDEO_EXT.test(path)) return;
+  const token = async () => (await applicationDefault().getAccessToken()).access_token;
+  const started = await startTranscode(path, { project: process.env.GCLOUD_PROJECT ?? '', region: REGION, token });
+  if (started === 'no-job') {
+    await refuseVideo(getStorage().bucket(event.data.bucket), getFirestore(), path, 'videos are not switched on for this site yet');
+  }
 });
 
 // Search (D4): live listings mirrored into <TENANT_ID>_listings on Typesense.
