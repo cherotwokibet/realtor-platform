@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_admin/src/app.dart';
 import 'package:realtor_admin/src/demo_admin.dart';
 import 'package:realtor_admin/src/format.dart';
+import 'package:realtor_admin/src/listing_media.dart';
 import 'package:realtor_admin/src/providers.dart';
 import 'package:realtor_admin/src/session.dart';
 import 'package:realtor_core/realtor_core.dart';
@@ -105,7 +108,15 @@ class SlowActions implements AdminActions {
 
 late SlowActions slow;
 
-Future<void> open(WidgetTester tester, {StaffUser? as, double width = 1280, bool slowActions = false}) async {
+class _FakePicker implements FilePicker {
+  _FakePicker(this.files);
+  final List<PickedFile> files;
+  @override
+  Future<List<PickedFile>> pick({required String accept}) async => files;
+}
+
+Future<void> open(WidgetTester tester,
+    {StaffUser? as, double width = 1280, bool slowActions = false, List<Override> overrides = const []}) async {
   tester.view.physicalSize = Size(width, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -115,6 +126,7 @@ Future<void> open(WidgetTester tester, {StaffUser? as, double width = 1280, bool
     tenantProvider.overrideWithValue(tenant()),
     demoAdminProvider.overrideWithValue(demo),
     if (slowActions) adminActionsProvider.overrideWithValue(slow),
+    ...overrides,
   ]);
   addTearDown(container.dispose);
   await tester.pumpWidget(UncontrolledProviderScope(container: container, child: const AdminApp()));
@@ -647,6 +659,39 @@ void main() {
     await tester.pumpAndSettle();
     final row = (await container.read(adminRepositoryProvider).listings(manager, limit: 1)).rows.single;
     expect((row.id, row.title, row.status), (first.id, '${first.title}, renovated', 'pending'));
+  });
+
+  testWidgets('photos: a new listing says to save first; an existing one uploads, refusing what the rules would', (tester) async {
+    final picked = <PickedFile>[
+      (name: 'lounge.jpg', bytes: Uint8List(2048), type: 'image/jpeg'),
+      (name: 'notes.pdf', bytes: Uint8List(10), type: 'application/pdf'),
+      (name: 'tour.mp4', bytes: Uint8List(4096), type: 'video/mp4'),
+    ];
+    await open(tester, as: wanjiku, overrides: [filePickerProvider.overrideWithValue(_FakePicker(picked))]);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New listing'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save the listing first, then open it again to add photos.'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    final mine = (await container.read(adminRepositoryProvider).listings(wanjiku, limit: 1)).rows.single;
+    await tester.tap(find.text(mine.title).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Photos and video: 0 photos'), findsOneWidget);
+    await tapVisible(tester, find.text('Add photos or a video'));
+    expect(find.textContaining('notes.pdf: not a photo or video'), findsOneWidget);
+    expect(find.text('Photos and video: 1 photo, 1 video'), findsOneWidget);
+    expect(find.textContaining('Uploaded 2.'), findsOneWidget);
+  });
+
+  test('upload paths follow storage.rules: agents under their agent id, managers under their uid', () {
+    final at = DateTime.utc(2026, 10, 28);
+    expect(uploadPath(wanjiku, 'l1', 'My Lounge (1).jpg', at),
+        'uploads/agents/agent-wanjiku/listings/l1/${at.millisecondsSinceEpoch}-My-Lounge-1-.jpg');
+    expect(uploadPath(manager, 'l1', 'a.jpg', at), 'uploads/staff/${manager.uid}/listings/l1/${at.millisecondsSinceEpoch}-a.jpg');
+    expect(uploadProblem((name: 'big.jpg', bytes: Uint8List(maxPhotoBytes), type: 'image/jpeg')), contains('under 20 MB'));
   });
 
   testWidgets('agents get no import button', (tester) async {

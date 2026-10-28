@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
 
 import 'format.dart';
+import 'listing_media.dart';
 import 'providers.dart';
 
 /// Create or edit a listing (P5-s02). Saving sends it for review: it goes to
@@ -199,6 +200,11 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
                         (v) => setState(() => _draft = d.copyWith(agentId: v)),
                         error: _tried && d.agentId == null ? 'Pick the agent' : null),
                   ],
+                  gap(),
+                  if (widget.listingId == null)
+                    Text('Save the listing first, then open it again to add photos.', style: Theme.of(context).textTheme.bodySmall)
+                  else
+                    ListingMediaSection(listingId: widget.listingId!),
                   if (_saveError != null) ...[
                     gap(),
                     Text("Couldn't save: $_saveError", style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -217,5 +223,113 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
         ),
       ],
     );
+  }
+}
+
+/// The listing's photos and videos, and a button to add more. Uploads are
+/// checked and resized by the media pipeline, so they appear after a moment.
+class ListingMediaSection extends ConsumerStatefulWidget {
+  const ListingMediaSection({super.key, required this.listingId});
+  final String listingId;
+
+  @override
+  ConsumerState<ListingMediaSection> createState() => _ListingMediaSectionState();
+}
+
+class _ListingMediaSectionState extends ConsumerState<ListingMediaSection> {
+  ListingMediaState? _state;
+  String? _status;
+  final _problems = <String>[];
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final s = await ref.read(listingMediaProvider).state(ref.read(staffProvider)!, widget.listingId);
+    if (mounted) setState(() => _state = s);
+  }
+
+  Future<void> _add() async {
+    final files = await ref.read(filePickerProvider).pick(accept: [...photoTypes, ...videoTypes].join(','));
+    if (files.isEmpty || !mounted) return;
+    final media = ref.read(listingMediaProvider), who = ref.read(staffProvider)!;
+    setState(() {
+      _busy = true;
+      _problems.clear();
+    });
+    var sent = 0;
+    for (final (i, f) in files.indexed) {
+      final problem = uploadProblem(f);
+      if (problem != null) {
+        _problems.add(problem);
+        continue;
+      }
+      setState(() => _status = 'Uploading ${i + 1} of ${files.length}…');
+      try {
+        await media.upload(who, widget.listingId, f);
+        sent++;
+      } on Object catch (e) {
+        _problems.add('${f.name}: could not upload ($e)');
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _status = sent == 0 ? null : 'Uploaded $sent. They are checked and resized, then appear here; press Refresh in a minute.';
+    });
+    await _refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _state, media = ref.watch(listingMediaProvider);
+    final t = Theme.of(context).textTheme, err = TextStyle(color: Theme.of(context).colorScheme.error);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Expanded(
+          child: Text(
+            s == null
+                ? 'Photos and video'
+                : 'Photos and video: ${s.thumbs.length} photo${s.thumbs.length == 1 ? '' : 's'}'
+                    '${s.videos > 0 ? ', ${s.videos} video${s.videos == 1 ? '' : 's'}' : ''}',
+            style: t.titleSmall,
+          ),
+        ),
+        IconButton(tooltip: 'Refresh', onPressed: _busy ? null : _refresh, icon: const Icon(Icons.refresh)),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _add,
+          icon: const Icon(Icons.add_photo_alternate_outlined),
+          label: const Text('Add photos or a video'),
+        ),
+      ]),
+      if (s != null && s.thumbs.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final p in s.thumbs)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: SizedBox.square(
+                  dimension: 72,
+                  child: switch (media.url(p)) {
+                    final String u => Image.network(u, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined)),
+                    null => const Icon(Icons.image_outlined),
+                  },
+                ),
+              ),
+          ]),
+        ),
+      if (s?.lastError != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text('Last upload refused: ${s!.lastError}', style: err)),
+      if (_status != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_status!, style: t.bodySmall)),
+      for (final p in _problems) Text(p, style: err),
+      Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text('Photos at least 1024 px on the long side, under 20 MB. A video up to 3 minutes, 720p or better, under 200 MB.', style: t.bodySmall),
+      ),
+    ]);
   }
 }
