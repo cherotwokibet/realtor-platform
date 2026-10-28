@@ -43,7 +43,7 @@ Inputs are validated with zod in `functions/src/api/`, and the stored document i
 | `logContactTap` | anyone | Adds 1 to a **live** listing's `stats.calls` or `stats.whatsapps` (D13). Stores no personal data and no lead. Counter-only writes do not re-sync search |
 | `bookViewing` | anyone, with the consent tick | Requests a viewing of a **live** listing with its agent: a half-hour slot, Mon–Sat, 08:00–17:30 Nairobi time, at least 2 hours and at most 30 days ahead. One active booking per agent per slot (id `<agentId>_<slot ms>`; a cancelled slot frees up). The client's name and phone are also stored as a lead (channel `viewing`, consent and 24-month retention) and counted in `stats.leads`. Fee is 0 until M-Pesa (P6) |
 | `updateLeadStage` | the lead's agent, or a manager | new → contacted → viewing → offer → won, any stage → lost, and lost → contacted |
-| `submitListing` | agents (as themselves), managers (for any agent) | Create or edit → `pending`; sets slug (unique), geohash, stats and timestamps; the area must exist |
+| `submitListing` | agents (as themselves), managers (for any agent) | Create or edit → `pending`; sets slug (unique), geohash, stats and timestamps; the area must exist. `media` may only reorder or drop the listing's own pipeline-made entries (the stored copies are kept); left out, the media stay as they are |
 | `moderateListing` | managers | approve (live, verified for 30 days), reject (needs a reason), expire, let, sold; status moves from `listing-rules.ts` |
 
 Still to come: rate limits on the public callables (P6 fraud controls), confirming and cancelling viewings from admin (P5 bookings), and agent availability instead of fixed hours.

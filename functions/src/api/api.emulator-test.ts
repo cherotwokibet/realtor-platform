@@ -194,6 +194,33 @@ describe('listings', () => {
     assert.equal('rejection' in l, false);
   });
 
+  test("media can be reordered or dropped, never borrowed; leaving it out keeps it", async () => {
+    const photo = (listingId: string, id: string) => ({
+      kind: 'photo',
+      variants: { thumb: `media/listings/${listingId}/${id}/thumb.webp`, card: `media/listings/${listingId}/${id}/card.webp`, full: `media/listings/${listingId}/${id}/full.webp` },
+      blurhash: 'LEHV6nWB2yk8pyo0adR*.7kCMdnj',
+      width: 1600,
+      height: 1200,
+    });
+    const { listingId } = await submitListing(db, wanjiku, newListing, now);
+    const ref = db.collection('listings').doc(listingId);
+    const [a, b] = [photo(listingId, 'aaaa'), photo(listingId, 'bbbb')];
+    await ref.update({ media: [a, b] }); // what the media pipeline would have added
+    const other = photo('listing-002', 'cccc');
+    await db.collection('listings').doc('listing-002').update({ media: [other] });
+
+    // Reorder and drop, sending a trimmed copy: the stored entry is what is kept.
+    await submitListing(db, wanjiku, { ...newListing, listingId, media: [{ kind: 'photo', variants: { full: b.variants.full } }] }, now);
+    assert.deepEqual((await ref.get()).get('media'), [b]);
+    await submitListing(db, wanjiku, { ...newListing, listingId }, now);
+    assert.deepEqual((await ref.get()).get('media'), [b], 'no media in the edit keeps what is there');
+
+    await rejectsWith(submitListing(db, wanjiku, { ...newListing, listingId, media: [b, other] }, now), 'invalid-argument');
+    await rejectsWith(submitListing(db, wanjiku, { ...newListing, listingId, media: [b, b] }, now), 'invalid-argument');
+    await rejectsWith(submitListing(db, wanjiku, { ...newListing, media: [other] }, now), 'invalid-argument');
+    assert.deepEqual((await ref.get()).get('media'), [b]);
+  });
+
   test("agents can't edit each other's listings", async () => {
     const { listingId } = await submitListing(db, wanjiku, newListing, now);
     await rejectsWith(submitListing(db, otieno, { ...newListing, listingId, priceKES: 1 }), 'permission-denied');
