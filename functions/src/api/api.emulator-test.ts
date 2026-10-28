@@ -181,6 +181,17 @@ describe('listings', () => {
       ['listing.submit', 'u1', listingId, null, 'pending'],
     ]);
   });
+  test('a rejection never reaches a live listing: resubmitting replaces the document', async () => {
+    const { listingId } = await submitListing(db, wanjiku, newListing, now);
+    await moderateListing(db, manager, { listingId, action: 'reject', reason: 'Blurry photos' }, now);
+    assert.equal((await db.collection('listings').doc(listingId).get()).get('rejection.reason'), 'Blurry photos');
+    await submitListing(db, wanjiku, { ...newListing, listingId }, now);
+    await moderateListing(db, manager, { listingId, action: 'approve' }, now);
+    const l = (await db.collection('listings').doc(listingId).get()).data()!;
+    assert.equal(l.status, 'live');
+    assert.equal('rejection' in l, false);
+  });
+
   test("agents can't edit each other's listings", async () => {
     const { listingId } = await submitListing(db, wanjiku, newListing, now);
     await rejectsWith(submitListing(db, otieno, { ...newListing, listingId, priceKES: 1 }), 'permission-denied');
