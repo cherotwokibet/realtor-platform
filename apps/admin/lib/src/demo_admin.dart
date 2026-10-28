@@ -27,6 +27,15 @@ const _agents = {
 const _demoReplies = {'agent-wanjiku': 25, 'agent-otieno': 140};
 
 const _areas = ['kilimani', 'westlands', 'kileleshwa', 'lavington', 'south-b', 'ruaka'];
+/// Area centres for the editor's first map pin.
+const _areaCentres = {
+  'kilimani': (-1.2921, 36.7856),
+  'westlands': (-1.2676, 36.8108),
+  'kileleshwa': (-1.2833, 36.7833),
+  'lavington': (-1.2799, 36.7680),
+  'south-b': (-1.3110, 36.8360),
+  'ruaka': (-1.2050, 36.7770),
+};
 const _kinds = ['2 bedroom apartment', '1 bedroom apartment', 'Studio', '3 bedroom maisonette', 'Bedsitter'];
 const _first = [
   'Amina',
@@ -304,6 +313,66 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
       created.add(i + 1);
     }
     return ImportOutcome(created: created, failed: failed);
+  }
+
+  /// Drafts saved in the editor; seeded listings get one made up on first open.
+  final _drafts = <String, ListingDraft>{};
+
+  @override
+  Future<List<AreaOption>> areas() async => [
+        for (final e in _areaCentres.entries) (slug: e.key, name: _areaName(e.key), lat: e.value.$1, lng: e.value.$2),
+      ]..sort((a, b) => a.name.compareTo(b.name));
+
+  @override
+  Future<ListingDraft?> listingDraft(StaffUser who, String listingId) async {
+    final row = _listings.where((l) => l.id == listingId).firstOrNull;
+    if (row == null || (!who.isManager && row.agentId != who.agentId)) return null;
+    final c = _areaCentres[row.area] ?? (-1.2921, 36.8219);
+    return _drafts[listingId] ??
+        ListingDraft(
+          listingId: row.id,
+          title: row.title,
+          type: row.title.contains('Studio') ? 'studio' : row.title.contains('Bedsitter') ? 'bedsitter' : 'apartment',
+          beds: int.tryParse(row.title.split(' ').first) ?? 0,
+          priceKES: row.priceKES,
+          lat: c.$1,
+          lng: c.$2,
+          area: row.area,
+          agentId: row.agentId,
+        );
+  }
+
+  @override
+  Future<String> submitListing(StaffUser who, ListingDraft draft) async {
+    final agentId = who.isManager ? draft.agentId : who.agentId;
+    if (agentId == null || !_agents.containsKey(agentId)) throw AdminActionException('invalid-argument', 'agentId: pick an agent');
+    final problems = draft.problems();
+    if (problems.isNotEmpty) throw AdminActionException('invalid-argument', problems.entries.map((e) => '${e.key}: ${e.value}').join('; '));
+    final at = _clock();
+    final i = draft.listingId == null ? -1 : _listings.indexWhere((l) => l.id == draft.listingId);
+    if (draft.listingId != null && i < 0) throw AdminActionException('not-found', 'no such listing');
+    if (i >= 0 && !who.isManager && _listings[i].agentId != who.agentId) throw AdminActionException('permission-denied', 'not your listing');
+    final id = i >= 0 ? _listings[i].id : 'listing-new-${_listings.length + 1}';
+    final before = i >= 0 ? _listings[i] : null;
+    final row = StaffListingRow(
+      id: id,
+      slug: before?.slug ?? draft.title.toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-'),
+      title: draft.title.trim(),
+      area: draft.area,
+      priceKES: draft.priceKES,
+      status: 'pending',
+      agentId: agentId,
+      agentName: _agents[agentId]!,
+      updatedAt: at,
+      leads: before?.leads ?? 0,
+      calls: before?.calls ?? 0,
+      whatsapps: before?.whatsapps ?? 0,
+    );
+    i >= 0 ? _listings.removeAt(i) : null;
+    _listings.insert(0, row);
+    _drafts[id] = ListingDraft.fromDoc(id, {...draft.toCallable(), 'agentId': agentId});
+    _log(who, 'listing.submit', row.title, before?.status ?? 'none', 'pending', at: at);
+    return id;
   }
 
   /// How many times the team was read (tests check screens don't refetch needlessly).

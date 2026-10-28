@@ -1,3 +1,4 @@
+import 'listing_draft.dart';
 import 'staff.dart';
 
 /// Lead pipeline stages, in order (functions/src/model/schema.ts).
@@ -199,6 +200,12 @@ abstract interface class AdminRepository {
 
   /// Agent records, by name, to pick from when giving someone the agent role.
   Future<List<AgentOption>> agents(StaffUser who);
+
+  /// One listing as the editor shows it; null when missing or not [who]'s.
+  Future<ListingDraft?> listingDraft(StaffUser who, String listingId);
+
+  /// The tenant's areas, by name, for the listing form.
+  Future<List<AreaOption>> areas();
 }
 
 /// The rows [who] may see: an agent's own, everyone's for managers.

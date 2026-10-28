@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
 
 import 'format.dart';
+import 'listing_editor.dart';
 import 'paged_table.dart';
 import 'providers.dart';
 
@@ -383,22 +384,37 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
     });
   }
 
+  /// Opens the editor; a save sends the listing to Pending.
+  Future<void> _edit(String? listingId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await showDialog<String>(context: context, builder: (_) => ListingEditorDialog(listingId: listingId));
+    if (saved == null || !mounted) return;
+    messenger.showSnackBar(const SnackBar(content: Text('Saved. The listing waits in Pending for approval.')));
+    setState(() => _reload++);
+  }
+
   @override
   Widget build(BuildContext context) {
     final who = ref.watch(staffProvider)!;
     final repo = ref.watch(adminRepositoryProvider);
     return _TablePage(
       title: 'Listings',
-      action: who.isManager
-          ? OutlinedButton.icon(
-              onPressed: () async {
-                final imported = await showDialog<int>(context: context, builder: (_) => const _ImportDialog());
-                if ((imported ?? 0) > 0 && mounted) setState(() => _reload++);
-              },
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Import CSV…'),
-            )
-          : null,
+      action: Wrap(spacing: 8, runSpacing: 8, children: [
+        FilledButton.icon(
+          onPressed: () => _edit(null),
+          icon: const Icon(Icons.add),
+          label: const Text('New listing'),
+        ),
+        if (who.isManager)
+          OutlinedButton.icon(
+            onPressed: () async {
+              final imported = await showDialog<int>(context: context, builder: (_) => const _ImportDialog());
+              if ((imported ?? 0) > 0 && mounted) setState(() => _reload++);
+            },
+            icon: const Icon(Icons.upload_file),
+            label: const Text('Import CSV…'),
+          ),
+      ]),
       subtitle:
           who.isManager ? 'Every listing, most recently updated first.' : 'Your listings, most recently updated first.',
       filters: FilterChips(
@@ -420,9 +436,13 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
             'Title',
             (r) {
               final featured = r.featuredAt(DateTime.now());
-              if (!r.photoMatch && !featured) return Text(r.title);
+              final title = Tooltip(
+                message: 'Edit ${r.title}',
+                child: InkWell(onTap: () => _edit(r.id), child: Text(r.title, style: const TextStyle(decoration: TextDecoration.underline))),
+              );
+              if (!r.photoMatch && !featured) return title;
               return Row(mainAxisSize: MainAxisSize.min, children: [
-                Flexible(child: Text(r.title)),
+                Flexible(child: title),
                 if (featured) ...[
                   const SizedBox(width: 6),
                   Tooltip(

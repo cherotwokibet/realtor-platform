@@ -1,3 +1,4 @@
+import 'listing_draft.dart';
 import 'staff.dart';
 
 /// Lead stage moves, listing status moves and moderation actions. A copy of
@@ -105,6 +106,11 @@ abstract interface class AdminActions {
   /// `featureListing` (P5-s02), managers: a live listing ranks first in
   /// search for [days]; 0 stops it. Completes with the new end, or null.
   Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days});
+
+  /// `submitListing` (P5-s02): creates or edits a listing and sends it for
+  /// review (pending). Agents submit their own; managers for any agent.
+  /// Completes with the listing id.
+  Future<String> submitListing(StaffUser who, ListingDraft draft);
 
   /// `importListings` (P5-s02), managers: each row (see [ListingCsv]) becomes
   /// a pending listing; at most [importChunk] rows per call.

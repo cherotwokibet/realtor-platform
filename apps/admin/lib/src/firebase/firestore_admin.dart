@@ -168,6 +168,34 @@ class FirestoreAdminRepository implements AdminRepository {
         for (final e in (await _agents()).entries) AgentOption(e.key, e.value)
       ]..sort((a, b) => a.name.compareTo(b.name));
 
+  @override
+  Future<ListingDraft?> listingDraft(StaffUser who, String listingId) async {
+    try {
+      final d = await _db.collection('listings').doc(listingId).get();
+      final data = d.data();
+      if (data == null || (who.agentScope != null && data['agentId'] != who.agentScope)) return null;
+      final geo = data['geo'];
+      return ListingDraft.fromDoc(d.id, {
+        ...data,
+        if (geo is GeoPoint) 'geo': {'lat': geo.latitude, 'lng': geo.longitude},
+      });
+    } on FirebaseException catch (e) {
+      // The rules refuse another agent's draft: the same as missing.
+      if (e.code == 'permission-denied') return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<AreaOption>> areas() async {
+    final snap = await _db.collection('areas').get();
+    return [
+      for (final d in snap.docs)
+        if (d.data()['centre'] case {'lat': final num lat, 'lng': final num lng})
+          (slug: d.id, name: d.data()['name'] as String? ?? d.id, lat: lat.toDouble(), lng: lng.toDouble()),
+    ]..sort((a, b) => a.name.compareTo(b.name));
+  }
+
   /// One page of [q] after the document [after], plus the next cursor.
   Future<RowPage<T>> _page<T>(
     String collection,

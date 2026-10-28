@@ -43,6 +43,12 @@ class CallableAdminActions implements AdminActions {
   }
 
   @override
+  Future<String> submitListing(StaffUser who, ListingDraft draft) async {
+    final r = await _run('submitListing', draft.toCallable()) as Map<Object?, Object?>;
+    return r['listingId'] as String;
+  }
+
+  @override
   Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows) async {
     final r = await _run('importListings', {'rows': rows}) as Map<Object?, Object?>;
     return ImportOutcome(

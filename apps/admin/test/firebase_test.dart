@@ -131,6 +131,27 @@ void main() {
       expect((l2.priceKES, l2.leads, l2.calls, l2.whatsapps, l2.agentName), (50002, 2, 4, 0, 'Agent A'));
     });
 
+    test('the editor reads a listing (own only for agents) and the areas with their centres', () async {
+      await db.collection('listings').doc('l2').update({
+        'purpose': 'rent',
+        'type': 'apartment',
+        'beds': 2,
+        'baths': 1,
+        'depositMonths': 2,
+        'geo': {'lat': -1.29, 'lng': 36.78, 'geohash': 'kzf0'},
+        'amenities': ['Borehole'],
+      });
+      final d = (await repo.listingDraft(manager, 'l2'))!;
+      expect((d.listingId, d.title, d.beds, d.depositMonths, d.lat, d.lng, d.agentId), ('l2', 'Listing 2', 2, 2, -1.29, 36.78, 'agent-a'));
+      expect(d.amenities, ['Borehole']);
+      expect(await repo.listingDraft(agent, 'l1'), isNull, reason: "another agent's listing");
+      expect(await repo.listingDraft(manager, 'missing'), isNull);
+
+      await db.collection('areas').doc('westlands').set({'name': 'Westlands', 'centre': {'lat': -1.27, 'lng': 36.81}});
+      await db.collection('areas').doc('kilimani').set({'name': 'Kilimani', 'centre': {'lat': -1.29, 'lng': 36.79}});
+      expect([for (final a in await repo.areas()) (a.slug, a.lat)], [('kilimani', -1.29), ('westlands', -1.27)]);
+    });
+
     test('managers see which listings have a photo flagged; agents do not', () async {
       await db.collection('photoFlags').doc('l2_abc').set({'listingId': 'l2', 'mediaId': 'abc', 'matches': []});
       final rows = (await repo.listings(manager)).rows;
@@ -287,6 +308,19 @@ void main() {
       expect(calls.last.$1, 'importListings');
       expect(r.created, [1]);
       expect((r.failed.single.row, r.failed.single.error), (2, 'agentId: no agent "ghost"'));
+    });
+
+    test('submitListing sends the draft and returns the listing id', () async {
+      final calls = <(String, Map<String, Object?>)>[];
+      final actions = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return {'listingId': 'new-1', 'slug': 'x'};
+      });
+      const draft = ListingDraft(title: 'Studio, Kilimani', type: 'studio', beds: 0, priceKES: 25000, lat: -1.29, lng: 36.78, area: 'kilimani', agentId: 'agent-a');
+      expect(await actions.submitListing(manager, draft), 'new-1');
+      expect(calls.single.$1, 'submitListing');
+      expect(calls.single.$2['priceKES'], 25000);
+      expect(calls.single.$2.containsKey('media'), isFalse, reason: 'media stays as it is');
     });
 
     test('updateViewing calls updateViewingStatus', () async {

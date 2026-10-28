@@ -74,6 +74,13 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<String> submitListing(StaffUser who, ListingDraft draft) async {
+    calls++;
+    await gate.future;
+    return inner.submitListing(who, draft);
+  }
+
+  @override
   Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows) async {
     calls++;
     await gate.future;
@@ -594,6 +601,52 @@ void main() {
     await tester.pumpAndSettle();
     final pending = (await container.read(adminRepositoryProvider).listings(manager, status: 'pending', limit: 50)).rows;
     expect(pending.map((r) => r.title), contains('Imported studio Kilimani'));
+  });
+
+  testWidgets('an agent adds a listing: problems shown first, then it lands in Pending as theirs', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New listing'));
+    await tester.pumpAndSettle();
+    expect(find.text('Agent'), findsNothing, reason: 'an agent lists as themself');
+    await tester.tap(find.text('Save and send for review'));
+    await tester.pumpAndSettle();
+    expect(find.text('Use 5 to 120 characters.'), findsOneWidget);
+    expect(find.text('Pick an area.'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Title'), '2 bedroom flat near Yaya');
+    await tester.enterText(find.widgetWithText(TextField, 'Rent a month (KES)'), '68,000');
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'Area'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kilimani').last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Latitude')).controller!.text, '-1.292100');
+    await tester.tap(find.text('Save and send for review'));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved. The listing waits in Pending for approval.'), findsOneWidget);
+
+    final mine = (await container.read(adminRepositoryProvider).listings(wanjiku, status: 'pending', limit: 50)).rows;
+    final row = mine.firstWhere((r) => r.title == '2 bedroom flat near Yaya');
+    expect((row.priceKES, row.area, row.agentId), (68000, 'kilimani', wanjiku.agentId));
+    final draft = await container.read(adminRepositoryProvider).listingDraft(wanjiku, row.id);
+    expect((draft!.lat, draft.lng), (-1.2921, 36.7856));
+  });
+
+  testWidgets('a manager edits a listing from its title; the edit goes back to Pending', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    final first = (await container.read(adminRepositoryProvider).listings(manager, limit: 1)).rows.single;
+    await tester.tap(find.text(first.title).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Edit listing'), findsOneWidget);
+    expect(find.widgetWithText(DropdownButtonFormField<String>, 'Agent'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'Title'), '${first.title}, renovated');
+    await tester.tap(find.text('Save and send for review'));
+    await tester.pumpAndSettle();
+    final row = (await container.read(adminRepositoryProvider).listings(manager, limit: 1)).rows.single;
+    expect((row.id, row.title, row.status), (first.id, '${first.title}, renovated', 'pending'));
   });
 
   testWidgets('agents get no import button', (tester) async {
