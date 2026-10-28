@@ -173,6 +173,12 @@ describe('listings', () => {
     await moderateListing(db, manager, { listingId, action: 'reject', reason: 'short stays are off' }, now);
     await submitListing(db, wanjiku, newListing, now);
   });
+  test('a live listing whose purpose is switched off cannot be confirmed again', async () => {
+    const { listingId } = await submitListing(db, wanjiku, { ...newListing, purpose: 'short-stay' }, now);
+    await moderateListing(db, manager, { listingId, action: 'approve' }, now);
+    await db.collection('config').doc('tenant').set({ features: { shortStay: false } });
+    await rejectsWith(confirmListing(db, wanjiku, { listingId }, now), 'failed-precondition');
+  });
   test('rejects decimals, unknown areas and non-staff', async () => {
     await rejectsWith(submitListing(db, wanjiku, { ...newListing, priceKES: 70000.5 }), 'invalid-argument');
     await rejectsWith(submitListing(db, wanjiku, { ...newListing, area: 'atlantis' }), 'invalid-argument');

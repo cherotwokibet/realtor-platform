@@ -149,12 +149,14 @@ export async function confirmListing(db: Firestore, caller: Caller, input: unkno
   const req = parseInput(confirmListingInput, input);
   const ref = db.collection('listings').doc(req.listingId);
   const expiresAt = verificationExpiry(now);
+  const features = await tenantFeatures(db);
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'no such listing');
     if (!isManager(caller) && snap.get('agentId') !== caller.agentId) throw new HttpsError('permission-denied', 'not your listing');
     const from = snap.get('status') as ListingStatus;
     if (from !== 'live' && from !== 'expired') throw new HttpsError('failed-precondition', `a ${from} listing cannot be confirmed`);
+    requirePurposeOn(features, snap.get('purpose'));
     tx.update(ref, { status: 'live', verifiedAt: now, expiresAt, updatedAt: now });
     audit(tx, db, caller, { action: 'listing.confirm', target: { collection: 'listings', id: ref.id, label: snap.get('title') as string | undefined }, from, to: 'live' }, now);
   });
