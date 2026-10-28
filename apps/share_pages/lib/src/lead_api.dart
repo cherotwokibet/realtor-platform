@@ -68,8 +68,8 @@ class CallableLeadApi implements LeadApi {
   Future<void> createLead({required String listingId, required String phone, String? name, String? message}) => _call('createLead', {
         'listingId': listingId,
         'channel': 'form',
-        'contact': {'phone': phone, if (name != null) 'name': name},
-        if (message != null) 'message': message,
+        'contact': {'phone': phone, 'name': ?name},
+        'message': ?message,
         'consent': true,
       });
 
@@ -83,7 +83,7 @@ class CallableLeadApi implements LeadApi {
         'listingId': listingId,
         'slot': slot,
         'client': {'name': name, 'phone': phone},
-        if (message != null) 'message': message,
+        'message': ?message,
         'consent': true,
       });
 }
