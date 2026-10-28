@@ -14,7 +14,7 @@ Status: ✅ holds · ⚠️ gap, with plan · ➖ not applicable. Grouped by ASV
 - ✅ Money, approval, verification and commission logic is in Functions only (D7). Clients only read, except their own `savedSearches`, whose shape the rules now pin.
 - ✅ State changes follow `functions/src/model/transitions.json`. An invalid move is a `failed-precondition`.
 - ✅ Public callables are rate-limited per contact and per listing, inside the same transaction, so a refused call writes nothing (`functions/src/api/ratelimit.ts`). The share pages form has a honeypot and answers a limit with 429 and a plain message. Limits are not per IP: the share pages call from one server address.
-- ⚠️ No App Check yet. **Plan:** P6-s05 adds it to the app and web, then enforces it.
+- ⚠️ No App Check yet. **Plan:** D16 (Proposed): App Check on the app and web, and service-account-only twins for the share pages server, then enforce.
 
 ## V3 Web frontend security
 - ✅ Share pages send CSP `default-src 'none'` with only inline styles, `https:` images and same-origin form posts. They also send `frame-ancestors 'none'`, nosniff, `X-Frame-Options: DENY`, a strict Referrer-Policy and a closed Permissions-Policy (test: *every response carries the security headers*).
