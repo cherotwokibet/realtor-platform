@@ -13,7 +13,7 @@ test('ENFORCE_APP_CHECK names the callables to enforce; unset enforces none', ()
 test('twin names and invoker', () => {
   assert.equal(twinName('createLead'), 'shareCreateLead');
   assert.equal(twinName('logContactTap'), 'shareLogContactTap');
-  assert.equal(sharePagesInvoker('rte-realtor-dev'), 'share-pages@rte-realtor-dev.iam.gserviceaccount.com');
+  assert.equal(sharePagesInvoker('demo-project'), 'share-pages@demo-project.iam.gserviceaccount.com');
 });
 
 async function call(handler: (d: unknown) => Promise<unknown>, method: string, reqBody: unknown) {
