@@ -31,6 +31,7 @@ class ListingPage extends StatelessComponent {
     this.enquiry,
     this.viewing,
     this.viewingDays = const [],
+    this.areaMedianRentKES,
     super.key,
   });
   final TenantConfig tenant;
@@ -48,6 +49,9 @@ class ListingPage extends StatelessComponent {
 
   /// Days offered in the viewing form (see `viewingDays`).
   final List<({String value, String label})> viewingDays;
+
+  /// The area's typical rent, for the "below typical rent" note on rentals.
+  final int? areaMedianRentKES;
 
   @override
   Component build(BuildContext context) {
@@ -72,6 +76,11 @@ class ListingPage extends StatelessComponent {
         h1([Component.text(l.title)]),
         p(classes: 'price', priceText(l)),
         p(classes: 'facts', [Component.text(facts)]),
+        if (l.purpose == Purpose.rent)
+          if (percentBelowTypical(l.priceKES, areaMedianRentKES) case final int pct)
+            p(classes: 'insight', [
+              Component.text('$pct% below the typical rent in ${ListingSeo.placeName(l.area)} (${formatKes(areaMedianRentKES!)} a month)'),
+            ]),
         if (l.photos.isNotEmpty)
           div(classes: 'photos', [
             for (final (i, ph) in l.photos.take(6).indexed)

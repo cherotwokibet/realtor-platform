@@ -33,12 +33,23 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
   final clock = now ?? DateTime.now;
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
       {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {
-    final agent = listing.agentId == null || !_docId.hasMatch(listing.agentId!) ? null : await source.agent(listing.agentId!);
+    final (agent, area) = await (
+      listing.agentId == null || !_docId.hasMatch(listing.agentId!) ? Future<ShareAgent?>.value() : source.agent(listing.agentId!),
+      listing.purpose == Purpose.rent && _slug.hasMatch(listing.area) ? source.area(listing.area) : Future<ShareArea?>.value(),
+    ).wait;
     final q = req.url.queryParameters;
     final enquiry = leads == null ? null : form ?? EnquiryFormState(sent: q['sent'] == '1');
     final viewing = leads == null ? null : viewingForm ?? EnquiryFormState(sent: q['booked'] == '1');
     final r = await renderComponent(
-      ListingPage(tenant: tenant, listing: listing, agent: agent, enquiry: enquiry, viewing: viewing, viewingDays: viewingDays(clock())),
+      ListingPage(
+        tenant: tenant,
+        listing: listing,
+        agent: agent,
+        enquiry: enquiry,
+        viewing: viewing,
+        viewingDays: viewingDays(clock()),
+        areaMedianRentKES: area?.medianRentKES,
+      ),
       request: req,
     );
     bool own(EnquiryFormState? f) => f != null && (f.sent || f.values.isNotEmpty);

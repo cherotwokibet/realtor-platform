@@ -20,6 +20,7 @@ h1{font-family:var(--font-display);font-size:var(--text-headline);color:var(--co
 h2{font-family:var(--font-display);font-size:var(--text-title);color:var(--color-ink);margin:24px 0 8px}
 .price{font-size:var(--text-title);color:var(--color-primary);font-weight:600;margin:0 0 8px}
 .facts{color:var(--color-text-muted);margin:0 0 16px}
+.insight{color:var(--color-success);font-weight:600;margin:-8px 0 16px}
 .badge{display:inline-block;background:var(--color-accent);color:var(--color-on-accent);border-radius:var(--radius-sm);padding:2px 8px;font-size:var(--text-caption)}
 .photos{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));margin:16px 0}
 .photos img{width:100%;height:auto;border-radius:var(--radius-md);background:var(--color-surface-alt)}

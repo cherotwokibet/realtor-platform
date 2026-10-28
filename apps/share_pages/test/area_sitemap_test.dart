@@ -45,6 +45,14 @@ void main() {
     expect((((ld['subjectOf'] as Map)['itemListElement'] as List).single as Map)['url'], 'https://realtimeestates.co.ke/listing/2-bedroom-apartment-kilimani');
   });
 
+  test("a rental below its area's typical rent says so; without a median it says nothing", () async {
+    final html = await (await get('/listing/${flat.slug}')).readAsString();
+    expect(html, contains('13% below the typical rent in Kilimani (KES 75,000 a month)'));
+    final bare = shareHandler(tenant, InMemoryListingSource(const [flat]));
+    final plain = await (await bare(shelf.Request('GET', Uri.parse('https://x/listing/${flat.slug}')))).readAsString();
+    expect(plain, isNot(contains('typical rent')));
+  });
+
   test('listing pages link back to their area', () async {
     final html = await (await get('/listing/2-bedroom-apartment-kilimani')).readAsString();
     expect(html, contains('href="/area/kilimani"'));
