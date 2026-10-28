@@ -12,6 +12,10 @@ updates:
       - dependency-name: "@types/node"
         update-types: [version-update:semver-major]
     groups:
+      # The client SDK and the rules test kit peer-depend on each other's
+      # major, so they move together, majors included.
+      firebase-test-sdk:
+        patterns: ["firebase", "@firebase/rules-unit-testing"]
       npm-minor:
         update-types: [minor, patch]
 
