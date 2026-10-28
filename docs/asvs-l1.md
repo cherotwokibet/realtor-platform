@@ -60,7 +60,7 @@ Status: ✅ holds · ⚠️ gap, with plan · ➖ not applicable. Grouped by ASV
 ## V13 Configuration
 - ✅ No secrets in the repo or state. Values are `secret://` references to Secret Manager (D7), and GitGuardian runs on every PR.
 - ✅ `npm audit` is at 0 for `functions` and `tools/tenant-cli`.
-- ⚠️ No automated dependency updates. **Plan:** P8-s02 (observability) adds Dependabot for npm, pub and Actions.
+- ✅ Dependabot opens weekly grouped PRs for npm, pub, Actions and the share pages base image (`.github/dependabot.yml`).
 
 ## V14 Data protection
 - ✅ Personal data (`leads`, `viewings`, `payments`) is staff-only. The audit log holds no names or phones, and the share pages never log form contents.
@@ -83,4 +83,4 @@ There are no critical findings. These gaps are open, each with an owner:
 2. Lead retention (P6)
 3. Server-side password policy (Boniface, console)
 4. Full CSP on the Flutter sites (before prod)
-5. Dependency updates and alerting (P8-s02)
+5. Alerting (P8-s02)
