@@ -6,6 +6,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'format.dart';
 import 'providers.dart';
+import 'reports.dart';
 import 'screens.dart';
 import 'session.dart';
 
@@ -23,6 +24,7 @@ final _sections = [
   _Section(AdminSection.leads, 'Leads', Icons.inbox_outlined, () => const LeadsScreen()),
   _Section(AdminSection.viewings, 'Viewings', Icons.event_outlined, () => const ViewingsScreen()),
   _Section(AdminSection.listings, 'Listings', Icons.home_work_outlined, () => const ListingsScreen()),
+  _Section(AdminSection.reports, 'Reports', Icons.insights_outlined, () => const ReportsScreen()),
   _Section(AdminSection.team, 'Team', Icons.group_outlined, () => const TeamScreen()),
   _Section(AdminSection.audit, 'Audit log', Icons.history, () => const AuditScreen()),
   _Section(AdminSection.privacy, 'Privacy', Icons.privacy_tip_outlined, () => const PrivacyScreen()),

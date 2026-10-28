@@ -12,6 +12,7 @@ import 'package:realtor_admin/src/demo_admin.dart';
 import 'package:realtor_admin/src/format.dart';
 import 'package:realtor_admin/src/listing_media.dart';
 import 'package:realtor_admin/src/providers.dart';
+import 'package:realtor_admin/src/reports.dart';
 import 'package:realtor_admin/src/session.dart';
 import 'package:realtor_core/realtor_core.dart';
 
@@ -82,6 +83,9 @@ class SlowActions implements AdminActions {
     await gate.future;
     return inner.addTimeOff(who, agentId: agentId, start: start, end: end, note: note);
   }
+
+  @override
+  Future<MonthlyReport> monthlyReport(StaffUser who, String month) => inner.monthlyReport(who, month);
 
   @override
   Future<String> saveAgent(StaffUser who, AgentProfile profile) async {
@@ -873,6 +877,30 @@ void main() {
     await open(tester, as: wanjiku);
     expect(find.text('Team'), findsNothing);
     expect(() => container.read(adminRepositoryProvider).agentProfiles(wanjiku), throwsA(isA<StaffAccessException>()));
+  });
+
+  testWidgets('a manager reads the monthly report and downloads it as CSV; agents have no reports', (tester) async {
+    final saver = MemoryFileSaver();
+    await open(tester, as: manager, overrides: [fileSaverProvider.overrideWithValue(saver)]);
+    await tester.tap(find.text('Reports'));
+    await tester.pumpAndSettle();
+    expect(location(), '/reports');
+    final month = reportMonths(DateTime.now()).first;
+    final r = await container.read(adminActionsProvider).monthlyReport(manager, month);
+    expect(find.text('${r.leads} leads, ${r.viewings} viewings'), findsOneWidget);
+    expect(find.text('Agents'), findsOneWidget);
+    await tester.tap(find.text('Download CSV'));
+    await tester.pump();
+    expect(saver.saved.single.$1, 'report-$month.csv');
+    expect(saver.saved.single.$2, startsWith('Report,$month'));
+    expect(saver.saved.single.$2.contains('+2547'), isFalse, reason: 'no client numbers');
+  });
+
+  testWidgets('agents cannot open reports', (tester) async {
+    await open(tester, as: wanjiku);
+    expect(find.text('Reports'), findsNothing);
+    await expectLater(container.read(adminActionsProvider).monthlyReport(wanjiku, '2026-10'),
+        throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'permission-denied')));
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

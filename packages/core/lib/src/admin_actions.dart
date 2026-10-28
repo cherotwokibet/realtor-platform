@@ -1,5 +1,6 @@
 import 'agent_profile.dart';
 import 'listing_draft.dart';
+import 'monthly_report.dart';
 import 'staff.dart';
 
 /// Lead stage moves, listing status moves and moderation actions. A copy of
@@ -113,6 +114,9 @@ abstract interface class AdminActions {
   /// offset) so no viewing is booked then. Managers name the agent; an agent
   /// always blocks for themself. Completes with the block's id.
   Future<String> addTimeOff(StaffUser who, {String? agentId, required String start, required String end, String? note});
+
+  /// `monthlyReport` (P5-s08), managers: [month] is `YYYY-MM`.
+  Future<MonthlyReport> monthlyReport(StaffUser who, String month);
 
   /// `saveAgent` (P5-s04), managers: adds or edits an agent's profile.
   /// Completes with the agent's id.

@@ -365,6 +365,46 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   };
 
   @override
+  Future<MonthlyReport> monthlyReport(StaffUser who, String month) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    bool inMonth(DateTime t) {
+      final n = t.toUtc().add(const Duration(hours: 3));
+      return '${n.year}-${n.month.toString().padLeft(2, '0')}' == month;
+    }
+
+    final leads = _leads.where((l) => inMonth(l.createdAt)).toList();
+    final viewings = _viewings.where((v) => inMonth(v.slot)).toList();
+    Map<String, int> tally(Iterable<String> keys) => {for (final k in keys.toSet()) k: keys.where((x) => x == k).length};
+    final agents = [
+      for (final p in _profiles.values)
+        (
+          agentId: p.id!,
+          name: p.name,
+          leads: leads.where((l) => l.agentId == p.id).length,
+          won: leads.where((l) => l.agentId == p.id && l.stage == 'won').length,
+          viewingsDone: viewings.where((v) => v.agentId == p.id && v.status == 'done').length,
+          noShows: viewings.where((v) => v.agentId == p.id && v.status == 'no-show').length,
+          replyMins: p.responseMins,
+        ),
+    ].where((a) => a.leads + a.viewingsDone + a.noShows > 0).toList()
+      ..sort((a, b) => b.won != a.won ? b.won - a.won : b.leads - a.leads);
+    final top = [..._listings]..sort((a, b) => b.leads - a.leads);
+    return MonthlyReport(
+      month: month,
+      leads: leads.length,
+      leadsByChannel: tally(leads.map((l) => l.channel)),
+      leadsByStage: tally(leads.map((l) => l.stage)),
+      viewings: viewings.length,
+      viewingsByStatus: tally(viewings.map((v) => v.status)),
+      agents: agents,
+      topListings: [
+        for (final l in top.take(10))
+          if (l.leads > 0) (listingId: l.id, title: l.title, agentId: l.agentId, leads: l.leads, calls: l.calls, whatsapps: l.whatsapps),
+      ],
+    );
+  }
+
+  @override
   Future<List<AgentProfile>> agentProfiles(StaffUser who) async {
     if (!who.isManager) throw StaffAccessException('agent profiles are for owners and managers');
     return _profiles.values.toList()..sort((a, b) => a.name.compareTo(b.name));

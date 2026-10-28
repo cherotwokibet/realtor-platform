@@ -13,6 +13,7 @@ import { clearLapsedFeatures, confirmListing, expireListings, featureListing, im
 import { bookViewing, rescheduleViewing, updateViewingStatus } from './viewings';
 import { addAgentBlock, removeAgentBlock } from './availability';
 import { saveAgent } from './agents';
+import { monthlyReport } from './reports';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
@@ -651,5 +652,26 @@ describe('agent profiles (P5-s04)', () => {
 
     const log = (await db.collection('audit').where('action', '==', 'agent.save').get()).docs.map((d) => `${d.get('from')}->${d.get('to')}`);
     assert.deepEqual(log.sort(), ['active->inactive', 'none->active', 'none->active']);
+  });
+});
+
+describe('monthly report (P5-s08)', () => {
+  test('counts the month by channel, stage and status, per agent; managers only; no client details', async () => {
+    const r1 = await createLead(db, { listingId: 'listing-001', channel: 'form', contact: { name: 'Report Client', phone: '+254700001401' }, consent: true }, now);
+    await updateLeadStage(db, wanjiku, { leadId: r1.leadId, stage: 'contacted' }, new Date(now.getTime() + 20 * 60_000));
+    await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-29T10:00:00+03:00', client: { name: 'Report Client', phone: '+254700001401' }, consent: true }, now);
+
+    await rejectsWith(monthlyReport(db, wanjiku, { month: '2026-10' }), 'permission-denied');
+    await rejectsWith(monthlyReport(db, manager, { month: '2026-13' }), 'invalid-argument');
+    const r = await monthlyReport(db, manager, { month: '2026-10' });
+    assert.ok(r.leads.total >= 2);
+    assert.ok(r.leads.byChannel.form >= 1 && r.leads.byChannel.viewing >= 1);
+    assert.ok(r.leads.byStage.contacted >= 1);
+    assert.ok((r.viewings.byStatus.requested ?? 0) >= 1);
+    const w = r.agents.find((a) => a.agentId === 'agent-wanjiku')!;
+    assert.ok(w.leads >= 2 && w.name.length > 0);
+    assert.equal(typeof w.replyMins, 'number');
+    assert.ok(!JSON.stringify(r).includes('Report Client') && !JSON.stringify(r).includes('700001401'));
+    assert.equal((await monthlyReport(db, manager, { month: '2025-01' })).leads.total, 0);
   });
 });
