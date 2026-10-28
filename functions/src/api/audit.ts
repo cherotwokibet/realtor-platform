@@ -14,6 +14,7 @@ export interface AuditEvent {
     | 'listing.confirm'
     | 'listing.feature'
     | 'viewing.status'
+    | 'viewing.reschedule'
     | 'staff.role'
     | 'privacy.export'
     | 'privacy.delete';

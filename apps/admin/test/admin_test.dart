@@ -70,6 +70,13 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<String> rescheduleViewing(StaffUser who, {required String viewingId, required String slot}) async {
+    calls++;
+    await gate.future;
+    return inner.rescheduleViewing(who, viewingId: viewingId, slot: slot);
+  }
+
+  @override
   Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
     calls++;
     await gate.future;
@@ -741,6 +748,37 @@ void main() {
     await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Confirm'));
     await tester.pumpAndSettle();
     expect(find.text('Viewing ${shortDateTime(future.slot)}: Confirmed'), findsOneWidget);
+  });
+
+  testWidgets('an agent reschedules a viewing: confirmed at the new time, the old one cancelled', (tester) async {
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    final repo = container.read(adminRepositoryProvider);
+    final future = (await repo.viewings(wanjiku, from: from, limit: 50)).rows.firstWhere((v) => v.slot.isAfter(now));
+    await tapVisible(tester, find.byTooltip('Update the viewing ${shortDateTime(future.slot)}'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Reschedule…'));
+    await tester.pumpAndSettle();
+    final day = viewingDays(now)[3];
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'Day'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(day.label).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'Time'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15:00').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move viewing'));
+    await tester.pumpAndSettle();
+
+    final at = DateTime.parse(viewingSlot(day.value, '15:00')).toLocal();
+    expect(find.text('Viewing moved to ${shortDateTime(at)}, confirmed'), findsOneWidget);
+    final open_ = (await repo.viewings(wanjiku, from: from, limit: 50)).rows;
+    expect(open_.where((v) => v.id == future.id), isEmpty, reason: 'the old one is cancelled');
+    final moved = open_.singleWhere((v) => v.slot == at);
+    expect((moved.status, moved.clientName), ('confirmed', future.clientName));
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

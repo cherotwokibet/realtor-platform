@@ -332,6 +332,12 @@ void main() {
       await actions.updateViewing(agent, viewingId: 'agent-a_1', status: 'confirmed');
       expect(calls.single.$1, 'updateViewingStatus');
       expect(calls.single.$2, {'viewingId': 'agent-a_1', 'status': 'confirmed'});
+      final moved = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return {'viewingId': 'agent-a_2'};
+      });
+      expect(await moved.rescheduleViewing(agent, viewingId: 'agent-a_1', slot: '2026-10-29T15:00:00+03:00'), 'agent-a_2');
+      expect(calls.last, ('rescheduleViewing', {'viewingId': 'agent-a_1', 'slot': '2026-10-29T15:00:00+03:00'}));
     });
 
     test('a refusal becomes an AdminActionException with the callable code', () async {

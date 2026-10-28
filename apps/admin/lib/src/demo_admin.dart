@@ -203,6 +203,35 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   }
 
   @override
+  Future<String> rescheduleViewing(StaffUser who, {required String viewingId, required String slot}) async {
+    final i = _viewings.indexWhere((v) => v.id == viewingId);
+    if (i < 0) throw AdminActionException('not-found', 'no such viewing');
+    final v = _viewings[i];
+    if (!who.isManager && v.agentId != who.agentId) throw AdminActionException('permission-denied', 'not your viewing');
+    if (v.status != 'requested' && v.status != 'confirmed') throw AdminActionException('failed-precondition', 'a ${v.status} viewing cannot be moved');
+    final at = DateTime.parse(slot);
+    if (!at.isAfter(_clock().add(const Duration(hours: 2)))) throw AdminActionException('invalid-argument', 'slot: book at least 2 hours ahead');
+    final id = '${v.agentId}_${at.millisecondsSinceEpoch}';
+    if (_viewings.any((o) => o.id == id && (o.status == 'requested' || o.status == 'confirmed'))) {
+      throw AdminActionException('already-exists', 'the agent has another viewing then');
+    }
+    _viewings[i] = v.withStatus('cancelled');
+    _viewings.add(ViewingRow(
+      id: id,
+      listingId: v.listingId,
+      listingTitle: v.listingTitle,
+      agentId: v.agentId,
+      agentName: v.agentName,
+      slot: at.toLocal(),
+      status: 'confirmed',
+      clientName: v.clientName,
+      clientPhone: v.clientPhone,
+    ));
+    _log(who, 'viewing.reschedule', 'Viewing of ${v.listingTitle}', null, null);
+    return id;
+  }
+
+  @override
   Future<RowPage<StaffListingRow>> listings(StaffUser who, {String? status, String? after, int limit = 25}) async {
     final rows = scopedTo(who, _listings, (r) => r.agentId)
         .where((r) => status == null || r.status == status)

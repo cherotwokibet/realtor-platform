@@ -36,6 +36,12 @@ class CallableAdminActions implements AdminActions {
       _run('updateViewingStatus', {'viewingId': viewingId, 'status': status});
 
   @override
+  Future<String> rescheduleViewing(StaffUser who, {required String viewingId, required String slot}) async {
+    final r = await _run('rescheduleViewing', {'viewingId': viewingId, 'slot': slot}) as Map<Object?, Object?>;
+    return r['viewingId'] as String;
+  }
+
+  @override
   Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
     final r = await _run('featureListing', {'listingId': listingId, 'days': days}) as Map<Object?, Object?>;
     final until = r['featuredUntil'] as String?;

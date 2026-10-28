@@ -103,6 +103,11 @@ abstract interface class AdminActions {
   /// `updateViewingStatus` (P5-s05): the viewing's agent, or a manager.
   Future<void> updateViewing(StaffUser who, {required String viewingId, required String status});
 
+  /// `rescheduleViewing` (P5-s05): moves an open viewing to [slot] (as
+  /// [viewingSlot] makes it), confirmed; the old one is cancelled.
+  /// Completes with the new viewing's id.
+  Future<String> rescheduleViewing(StaffUser who, {required String viewingId, required String slot});
+
   /// `featureListing` (P5-s02), managers: a live listing ranks first in
   /// search for [days]; 0 stops it. Completes with the new end, or null.
   Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days});

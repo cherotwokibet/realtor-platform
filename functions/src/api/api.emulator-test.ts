@@ -10,7 +10,7 @@ import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
 import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateListing, submitListing } from './listings';
-import { bookViewing, updateViewingStatus } from './viewings';
+import { bookViewing, rescheduleViewing, updateViewingStatus } from './viewings';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
@@ -571,6 +571,30 @@ describe('viewing status (P5-s05)', () => {
     const again = await bookViewing(db, { listingId: 'listing-001', slot, client: { name: 'Wairimu', phone: '+254700001203' }, consent: true }, now);
     assert.equal(again.viewingId, viewingId);
     assert.equal((await db.collection('viewings').doc(viewingId).get()).get('status'), 'requested');
+  });
+
+  test('the agent moves a viewing to an agreed time: a confirmed one there, the old one cancelled; clashes refused', async () => {
+    const client = { name: 'Achieng', phone: '+254700001204' };
+    const first = await bookViewing(db, { listingId: 'listing-001', slot, client, consent: true }, now);
+    const other = await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-27T11:00:00+03:00', client: { name: 'Otieno', phone: '+254700001205' }, consent: true }, now);
+    const to = '2026-10-27T15:00:00+03:00';
+
+    await rejectsWith(rescheduleViewing(db, otieno, { viewingId: first.viewingId, slot: to }, now), 'permission-denied');
+    await rejectsWith(rescheduleViewing(db, wanjiku, { viewingId: first.viewingId, slot: '2026-10-25T15:00:00+03:00' }, now), 'invalid-argument'); // Sunday
+    await rejectsWith(rescheduleViewing(db, wanjiku, { viewingId: first.viewingId, slot: '2026-10-27T11:00:00+03:00' }, now), 'already-exists');
+
+    const { viewingId } = await rescheduleViewing(db, wanjiku, { viewingId: first.viewingId, slot: to }, now);
+    const moved = (await db.collection('viewings').doc(viewingId).get()).data()!;
+    const old = (await db.collection('viewings').doc(first.viewingId).get()).data()!;
+    assert.deepEqual([moved.status, moved.client.name, moved.rescheduledFrom, moved.slot.toDate().toISOString()], ['confirmed', 'Achieng', first.viewingId, '2026-10-27T12:00:00.000Z']);
+    assert.deepEqual([old.status, old.rescheduledTo], ['cancelled', viewingId]);
+    await rejectsWith(rescheduleViewing(db, wanjiku, { viewingId: first.viewingId, slot: '2026-10-28T09:00:00+03:00' }, now), 'failed-precondition'); // cancelled
+
+    const log = (await db.collection('audit').where('action', '==', 'viewing.reschedule').get()).docs.map((d) => d.data());
+    assert.equal(log.length, 1);
+    assert.match(`${log[0].from} -> ${log[0].to}`, /26 Oct,? 10:30 -> 27 Oct,? 15:00/);
+    assert.ok(!JSON.stringify(log).includes('Achieng'));
+    await updateViewingStatus(db, manager, { viewingId: other.viewingId, status: 'cancelled' }, now);
   });
 });
 

@@ -275,6 +275,22 @@ class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
     });
   }
 
+  Future<void> _reschedule(StaffUser who, ViewingRow v) async {
+    final slot = await showDialog<String>(context: context, builder: (_) => _RescheduleDialog(from: v.slot));
+    if (slot == null || !mounted) return;
+    setState(() => _saving[v.id] = 'cancelled');
+    final ok = await _act(
+      context,
+      () => ref.read(adminActionsProvider).rescheduleViewing(who, viewingId: v.id, slot: slot),
+      'Viewing moved to ${shortDateTime(DateTime.parse(slot).toLocal())}, confirmed',
+    );
+    if (!mounted) return;
+    setState(() {
+      _saving.remove(v.id);
+      if (ok) _reload++;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final who = ref.watch(staffProvider)!;
@@ -313,8 +329,12 @@ class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
             return _MenuCell(
               text: label(status),
               tooltip: 'Update the viewing ${shortDateTime(v.slot)}',
-              options: nextViewingStatuses(status, v.slot, DateTime.now()),
+              options: [
+                ...nextViewingStatuses(status, v.slot, DateTime.now()),
+                if (status == 'requested' || status == 'confirmed') 'reschedule',
+              ],
               labelOf: (s) => switch (s) {
+                'reschedule' => 'Reschedule…',
                 'confirmed' => 'Confirm',
                 'done' => 'Mark done',
                 'no-show' => 'Mark no-show',
@@ -322,7 +342,7 @@ class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
                 _ => label(s),
               },
               saving: _saving.containsKey(v.id),
-              onSelected: (s) => _move(who, v, s),
+              onSelected: (s) => s == 'reschedule' ? _reschedule(who, v) : _move(who, v, s),
             );
           }),
           if (who.isManager) TableColumn('Agent', (v) => Text(v.agentName)),
@@ -995,3 +1015,46 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
   }
 }
 
+
+/// Picks a new day and time for a viewing, from the slots clients can book.
+class _RescheduleDialog extends StatefulWidget {
+  const _RescheduleDialog({required this.from});
+  final DateTime from;
+  @override
+  State<_RescheduleDialog> createState() => _RescheduleDialogState();
+}
+
+class _RescheduleDialogState extends State<_RescheduleDialog> {
+  final _days = viewingDays(DateTime.now());
+  String? _day, _time;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Reschedule viewing'),
+        content: SizedBox(
+          width: 420,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('Now ${shortDateTime(widget.from)}. Pick the time agreed with the client; it is saved as confirmed.'),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Day', border: OutlineInputBorder()),
+              items: [for (final d in _days) DropdownMenuItem(value: d.value, child: Text(d.label))],
+              onChanged: (v) => setState(() => _day = v),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Time', border: OutlineInputBorder()),
+              items: [for (final t in viewingTimes) DropdownMenuItem(value: t, child: Text(t))],
+              onChanged: (v) => setState(() => _time = v),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: _day == null || _time == null ? null : () => Navigator.pop(context, viewingSlot(_day!, _time!)),
+            child: const Text('Move viewing'),
+          ),
+        ],
+      );
+}

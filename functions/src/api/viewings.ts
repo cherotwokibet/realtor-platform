@@ -162,3 +162,52 @@ export async function updateViewingStatus(db: Firestore, caller: Caller, input: 
   return { status: req.status };
 }
 
+
+export const rescheduleViewingInput = z.object({
+  viewingId: docId,
+  /** ISO 8601 with offset, e.g. 2026-10-29T15:00:00+03:00. */
+  slot: z.iso.datetime({ offset: true }),
+});
+
+/**
+ * P5-s05: the viewing's agent (or a manager) moves an open viewing to a new
+ * time agreed with the client. The new time gets its own viewing (ids are
+ * `<agentId>_<slot ms>`, so a clash with another active viewing of the same
+ * agent is refused), confirmed; the old one is cancelled and points to it.
+ */
+export async function rescheduleViewing(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ viewingId: string }> {
+  requireStaff(caller);
+  const req = parseInput(rescheduleViewingInput, input);
+  const slot = new Date(req.slot);
+  const problem = slotProblem(slot, now);
+  if (problem) throw new HttpsError('invalid-argument', `slot: ${problem}`);
+  const oldRef = db.collection('viewings').doc(req.viewingId);
+  let viewingId = '';
+  await db.runTransaction(async (tx) => {
+    const old = await tx.get(oldRef);
+    if (!old.exists) throw new HttpsError('not-found', 'no such viewing');
+    const agentId = old.get('agentId') as string;
+    if (!isManager(caller) && agentId !== caller.agentId) throw new HttpsError('permission-denied', 'not your viewing');
+    const from = old.get('status') as ViewingStatus;
+    if (!ACTIVE.has(from)) throw new HttpsError('failed-precondition', `a ${from} viewing cannot be moved`);
+    const oldSlot = old.get('slot').toDate() as Date;
+    if (oldSlot.getTime() === slot.getTime()) throw new HttpsError('invalid-argument', 'slot: that is the time it already has');
+    viewingId = `${agentId}_${slot.getTime()}`;
+    const newRef = db.collection('viewings').doc(viewingId);
+    const taken = await tx.get(newRef);
+    if (taken.exists && ACTIVE.has(taken.get('status'))) throw new HttpsError('already-exists', 'the agent has another viewing then');
+    const listing = await tx.get(db.collection('listings').doc(old.get('listingId') as string));
+    const title = listing.get('title') as string | undefined;
+
+    const moved = { ...old.data(), slot, status: 'confirmed' as const, rescheduledFrom: oldRef.id, createdAt: now, updatedAt: now };
+    tx.set(newRef, moved);
+    tx.update(oldRef, { status: 'cancelled', rescheduledTo: viewingId, updatedAt: now });
+    audit(tx, db, caller, {
+      action: 'viewing.reschedule',
+      target: { collection: 'viewings', id: viewingId, label: `Viewing${title ? ` of ${title}` : ''}` },
+      from: nairobi(oldSlot),
+      to: nairobi(slot),
+    }, now);
+  });
+  return { viewingId };
+}
