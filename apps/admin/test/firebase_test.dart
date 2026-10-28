@@ -337,7 +337,8 @@ void main() {
         return {'viewingId': 'agent-a_2'};
       });
       expect(await moved.rescheduleViewing(agent, viewingId: 'agent-a_1', slot: '2026-10-29T15:00:00+03:00'), 'agent-a_2');
-      expect(calls.last, ('rescheduleViewing', {'viewingId': 'agent-a_1', 'slot': '2026-10-29T15:00:00+03:00'}));
+      expect(calls.last.$1, 'rescheduleViewing');
+      expect(calls.last.$2, {'viewingId': 'agent-a_1', 'slot': '2026-10-29T15:00:00+03:00'});
     });
 
     test('a refusal becomes an AdminActionException with the callable code', () async {
