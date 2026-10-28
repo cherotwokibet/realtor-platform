@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing, confirmListing, setStaffRole, dataRequest.
+ * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, setStaffRole, dataRequest.
  * Scheduled, nightly: purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -52,6 +52,8 @@ export const updateLeadStage = onCall((req) => leads.updateLeadStage(getFirestor
 export const submitListing = onCall((req) => listings.submitListing(getFirestore(), callerFrom(req.auth), req.data));
 export const moderateListing = onCall((req) => listings.moderateListing(getFirestore(), callerFrom(req.auth), req.data));
 export const confirmListing = onCall((req) => listings.confirmListing(getFirestore(), callerFrom(req.auth), req.data));
+export const featureListing = onCall((req) => listings.featureListing(getFirestore(), callerFrom(req.auth), req.data));
+export const importListings = onCall({ timeoutSeconds: 120 }, (req) => listings.importListings(getFirestore(), callerFrom(req.auth), req.data));
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 export const dataRequest = onCall((req) => runDataRequest(getFirestore(), callerFrom(req.auth), req.data));
 
@@ -65,7 +67,9 @@ export const purgeExpiredLeads = onSchedule({ schedule: '15 3 * * *', timeZone: 
 // Verification (P6-s02): every night, live listings not re-confirmed within
 // 30 days lose the Verified badge and leave search (status expired).
 export const expireListings = onSchedule({ schedule: '45 2 * * *', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
-  console.log(`verification: expired ${await listings.expireListings(getFirestore(), new Date())} listings`);
+  const now = new Date();
+  console.log(`verification: expired ${await listings.expireListings(getFirestore(), now)} listings`);
+  console.log(`featured: ${await listings.clearLapsedFeatures(getFirestore(), now)} listings back to normal`);
 });
 
 // Response times (P5-s03): every night, each agent's typical reply time.

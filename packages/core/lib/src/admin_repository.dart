@@ -60,6 +60,7 @@ class StaffListingRow {
     this.calls = 0,
     this.whatsapps = 0,
     this.expiresAt,
+    this.featuredUntil,
     this.photoMatch = false,
   });
   final String id, slug, title, area, status, agentId, agentName;
@@ -69,10 +70,16 @@ class StaffListingRow {
   /// When the Verified badge runs out unless the agent confirms again (P6-s02); null when never verified.
   final DateTime? expiresAt;
 
+  /// Ranks first in search until then (P5-s02); null when not featured.
+  final DateTime? featuredUntil;
+
+  bool featuredAt(DateTime now) => featuredUntil != null && featuredUntil!.isAfter(now);
+
   /// A photo here matches another listing's (`photoFlags`, P6-s05). Managers only.
   final bool photoMatch;
 
-  StaffListingRow withStatus(String status, DateTime updatedAt, {DateTime? expiresAt}) => StaffListingRow(
+  StaffListingRow withStatus(String status, DateTime updatedAt, {DateTime? expiresAt, DateTime? Function()? featuredUntil}) =>
+      StaffListingRow(
         id: id,
         slug: slug,
         title: title,
@@ -86,6 +93,7 @@ class StaffListingRow {
         calls: calls,
         whatsapps: whatsapps,
         expiresAt: expiresAt ?? this.expiresAt,
+        featuredUntil: featuredUntil == null ? this.featuredUntil : featuredUntil(),
         photoMatch: photoMatch,
       );
 }

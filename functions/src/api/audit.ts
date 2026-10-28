@@ -12,6 +12,7 @@ export interface AuditEvent {
     | 'listing.let'
     | 'listing.sold'
     | 'listing.confirm'
+    | 'listing.feature'
     | 'staff.role'
     | 'privacy.export'
     | 'privacy.delete';

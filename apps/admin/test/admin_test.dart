@@ -60,6 +60,20 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
+    calls++;
+    await gate.future;
+    return inner.featureListing(who, listingId: listingId, days: days);
+  }
+
+  @override
+  Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows) async {
+    calls++;
+    await gate.future;
+    return inner.importListings(who, rows);
+  }
+
+  @override
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) async {
     calls++;
     await gate.future;
@@ -135,7 +149,9 @@ void main() {
           throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'failed-precondition')));
       expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-otieno'), ['confirm']);
       expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-wanjiku'), isEmpty);
-      expect(listingActionsFor(manager, status: 'live', agentId: 'x'), [...moderationsFor('live'), 'confirm']);
+      expect(listingActionsFor(manager, status: 'live', agentId: 'x'), [...moderationsFor('live'), 'confirm', 'feature']);
+      expect(listingActionsFor(manager, status: 'live', agentId: 'x', featured: true).last, 'unfeature');
+      expect(listingActionsFor(manager, status: 'pending', agentId: 'x'), isNot(contains('feature')));
     });
 
     test('photo flags are for managers: the agent gets the listing without the flag', () async {
@@ -523,6 +539,61 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, 'New'));
     await tester.pumpAndSettle();
     expect(find.textContaining('waiting '), findsWidgets);
+  });
+
+  testWidgets('a manager features a live listing and stops it; the star follows', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Live'));
+    await tester.pumpAndSettle();
+    final rows = (await container.read(adminRepositoryProvider).listings(manager, status: 'live', limit: 50)).rows;
+    final plain = rows.firstWhere((r) => !r.featuredAt(DateTime.now()));
+    expect(find.byIcon(Icons.star), findsOneWidget, reason: 'the demo has one featured listing');
+    await tapVisible(tester, find.byTooltip('Change ${plain.title}'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Feature for $featureDays days'));
+    await tester.pumpAndSettle();
+    expect(find.text('${plain.title}: featured for $featureDays days'), findsOneWidget);
+    expect(find.byIcon(Icons.star), findsNWidgets(2));
+    await tapVisible(tester, find.byTooltip('Change ${plain.title}'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Stop featuring'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.star), findsOneWidget);
+  });
+
+  testWidgets('a manager imports a CSV: checked first, bad lines named, good ones land in Pending', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Import CSV…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'CSV'),
+      'title,purpose,type,beds,baths,priceKES,lat,lng,area,agentId\n'
+      'Imported studio Kilimani,rent,studio,0,1,"25,000",-1.29,36.78,kilimani,agent-wanjiku\n'
+      'Broken row,rent,castle,1,1,20000,-1.29,36.78,kilimani,agent-wanjiku\n'
+      'Ghost agent flat,rent,apartment,1,1,30000,-1.29,36.78,kilimani,agent-ghost\n',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Check'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 listings ready to import.'), findsOneWidget);
+    expect(find.textContaining('Line 3: type "castle"'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Import 2'));
+    await tester.pumpAndSettle();
+    expect(find.text('Imported 1 listings. They wait in Pending for approval.'), findsOneWidget);
+    expect(find.textContaining('Line 4: agentId: no agent "agent-ghost"'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+    await tester.pumpAndSettle();
+    final pending = (await container.read(adminRepositoryProvider).listings(manager, status: 'pending', limit: 50)).rows;
+    expect(pending.map((r) => r.title), contains('Imported studio Kilimani'));
+  });
+
+  testWidgets('agents get no import button', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Import CSV…'), findsNothing);
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

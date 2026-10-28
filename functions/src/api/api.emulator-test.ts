@@ -9,7 +9,7 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
-import { confirmListing, expireListings, moderateListing, submitListing } from './listings';
+import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateListing, submitListing } from './listings';
 import { bookViewing } from './viewings';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
@@ -492,6 +492,55 @@ describe('response times (P5-s03)', () => {
     // Ninety days on, those replies are too old to count.
     out = await updateAgentResponseTimes(db, new Date(now.getTime() + 91 * 86_400_000));
     assert.equal(out['agent-wanjiku'], null);
+  });
+});
+
+describe('featuring and CSV import (P5-s02)', () => {
+  const day = 86_400_000;
+
+  test('a manager features a live listing for some days; it lapses overnight; 0 stops it', async () => {
+    const { listingId } = await submitListing(db, wanjiku, newListing, now);
+    await rejectsWith(featureListing(db, manager, { listingId, days: 7 }, now), 'failed-precondition'); // still pending
+    await moderateListing(db, manager, { listingId, action: 'approve' }, now);
+    await rejectsWith(featureListing(db, wanjiku, { listingId, days: 7 }, now), 'permission-denied');
+    await rejectsWith(featureListing(db, manager, { listingId, days: 91 }, now), 'invalid-argument');
+
+    const r = await featureListing(db, manager, { listingId, days: 7 }, now);
+    const ref = db.collection('listings').doc(listingId);
+    assert.equal((await ref.get()).get('featuredUntil').toDate().toISOString(), r.featuredUntil);
+    const entry = (await db.collection('audit').where('action', '==', 'listing.feature').get()).docs[0].data();
+    assert.deepEqual([entry.from, entry.to], ['none', new Date(now.getTime() + 7 * day).toISOString().slice(0, 10)]);
+
+    await clearLapsedFeatures(db, new Date(now.getTime() + 6 * day)); // seeded features may lapse; this one is in date
+    assert.notEqual((await ref.get()).get('featuredUntil'), null);
+    assert.ok((await clearLapsedFeatures(db, new Date(now.getTime() + 8 * day))) >= 1);
+    assert.equal((await ref.get()).get('featuredUntil'), null);
+
+    await featureListing(db, manager, { listingId, days: 3 }, now);
+    assert.deepEqual(await featureListing(db, manager, { listingId, days: 0 }, now), { featuredUntil: null });
+  });
+
+  test('import makes pending listings row by row; bad rows are reported, the rest go in', async () => {
+    const before = (await db.collection('listings').count().get()).data().count;
+    const r = await importListings(db, manager, {
+      rows: [
+        { ...newListing, agentId: 'agent-otieno', title: 'Bedsitter, Kilimani', type: 'bedsitter', beds: 0, priceKES: 15000 },
+        { ...newListing, agentId: 'agent-ghost' },
+        { ...newListing, agentId: 'agent-wanjiku', priceKES: 70000.5 },
+        { ...newListing, agentId: 'agent-wanjiku', listingId: 'listing-001' },
+        { ...newListing, agentId: 'agent-wanjiku', title: '3 bedroom house, Kilimani', type: 'bungalow', beds: 3 },
+      ],
+    }, now);
+    assert.deepEqual(r.created.map((c) => c.row), [1, 5]);
+    assert.deepEqual(r.failed.map((f) => f.row), [2, 3, 4]);
+    assert.match(r.failed[0].error, /no agent "agent-ghost"/);
+    assert.match(r.failed[1].error, /priceKES/);
+    assert.equal((await db.collection('listings').count().get()).data().count, before + 2);
+    const made = (await db.collection('listings').doc(r.created[0].listingId).get()).data()!;
+    assert.deepEqual([made.status, made.agentId, made.type], ['pending', 'agent-otieno', 'bedsitter']);
+
+    await rejectsWith(importListings(db, wanjiku, { rows: [newListing] }, now), 'permission-denied');
+    await rejectsWith(importListings(db, manager, { rows: [] }, now), 'invalid-argument');
   });
 });
 

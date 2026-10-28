@@ -77,6 +77,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         },
         // One demo listing reuses another's photo, so the flag shows.
         photoMatch: i == 4,
+        featuredUntil: i == 0 ? _now.add(const Duration(days: 12)) : null,
       ));
     }
     for (var i = 0; i < 40; i++) {
@@ -203,6 +204,55 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     return expiresAt;
   }
 
+  @override
+  Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    if (days < 0 || days > 90) throw AdminActionException('invalid-argument', 'days: 0 to 90');
+    final i = _listings.indexWhere((l) => l.id == listingId);
+    if (i < 0) throw AdminActionException('not-found', 'no such listing');
+    final listing = _listings[i];
+    if (days > 0 && listing.status != 'live') throw AdminActionException('failed-precondition', 'only a live listing can be featured');
+    final at = _clock();
+    final until = days == 0 ? null : at.add(Duration(days: days));
+    _listings[i] = listing.withStatus(listing.status, at, featuredUntil: () => until);
+    _log(who, 'listing.feature', listing.title, listing.featuredAt(at) ? 'featured' : 'none', until == null ? 'none' : '$days days',
+        at: at);
+    return until;
+  }
+
+  @override
+  Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final created = <int>[];
+    final failed = <({int row, String error})>[];
+    for (final (i, r) in rows.indexed) {
+      final agentId = r['agentId'] as String?;
+      if (agentId == null || !_agents.containsKey(agentId)) {
+        failed.add((row: i + 1, error: 'agentId: no agent "${agentId ?? ''}"'));
+        continue;
+      }
+      final at = _clock();
+      final area = r['area'] as String? ?? '';
+      _listings.insert(
+        0,
+        StaffListingRow(
+          id: 'listing-import-${_listings.length + 1}',
+          slug: '${r['title']}'.toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-'),
+          title: '${r['title']}',
+          area: area,
+          priceKES: (r['priceKES'] as num?)?.toInt() ?? 0,
+          status: 'pending',
+          agentId: agentId,
+          agentName: _agents[agentId]!,
+          updatedAt: at,
+        ),
+      );
+      _log(who, 'listing.submit', '${r['title']}', 'none', 'pending', at: at);
+      created.add(i + 1);
+    }
+    return ImportOutcome(created: created, failed: failed);
+  }
+
   /// How many times the team was read (tests check screens don't refetch needlessly).
   var teamCalls = 0;
 
@@ -314,6 +364,7 @@ StaffListingRow _unflagged(StaffListingRow r) => StaffListingRow(
       calls: r.calls,
       whatsapps: r.whatsapps,
       expiresAt: r.expiresAt,
+      featuredUntil: r.featuredUntil,
     );
 
 String _areaName(String slug) =>

@@ -178,3 +178,81 @@ export async function expireListings(db: Firestore, now = new Date(), page = 200
   }
 }
 
+/** Clears featuredUntil once it has passed, so search re-syncs and stops ranking the listing first. */
+export async function clearLapsedFeatures(db: Firestore, now = new Date()): Promise<number> {
+  const snap = await db.collection('listings').where('featuredUntil', '<=', now).get();
+  const batch = db.batch();
+  for (const d of snap.docs) batch.update(d.ref, { featuredUntil: null });
+  if (!snap.empty) await batch.commit();
+  return snap.size;
+}
+
+/** Longest a listing can be featured in one go, in days. */
+export const MAX_FEATURE_DAYS = 90;
+
+export const featureListingInput = z.object({ listingId: docId, days: z.number().int().min(0).max(MAX_FEATURE_DAYS) });
+
+/**
+ * P5-s02: managers feature a live listing for [days] (it ranks first in
+ * search until then), or stop featuring it with 0. Featured-ad fees by
+ * M-Pesa come with P6-s01; this is the manual switch.
+ */
+export async function featureListing(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ featuredUntil: string | null }> {
+  requireManager(caller);
+  const req = parseInput(featureListingInput, input);
+  const ref = db.collection('listings').doc(req.listingId);
+  const until = req.days ? new Date(now.getTime() + req.days * 86_400_000) : null;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'no such listing');
+    if (until && snap.get('status') !== 'live') throw new HttpsError('failed-precondition', 'only a live listing can be featured');
+    const before = snap.get('featuredUntil')?.toDate?.() as Date | undefined;
+    tx.update(ref, { featuredUntil: until, updatedAt: now });
+    audit(tx, db, caller, {
+      action: 'listing.feature',
+      target: { collection: 'listings', id: ref.id, label: snap.get('title') as string | undefined },
+      from: before && before > now ? before.toISOString().slice(0, 10) : 'none',
+      to: until ? until.toISOString().slice(0, 10) : 'none',
+    }, now);
+  });
+  return { featuredUntil: until?.toISOString() ?? null };
+}
+
+/** Rows per importListings call; the admin sends bigger files in chunks. */
+export const MAX_IMPORT_ROWS = 100;
+
+export const importListingsInput = z.object({ rows: z.array(z.record(z.string(), z.unknown())).min(1).max(MAX_IMPORT_ROWS) });
+
+export interface ImportResult {
+  created: { row: number; listingId: string; slug: string }[];
+  failed: { row: number; error: string }[];
+}
+
+/**
+ * P5-s02 CSV bulk import: each row is a new listing, submitted exactly as
+ * submitListing would (same validation, pending for review, audited), for
+ * the agent the row names. One bad row does not stop the others; rows are
+ * numbered from 1 as in the file (after its header).
+ */
+export async function importListings(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<ImportResult> {
+  requireManager(caller);
+  const { rows } = parseInput(importListingsInput, input);
+  const agents = new Map<string, boolean>();
+  const out: ImportResult = { created: [], failed: [] };
+  for (const [i, row] of rows.entries()) {
+    const n = i + 1;
+    try {
+      if ('listingId' in row || 'media' in row) throw new HttpsError('invalid-argument', 'import makes new listings only (no listingId or media)');
+      const agentId = row.agentId;
+      if (typeof agentId !== 'string' || !agentId) throw new HttpsError('invalid-argument', 'agentId: every row needs the agent');
+      if (!agents.has(agentId)) agents.set(agentId, (await db.collection('agents').doc(agentId).get()).exists);
+      if (!agents.get(agentId)) throw new HttpsError('invalid-argument', `agentId: no agent "${agentId}"`);
+      const r = await submitListing(db, caller, row, now);
+      out.created.push({ row: n, ...r });
+    } catch (e) {
+      out.failed.push({ row: n, error: e instanceof HttpsError ? e.message : 'could not be saved' });
+    }
+  }
+  return out;
+}
+

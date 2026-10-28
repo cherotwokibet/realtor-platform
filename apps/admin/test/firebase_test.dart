@@ -240,6 +240,33 @@ void main() {
       expect([delete.leads, delete.viewings, delete.exportJson], [2, 1, null]);
     });
 
+    test('featureListing and importListings send what the Functions take and read their answers', () async {
+      final calls = <(String, Map<String, Object?>)>[];
+      final actions = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return name == 'featureListing'
+            ? {'featuredUntil': data['days'] == 0 ? null : '2026-11-27T09:00:00.000Z'}
+            : {
+                'created': [
+                  {'row': 1, 'listingId': 'x', 'slug': 'x'}
+                ],
+                'failed': [
+                  {'row': 2, 'error': 'agentId: no agent "ghost"'}
+                ],
+              };
+      });
+      expect(await actions.featureListing(manager, listingId: 'l1', days: 30), DateTime.utc(2026, 11, 27, 9));
+      expect(await actions.featureListing(manager, listingId: 'l1', days: 0), isNull);
+      expect(calls.first.$2, {'listingId': 'l1', 'days': 30});
+      final r = await actions.importListings(manager, [
+        {'title': 'a'},
+        {'title': 'b'}
+      ]);
+      expect(calls.last.$1, 'importListings');
+      expect(r.created, [1]);
+      expect((r.failed.single.row, r.failed.single.error), (2, 'agentId: no agent "ghost"'));
+    });
+
     test('a refusal becomes an AdminActionException with the callable code', () async {
       final actions = CallableAdminActions(
         (name, data) async => throw FirebaseException(

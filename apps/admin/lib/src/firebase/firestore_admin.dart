@@ -64,6 +64,7 @@ class FirestoreAdminRepository implements AdminRepository {
             calls: (_map(d, 'stats')['calls'] as num?)?.toInt() ?? 0,
             whatsapps: (_map(d, 'stats')['whatsapps'] as num?)?.toInt() ?? 0,
             expiresAt: d.data()['expiresAt'] == null ? null : _date(d.data()['expiresAt']),
+            featuredUntil: d.data()['featuredUntil'] == null ? null : _date(d.data()['featuredUntil']),
             photoMatch: flagged.contains(d.id),
           ),
       ];

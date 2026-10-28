@@ -32,6 +32,24 @@ class CallableAdminActions implements AdminActions {
   }
 
   @override
+  Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
+    final r = await _run('featureListing', {'listingId': listingId, 'days': days}) as Map<Object?, Object?>;
+    final until = r['featuredUntil'] as String?;
+    return until == null ? null : DateTime.parse(until);
+  }
+
+  @override
+  Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows) async {
+    final r = await _run('importListings', {'rows': rows}) as Map<Object?, Object?>;
+    return ImportOutcome(
+      created: [for (final c in r['created'] as List) ((c as Map)['row'] as num).toInt()],
+      failed: [
+        for (final f in r['failed'] as List) (row: ((f as Map)['row'] as num).toInt(), error: f['error'] as String),
+      ],
+    );
+  }
+
+  @override
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) =>
       _run('setStaffRole', {
         'email': email.trim(),

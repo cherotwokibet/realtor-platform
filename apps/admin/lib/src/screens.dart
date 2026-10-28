@@ -12,10 +12,13 @@ const leadReplyTargetMins = 60;
 
 /// Heading, optional filters and a table, in a scrollable page.
 class _TablePage extends StatelessWidget {
-  const _TablePage({required this.title, this.subtitle, this.filters, required this.table});
+  const _TablePage({required this.title, this.subtitle, this.filters, this.action, required this.table});
   final String title;
   final String? subtitle;
   final Widget? filters;
+
+  /// A button beside the title (e.g. Import CSV).
+  final Widget? action;
   final Widget table;
 
   @override
@@ -24,7 +27,7 @@ class _TablePage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(title, style: t.headlineSmall),
+        Row(children: [Expanded(child: Text(title, style: t.headlineSmall)), if (action != null) action!]),
         if (subtitle != null)
           Padding(padding: const EdgeInsets.only(top: 4), child: Text(subtitle!, style: t.bodyMedium)),
         if (filters != null) Padding(padding: const EdgeInsets.only(top: 12), child: filters),
@@ -98,6 +101,8 @@ String moderationLabel(String action, String status) => switch ((action, status)
       ('let', _) => 'Mark let',
       ('sold', _) => 'Mark sold',
       ('confirm', _) => 'Confirm still available',
+      ('feature', _) => 'Feature for $featureDays days',
+      ('unfeature', _) => 'Stop featuring',
       _ => label(action),
     };
 
@@ -257,15 +262,27 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
       if (reason == null || !mounted) return;
     }
     if (_saving.containsKey(r.id)) return;
-    final to = action == 'confirm' ? 'live' : moderationTargets[action]!;
+    final to = switch (action) {
+      'confirm' => 'live',
+      'feature' || 'unfeature' => r.status,
+      _ => moderationTargets[action]!,
+    };
     setState(() => _saving[r.id] = to);
     final actions = ref.read(adminActionsProvider);
     final ok = await _act(
       context,
-      () => action == 'confirm'
-          ? actions.confirmListing(who, listingId: r.id)
-          : actions.moderateListing(who, listingId: r.id, action: action, reason: reason),
-      action == 'confirm' ? '${r.title}: confirmed, verified for 30 days' : '${r.title}: ${label(to)}',
+      () => switch (action) {
+        'confirm' => actions.confirmListing(who, listingId: r.id),
+        'feature' => actions.featureListing(who, listingId: r.id, days: featureDays),
+        'unfeature' => actions.featureListing(who, listingId: r.id, days: 0),
+        _ => actions.moderateListing(who, listingId: r.id, action: action, reason: reason),
+      },
+      switch (action) {
+        'confirm' => '${r.title}: confirmed, verified for 30 days',
+        'feature' => '${r.title}: featured for $featureDays days',
+        'unfeature' => '${r.title}: no longer featured',
+        _ => '${r.title}: ${label(to)}',
+      },
     );
     if (!mounted) return;
     setState(() {
@@ -283,6 +300,16 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
     final repo = ref.watch(adminRepositoryProvider);
     return _TablePage(
       title: 'Listings',
+      action: who.isManager
+          ? OutlinedButton.icon(
+              onPressed: () async {
+                final imported = await showDialog<int>(context: context, builder: (_) => const _ImportDialog());
+                if ((imported ?? 0) > 0 && mounted) setState(() => _reload++);
+              },
+              icon: const Icon(Icons.upload_file),
+              label: const Text('Import CSV…'),
+            )
+          : null,
       subtitle:
           who.isManager ? 'Every listing, most recently updated first.' : 'Your listings, most recently updated first.',
       filters: FilterChips(
@@ -302,16 +329,27 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
         columns: [
           TableColumn(
             'Title',
-            (r) => r.photoMatch
-                ? Row(mainAxisSize: MainAxisSize.min, children: [
-                    Flexible(child: Text(r.title)),
-                    const SizedBox(width: 6),
-                    Tooltip(
-                      message: 'A photo here matches another listing. Check it is theirs to use.',
-                      child: Icon(Icons.flag_outlined, size: 18, color: Theme.of(context).colorScheme.error),
-                    ),
-                  ])
-                : Text(r.title),
+            (r) {
+              final featured = r.featuredAt(DateTime.now());
+              if (!r.photoMatch && !featured) return Text(r.title);
+              return Row(mainAxisSize: MainAxisSize.min, children: [
+                Flexible(child: Text(r.title)),
+                if (featured) ...[
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'Featured until ${shortDateTime(r.featuredUntil!)}',
+                    child: Icon(Icons.star, size: 18, color: Theme.of(context).colorScheme.primary),
+                  ),
+                ],
+                if (r.photoMatch) ...[
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'A photo here matches another listing. Check it is theirs to use.',
+                    child: Icon(Icons.flag_outlined, size: 18, color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
+              ]);
+            },
           ),
           TableColumn('Area', (r) => Text(label(r.area))),
           TableColumn('Price', (r) => Text(formatKes(r.priceKES)), numeric: true),
@@ -323,7 +361,7 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
                 text: label(status),
                 tooltip: 'Change ${r.title}',
                 // Managers moderate; agents confirm their own. The Functions refuse anything else.
-                options: listingActionsFor(who, status: status, agentId: r.agentId),
+                options: listingActionsFor(who, status: status, agentId: r.agentId, featured: r.featuredAt(DateTime.now())),
                 labelOf: (a) => moderationLabel(a, status),
                 saving: _saving.containsKey(r.id),
                 onSelected: (a) => _moderate(who, r, a),
@@ -730,6 +768,120 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
           ],
         ],
       ],
+    );
+  }
+}
+
+/// Paste a sheet saved as CSV, check it, then import its rows as pending
+/// listings (P5-s02). Pops with how many listings were made.
+class _ImportDialog extends ConsumerStatefulWidget {
+  const _ImportDialog();
+  @override
+  ConsumerState<_ImportDialog> createState() => _ImportDialogState();
+}
+
+class _ImportDialogState extends ConsumerState<_ImportDialog> {
+  final _text = TextEditingController();
+  ListingCsv? _checked;
+  bool _busy = false;
+  int _made = 0;
+  List<({int line, String problem})> _refused = const [];
+  bool _done = false;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  Future<void> _import() async {
+    final csv = _checked!;
+    setState(() => _busy = true);
+    final refused = <({int line, String problem})>[];
+    var made = 0;
+    try {
+      for (var i = 0; i < csv.rows.length; i += importChunk) {
+        final chunk = csv.rows.skip(i).take(importChunk).toList();
+        final r = await ref.read(adminActionsProvider).importListings(ref.read(staffProvider)!, [for (final c in chunk) c.row]);
+        made += r.created.length;
+        refused.addAll([for (final f in r.failed) (line: chunk[f.row - 1].line, problem: f.error)]);
+      }
+    } on AdminActionException catch (e) {
+      refused.add((line: 0, problem: e.message));
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _done = true;
+      _made = made;
+      _refused = refused;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final csv = _checked;
+    final t = Theme.of(context).textTheme;
+    final err = TextStyle(color: Theme.of(context).colorScheme.error);
+    Widget problems(List<({int line, String problem})> list) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [for (final p in list.take(20)) Text(p.line == 0 ? p.problem : 'Line ${p.line}: ${p.problem}', style: err)],
+        );
+    return AlertDialog(
+      title: const Text('Import listings'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+            if (_done) ...[
+              Text('Imported $_made listings. They wait in Pending for approval.', style: t.titleMedium),
+              if (_refused.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Not imported (${_refused.length}):', style: t.titleSmall),
+                problems(_refused),
+              ],
+            ] else ...[
+              Text(
+                'Save the sheet as CSV and paste it here. The first line names the columns: '
+                '${listingCsvColumns.join(', ')}. Amenities are separated by ";".',
+                style: t.bodyMedium,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _text,
+                minLines: 6,
+                maxLines: 12,
+                decoration: const InputDecoration(labelText: 'CSV', border: OutlineInputBorder()),
+                onChanged: (_) => setState(() => _checked = null),
+              ),
+              if (csv != null) ...[
+                const SizedBox(height: 8),
+                Text('${csv.rows.length} listings ready to import.', style: t.titleSmall),
+                if (!csv.ok) ...[
+                  Text('These lines will be left out:', style: t.bodyMedium),
+                  problems(csv.problems),
+                ],
+              ],
+              if (_busy) const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator())),
+            ],
+          ]),
+        ),
+      ),
+      actions: _done
+          ? [FilledButton(onPressed: () => Navigator.pop(context, _made), child: const Text('Done'))]
+          : [
+              TextButton(onPressed: _busy ? null : () => Navigator.pop(context, 0), child: const Text('Cancel')),
+              if (csv == null)
+                FilledButton(
+                  onPressed: _text.text.trim().isEmpty ? null : () => setState(() => _checked = ListingCsv.parse(_text.text)),
+                  child: const Text('Check'),
+                )
+              else
+                FilledButton(
+                  onPressed: _busy || csv.rows.isEmpty ? null : _import,
+                  child: Text('Import ${csv.rows.length}'),
+                ),
+            ],
     );
   }
 }

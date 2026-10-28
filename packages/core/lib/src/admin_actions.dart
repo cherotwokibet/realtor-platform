@@ -30,10 +30,24 @@ List<String> nextLeadStages(String stage) => leadStageMoves[stage] ?? const [];
 
 /// What [who] may do to a listing from its status menu: managers moderate,
 /// and the listing's agent (or a manager) confirms a live or expired one.
-List<String> listingActionsFor(StaffUser who, {required String status, required String agentId}) => [
+List<String> listingActionsFor(StaffUser who, {required String status, required String agentId, bool featured = false}) => [
       if (who.isManager) ...moderationsFor(status),
       if ((status == 'live' || status == 'expired') && (who.isManager || who.agentId == agentId)) 'confirm',
+      if (who.isManager && status == 'live') featured ? 'unfeature' : 'feature',
     ];
+
+/// How long "Feature" features a listing, in days.
+const featureDays = 30;
+
+/// Rows per `importListings` call (the Function's limit).
+const importChunk = 100;
+
+/// What an import did, by row of the batch sent (1-based).
+class ImportOutcome {
+  const ImportOutcome({required this.created, required this.failed});
+  final List<int> created;
+  final List<({int row, String error})> failed;
+}
 
 /// The moderation actions a listing at [status] can take, in table order.
 List<String> moderationsFor(String status) {
@@ -69,6 +83,14 @@ abstract interface class AdminActions {
   /// live or expired listing is still available. It goes live, verified for
   /// another 30 days; completes with the new expiry.
   Future<DateTime> confirmListing(StaffUser who, {required String listingId});
+
+  /// `featureListing` (P5-s02), managers: a live listing ranks first in
+  /// search for [days]; 0 stops it. Completes with the new end, or null.
+  Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days});
+
+  /// `importListings` (P5-s02), managers: each row (see [ListingCsv]) becomes
+  /// a pending listing; at most [importChunk] rows per call.
+  Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows);
 
   /// `setStaffRole`, owners only: give an account that has signed in once a
   /// role (an agent needs [agentId]), or take it away with a null [role].
