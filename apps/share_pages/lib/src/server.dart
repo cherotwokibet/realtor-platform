@@ -25,10 +25,11 @@ final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 /// `/robots.txt` and the App Links / Universal Links files in `/.well-known/`. Without [leads] there is no enquiry form and WhatsApp
 /// taps are not counted. With [fontsDir] the tenant's bundled fonts are served
 /// at `/fonts/<Family>-<Weight>.ttf`, which the pages' `@font-face` rules use.
+/// With [brandDir] the header logo is served at [logoPath].
 /// Unless [indexable] (dev and stage), robots.txt turns every crawler away and
 /// each response says noindex, so test copies never show up in search.
 shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
-    {LeadApi? leads, DateTime Function()? now, String? fontsDir, bool indexable = true}) {
+    {LeadApi? leads, DateTime Function()? now, String? fontsDir, String? brandDir, bool indexable = true}) {
   final clock = now ?? DateTime.now;
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
       {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {
@@ -160,6 +161,7 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
           headers: {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400'},
         ));
   if (fontsDir != null) router.get('/fonts/<file>', (shelf.Request _, String file) => serveFont(tenant, fontsDir, file));
+  if (brandDir != null) router.get(logoPath, (shelf.Request _) => serveLogo(tenant, brandDir));
   return (shelf.Request req) async {
     final r = _secured(await router.call(req));
     return indexable ? r : r.change(headers: {'x-robots-tag': 'noindex'});

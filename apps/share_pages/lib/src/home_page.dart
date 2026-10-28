@@ -2,6 +2,8 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/server.dart';
 import 'package:realtor_core/realtor_core.dart';
 
+import 'fonts.dart';
+
 import 'listing.dart';
 import 'page_shell.dart';
 
@@ -31,7 +33,7 @@ class HomePage extends StatelessComponent {
         '@type': 'RealEstateAgent',
         'name': tenant.name,
         'url': canonical,
-        'logo': 'https://${tenant.appDomain}/assets/assets/tenant/logo-horizontal.png',
+        'logo': 'https://${tenant.shareDomain}$logoPath',
         'address': {'@type': 'PostalAddress', 'addressCountry': 'KE'},
       },
       body: [

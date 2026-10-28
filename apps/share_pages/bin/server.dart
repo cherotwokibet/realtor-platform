@@ -10,7 +10,8 @@ import 'package:shelf/shelf_io.dart' as io;
 /// into the image at build time); PORT is set by Cloud Run.
 /// Listings come from the tenant's prod Firestore (FIRESTORE_PROJECT to
 /// override, FIRESTORE_EMULATOR_HOST for local runs against the emulator).
-/// FONTS_DIR is the folder of bundled fonts (/app/fonts in the image).
+/// FONTS_DIR is the folder of bundled fonts (/app/fonts in the image),
+/// BRAND_DIR the tenant's logo SVGs (/app/brand).
 /// Enquiries and WhatsApp taps go to the project's Cloud Functions
 /// (FUNCTIONS_BASE to override, e.g. the Functions emulator).
 /// NOINDEX=1 (set by Terraform outside prod) keeps search engines away.
@@ -24,7 +25,7 @@ Future<void> main() async {
   final projectId = env['FIRESTORE_PROJECT'] ?? tenant.firebaseProjects[FirebaseEnv.prod]!;
   final source = FirestoreListingSource(projectId: projectId, emulatorHost: env['FIRESTORE_EMULATOR_HOST']);
   final leads = CallableLeadApi(env['FUNCTIONS_BASE'] != null ? Uri.parse(env['FUNCTIONS_BASE']!) : functionsBase(projectId));
-  final handler = shareHandler(tenant, source, leads: leads, fontsDir: env['FONTS_DIR'], indexable: env['NOINDEX'] != '1');
+  final handler = shareHandler(tenant, source, leads: leads, fontsDir: env['FONTS_DIR'], brandDir: env['BRAND_DIR'], indexable: env['NOINDEX'] != '1');
   final server = await io.serve(handler, InternetAddress.anyIPv4, port);
   stdout.writeln('share pages for ${tenant.id} on :${server.port}');
 }

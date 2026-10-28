@@ -81,8 +81,8 @@ Component sharePage({
     ],
     body: Component.fragment([
       header([
-        a(href: 'https://${tenant.shareDomain}/', [
-          img(src: 'https://${tenant.appDomain}/assets/assets/tenant/logo-horizontal.png', alt: tenant.name, height: 36),
+        a(href: '/', [
+          img(src: logoPath, alt: tenant.name, height: 36),
         ]),
       ]),
       main_(body),
