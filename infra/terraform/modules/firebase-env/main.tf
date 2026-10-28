@@ -339,6 +339,14 @@ resource "google_cloud_run_v2_service" "share_pages" {
         name  = "FIRESTORE_PROJECT"
         value = google_project.this.project_id
       }
+      # Dev and stage hold demo data; keep them out of search results.
+      dynamic "env" {
+        for_each = var.env == "prod" ? [] : ["1"]
+        content {
+          name  = "NOINDEX"
+          value = env.value
+        }
+      }
       resources {
         limits   = { cpu = "1", memory = "256Mi" }
         cpu_idle = true

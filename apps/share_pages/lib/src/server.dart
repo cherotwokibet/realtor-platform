@@ -25,7 +25,10 @@ final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 /// `/robots.txt` and the App Links / Universal Links files in `/.well-known/`. Without [leads] there is no enquiry form and WhatsApp
 /// taps are not counted. With [fontsDir] the tenant's bundled fonts are served
 /// at `/fonts/<Family>-<Weight>.ttf`, which the pages' `@font-face` rules use.
-shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? leads, DateTime Function()? now, String? fontsDir}) {
+/// Unless [indexable] (dev and stage), robots.txt turns every crawler away and
+/// each response says noindex, so test copies never show up in search.
+shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
+    {LeadApi? leads, DateTime Function()? now, String? fontsDir, bool indexable = true}) {
   final clock = now ?? DateTime.now;
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
       {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {
@@ -151,11 +154,16 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
     ..get('/.well-known/assetlinks.json', (shelf.Request _) => _json(assetLinks(tenant)))
     ..get('/.well-known/apple-app-site-association', (shelf.Request _) => _json(appleAppSiteAssociation(tenant)))
     ..get('/robots.txt', (shelf.Request _) => shelf.Response.ok(
-          'User-agent: *\nAllow: /\nDisallow: /go/\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n',
+          indexable
+              ? 'User-agent: *\nAllow: /\nDisallow: /go/\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n'
+              : 'User-agent: *\nDisallow: /\n',
           headers: {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400'},
         ));
   if (fontsDir != null) router.get('/fonts/<file>', (shelf.Request _, String file) => serveFont(tenant, fontsDir, file));
-  return (shelf.Request req) async => _secured(await router.call(req));
+  return (shelf.Request req) async {
+    final r = _secured(await router.call(req));
+    return indexable ? r : r.change(headers: {'x-robots-tag': 'noindex'});
+  };
 }
 
 /// Shown when the rate limits in Functions refuse a form (P6-s05).

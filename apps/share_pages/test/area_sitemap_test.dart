@@ -70,6 +70,17 @@ void main() {
   });
 
   test('robots.txt points at the sitemap', () async {
-    expect(await (await get('/robots.txt')).readAsString(), contains('Sitemap: https://realtimeestates.co.ke/sitemap.xml'));
+    final r = await get('/robots.txt');
+    expect(await r.readAsString(), contains('Sitemap: https://realtimeestates.co.ke/sitemap.xml'));
+    expect(r.headers['x-robots-tag'], isNull);
+  });
+
+  test('outside prod, crawlers are turned away from every page', () async {
+    final h = shareHandler(tenant, InMemoryListingSource(const [flat], areas: const [kilimani]), indexable: false);
+    Future<shelf.Response> dev(String path) => Future.value(h(shelf.Request('GET', Uri.parse('https://x$path'))));
+    expect(await (await dev('/robots.txt')).readAsString(), 'User-agent: *\nDisallow: /\n');
+    for (final path in ['/', '/listing/${flat.slug}', '/area/kilimani', '/sitemap.xml', '/missing']) {
+      expect((await dev(path)).headers['x-robots-tag'], 'noindex', reason: path);
+    }
   });
 }
