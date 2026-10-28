@@ -3,7 +3,7 @@
  * verification or commissions happens here, never in a client.
  *
  * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing, confirmListing, setStaffRole, dataRequest.
- * Scheduled: purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), nightly.
+ * Scheduled, nightly: purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
  *   P2  onMediaUpload   -> ffmpeg HLS for video (photos done: onListingPhoto)
@@ -32,6 +32,7 @@ import * as staff from './api/staff';
 import * as viewings from './api/viewings';
 import { dataRequest as runDataRequest } from './api/privacy';
 import { purgeExpired } from './api/retention';
+import { updateAgentResponseTimes } from './api/response';
 import { REGION, verificationExpiry } from './listing-rules';
 
 initializeApp();
@@ -65,6 +66,11 @@ export const purgeExpiredLeads = onSchedule({ schedule: '15 3 * * *', timeZone: 
 // 30 days lose the Verified badge and leave search (status expired).
 export const expireListings = onSchedule({ schedule: '45 2 * * *', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
   console.log(`verification: expired ${await listings.expireListings(getFirestore(), new Date())} listings`);
+});
+
+// Response times (P5-s03): every night, each agent's typical reply time.
+export const agentResponseTimes = onSchedule({ schedule: '30 3 * * *', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
+  await updateAgentResponseTimes(getFirestore(), new Date());
 });
 
 // Media pipeline (D6): raw listing photos -> WebP variants + blurhash.

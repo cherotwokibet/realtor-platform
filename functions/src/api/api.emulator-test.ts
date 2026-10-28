@@ -13,6 +13,7 @@ import { confirmListing, expireListings, moderateListing, submitListing } from '
 import { bookViewing } from './viewings';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
+import { updateAgentResponseTimes } from './response';
 import { dataRequest } from './privacy';
 import { bootstrapOwner, setStaffRole, type StaffAuth } from './staff';
 
@@ -461,3 +462,36 @@ describe('data requests (DPA 2019, P6-s04)', () => {
     await rejectsWith(dataRequest(db, manager, { kind: 'export', phone: '0712345678' }, now), 'invalid-argument');
   });
 });
+
+describe('response times (P5-s03)', () => {
+  const min = 60_000;
+  const ask = (i: number) =>
+    createLead(db, { listingId: 'listing-001', channel: 'form', contact: { phone: `+2547000011${String(i).padStart(2, '0')}` }, consent: true }, now);
+
+  test("a lead's first move from new records the reply time; later moves keep it", async () => {
+    const { leadId } = await ask(0);
+    await updateLeadStage(db, wanjiku, { leadId, stage: 'contacted' }, new Date(now.getTime() + 42 * min));
+    await updateLeadStage(db, wanjiku, { leadId, stage: 'viewing' }, new Date(now.getTime() + 300 * min));
+    const l = (await db.collection('leads').doc(leadId).get()).data()!;
+    assert.equal(l.responseMins, 42);
+    assert.equal(l.firstResponseAt.toDate().getTime(), now.getTime() + 42 * min);
+  });
+
+  test("each agent's typical reply is the median of recent replies, once there are 3", async () => {
+    const replies = [5, 30, 600];
+    for (const [i, m] of replies.entries()) {
+      const { leadId } = await ask(i + 1);
+      await updateLeadStage(db, wanjiku, { leadId, stage: i === 2 ? 'lost' : 'contacted' }, new Date(now.getTime() + m * min));
+    }
+    const day = new Date(now.getTime() + 86_400_000);
+    let out = await updateAgentResponseTimes(db, day);
+    assert.equal(out['agent-wanjiku'], 30);
+    assert.equal((await db.collection('agents').doc('agent-wanjiku').get()).get('responseMins'), 30);
+    assert.equal(out['agent-otieno'], null, 'no replies yet: nothing said');
+
+    // Ninety days on, those replies are too old to count.
+    out = await updateAgentResponseTimes(db, new Date(now.getTime() + 91 * 86_400_000));
+    assert.equal(out['agent-wanjiku'], null);
+  });
+});
+

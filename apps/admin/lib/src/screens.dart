@@ -7,6 +7,9 @@ import 'format.dart';
 import 'paged_table.dart';
 import 'providers.dart';
 
+/// A new lead should get its first reply within this many minutes (P5-s03).
+const leadReplyTargetMins = 60;
+
 /// Heading, optional filters and a table, in a scrollable page.
 class _TablePage extends StatelessWidget {
   const _TablePage({required this.title, this.subtitle, this.filters, required this.table});
@@ -192,7 +195,23 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
         },
         load: (after) => repo.leads(who, stage: _stage, after: after, limit: pageSize),
         columns: [
-          TableColumn('Received', (r) => Text(shortDateTime(r.createdAt))),
+          TableColumn('Received', (r) {
+            final received = Text(shortDateTime(r.createdAt));
+            if (r.stage != 'new') return received;
+            // SLA (P5-s03): a new lead waiting over an hour shows red.
+            final waiting = DateTime.now().difference(r.createdAt).inMinutes;
+            return Row(mainAxisSize: MainAxisSize.min, children: [
+              received,
+              const SizedBox(width: 8),
+              Text(
+                'waiting ${minutesLabel(waiting < 0 ? 0 : waiting)}',
+                style: TextStyle(
+                  color: waiting > leadReplyTargetMins ? Theme.of(context).colorScheme.error : null,
+                  fontWeight: waiting > leadReplyTargetMins ? FontWeight.w600 : null,
+                ),
+              ),
+            ]);
+          }),
           TableColumn('Name', (r) => Text(r.contactName ?? '—')),
           TableColumn('Phone', (r) => Text(r.contactPhone ?? '—')),
           TableColumn('Listing', (r) => Text(r.listingTitle)),
@@ -459,6 +478,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                 DataColumn(label: Text('Name')),
                 DataColumn(label: Text('Role')),
                 DataColumn(label: Text('Acts as agent')),
+                DataColumn(label: Text('Typical reply')),
               ],
               rows: [
                 for (final m in team)
@@ -477,6 +497,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                       onSelected: (o) => o == 'edit' ? _edit(who, member: m) : _remove(who, m),
                     )),
                     DataCell(Text(m.agentName ?? m.agentId ?? '')),
+                    DataCell(Text(m.agentReplyMins == null ? (m.agentId == null ? '' : '—') : minutesLabel(m.agentReplyMins!))),
                   ]),
               ],
             ),

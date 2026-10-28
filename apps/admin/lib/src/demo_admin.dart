@@ -23,6 +23,9 @@ const _agents = {
   'agent-achieng': 'Achieng Odhiambo',
 };
 
+/// Typical first replies in minutes (Achieng has too few leads yet).
+const _demoReplies = {'agent-wanjiku': 25, 'agent-otieno': 140};
+
 const _areas = ['kilimani', 'westlands', 'kileleshwa', 'lavington', 'south-b', 'ruaka'];
 const _kinds = ['2 bedroom apartment', '1 bedroom apartment', 'Studio', '3 bedroom maisonette', 'Bedsitter'];
 const _first = [
@@ -126,6 +129,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
           role: e.value.role,
           agentId: e.value.agentId,
           agentName: _agents[e.value.agentId],
+          agentReplyMins: _demoReplies[e.value.agentId],
         ),
   };
 

@@ -112,10 +112,14 @@ class AuditRow {
 
 /// One person on the team (staff/{uid}, the mirror of their role claims).
 class StaffMember {
-  const StaffMember({required this.uid, required this.role, this.email, this.name, this.agentId, this.agentName});
+  const StaffMember(
+      {required this.uid, required this.role, this.email, this.name, this.agentId, this.agentName, this.agentReplyMins});
   final String uid;
   final StaffRole role;
   final String? email, name, agentId, agentName;
+
+  /// The agent's typical first reply to a lead, in minutes (P5-s03); null until there are enough replies.
+  final int? agentReplyMins;
 }
 
 /// An agent record staff accounts can act as.

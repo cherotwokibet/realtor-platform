@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_admin/src/app.dart';
 import 'package:realtor_admin/src/demo_admin.dart';
+import 'package:realtor_admin/src/format.dart';
 import 'package:realtor_admin/src/providers.dart';
 import 'package:realtor_admin/src/session.dart';
 import 'package:realtor_core/realtor_core.dart';
@@ -503,6 +504,25 @@ void main() {
     await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
     expect(find.byTooltip(why), findsNothing);
+  });
+
+  test('reply times read as minutes, hours or days', () {
+    expect([minutesLabel(0), minutesLabel(59), minutesLabel(90), minutesLabel(1440), minutesLabel(4000)],
+        ['0 min', '59 min', '2 h', '1 day', '3 days']);
+  });
+
+  testWidgets("the team shows each agent's typical reply; new leads show how long they have waited", (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Team'));
+    await tester.pumpAndSettle();
+    expect(find.text('Typical reply'), findsOneWidget);
+    expect(find.text('25 min'), findsOneWidget); // Wanjiku
+    expect(find.text('2 h'), findsOneWidget); // Otieno, 140 min
+    await tester.tap(find.text('Leads'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'New'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('waiting '), findsWidgets);
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

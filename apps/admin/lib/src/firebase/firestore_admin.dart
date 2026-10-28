@@ -12,6 +12,7 @@ class FirestoreAdminRepository implements AdminRepository {
 
   final FirebaseFirestore _db;
   Map<String, String>? _agentNames;
+  Map<String, int?> _agentReplies = const {};
 
   @override
   Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25}) async {
@@ -125,6 +126,7 @@ class FirestoreAdminRepository implements AdminRepository {
             name: d.data()['name'] as String?,
             agentId: d.data()['agentId'] as String?,
             agentName: names[d.data()['agentId']],
+            agentReplyMins: _agentReplies[d.data()['agentId']],
           ),
     ];
   }
@@ -153,9 +155,14 @@ class FirestoreAdminRepository implements AdminRepository {
   }
 
   /// Agent names, read once (a small collection staff may read).
-  Future<Map<String, String>> _agents() async => _agentNames ??= {
-        for (final d in (await _db.collection('agents').get()).docs) d.id: (d.data()['name'] as String?) ?? d.id,
-      };
+  Future<Map<String, String>> _agents() async {
+    if (_agentNames == null) {
+      final docs = (await _db.collection('agents').get()).docs;
+      _agentReplies = {for (final d in docs) d.id: (d.data()['responseMins'] as num?)?.toInt()};
+      _agentNames = {for (final d in docs) d.id: (d.data()['name'] as String?) ?? d.id};
+    }
+    return _agentNames!;
+  }
 
   /// Titles of the listings a page of leads points at. One read each: an
   /// agent may not read every listing (a colleague's draft), and a refused

@@ -60,7 +60,7 @@ void main() {
     setUp(() async {
       db = FakeFirebaseFirestore();
       repo = FirestoreAdminRepository(db);
-      await db.collection('agents').doc('agent-a').set({'name': 'Agent A', 'active': true});
+      await db.collection('agents').doc('agent-a').set({'name': 'Agent A', 'active': true, 'responseMins': 25});
       await db.collection('agents').doc('agent-b').set({'name': 'Agent B', 'active': true});
       for (var i = 0; i < 5; i++) {
         final agentId = i.isEven ? 'agent-a' : 'agent-b';
@@ -145,7 +145,8 @@ void main() {
       expect(() => repo.team(agent), throwsA(isA<StaffAccessException>()));
       final team = await repo.team(manager);
       expect(team.map((m) => m.email), ['a@example.com', 'b@example.com']);
-      expect((team.last.role, team.last.agentName), (StaffRole.agent, 'Agent A'));
+      expect((team.last.role, team.last.agentName, team.last.agentReplyMins), (StaffRole.agent, 'Agent A', 25));
+      expect(team.first.agentReplyMins, isNull);
       expect((await repo.agents(manager)).map((a) => a.name), ['Agent A', 'Agent B']);
     });
 
