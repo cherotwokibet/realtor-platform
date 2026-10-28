@@ -138,6 +138,28 @@ void main() {
       expect((await repo.listings(agent)).rows.any((r) => r.photoMatch), isFalse);
     });
 
+    test('viewings: open ones from a date, earliest first and scoped; history by status, latest first', () async {
+      DateTime at(int h) => t0.add(Duration(hours: h));
+      Future<void> v(String id, String agentId, String status, DateTime slot) => db.collection('viewings').doc(id).set({
+            'listingId': 'l0',
+            'agentId': agentId,
+            'slot': Timestamp.fromDate(slot),
+            'status': status,
+            'client': {'name': 'Client $id', 'phone': '+2547000009${id.substring(1)}'},
+          });
+      await v('v1', 'agent-a', 'confirmed', at(-30)); // yesterday-ish, still open
+      await v('v2', 'agent-a', 'requested', at(20));
+      await v('v3', 'agent-b', 'requested', at(10));
+      await v('v4', 'agent-a', 'done', at(-50));
+      await v('v5', 'agent-a', 'requested', at(-24 * 30)); // too old for the open list
+      final from = t0.subtract(const Duration(days: 14));
+      expect((await repo.viewings(manager, from: from)).rows.map((r) => r.id), ['v1', 'v3', 'v2']);
+      final mine = (await repo.viewings(agent, from: from)).rows;
+      expect(mine.map((r) => r.id), ['v1', 'v2']);
+      expect((mine.first.listingTitle, mine.first.clientName, mine.first.agentName), ('Listing 0', 'Client v1', 'Agent A'));
+      expect((await repo.viewings(manager, status: 'done', from: from)).rows.map((r) => r.id), ['v4']);
+    });
+
     test('the team: managers only, by email, with agent names; unknown roles skipped', () async {
       await db.collection('staff').doc('u2').set({'email': 'b@example.com', 'role': 'agent', 'agentId': 'agent-a'});
       await db.collection('staff').doc('u1').set({'email': 'a@example.com', 'name': 'Boss', 'role': 'owner'});
@@ -265,6 +287,17 @@ void main() {
       expect(calls.last.$1, 'importListings');
       expect(r.created, [1]);
       expect((r.failed.single.row, r.failed.single.error), (2, 'agentId: no agent "ghost"'));
+    });
+
+    test('updateViewing calls updateViewingStatus', () async {
+      final calls = <(String, Map<String, Object?>)>[];
+      final actions = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return {'status': data['status']};
+      });
+      await actions.updateViewing(agent, viewingId: 'agent-a_1', status: 'confirmed');
+      expect(calls.single.$1, 'updateViewingStatus');
+      expect(calls.single.$2, {'viewingId': 'agent-a_1', 'status': 'confirmed'});
     });
 
     test('a refusal becomes an AdminActionException with the callable code', () async {

@@ -13,11 +13,12 @@ export interface AuditEvent {
     | 'listing.sold'
     | 'listing.confirm'
     | 'listing.feature'
+    | 'viewing.status'
     | 'staff.role'
     | 'privacy.export'
     | 'privacy.delete';
   /** label: what the admin shows for it (a listing title, a staff email), kept as it was then. */
-  target: { collection: 'leads' | 'listings' | 'staff' | 'people'; id: string; label?: string };
+  target: { collection: 'leads' | 'listings' | 'staff' | 'people' | 'viewings'; id: string; label?: string };
   from?: string | null;
   to?: string;
   reason?: string;

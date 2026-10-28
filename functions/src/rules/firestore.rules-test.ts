@@ -13,7 +13,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { seedDocs } from '../seed/data';
 
 let env: RulesTestEnvironment;
@@ -109,6 +109,14 @@ describe('viewings and payments', () => {
     await assertSucceeds(getDoc(doc(agent('agent-wanjiku'), 'viewings', 'view-1')));
     await assertFails(getDoc(doc(agent('agent-otieno'), 'viewings', 'view-1')));
     await assertFails(updateDoc(doc(agent('agent-wanjiku'), 'viewings', 'view-1'), { status: 'confirmed' }));
+    // The admin's Viewings queries (P5-s05): an agent's own, a manager's all.
+    const open = (db: ReturnType<typeof manager>, agentId?: string) =>
+      getDocs(query(collection(db, 'viewings'), ...(agentId ? [where('agentId', '==', agentId)] : []),
+        where('status', 'in', ['requested', 'confirmed']), orderBy('slot')));
+    await assertSucceeds(open(agent('agent-wanjiku'), 'agent-wanjiku'));
+    await assertFails(open(agent('agent-wanjiku')));
+    await assertFails(open(agent('agent-wanjiku'), 'agent-otieno'));
+    await assertSucceeds(open(manager()));
   });
   test('payments: managers read, nobody writes', async () => {
     await assertFails(getDoc(doc(agent(), 'payments', 'pay-1')));

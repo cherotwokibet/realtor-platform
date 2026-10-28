@@ -118,8 +118,16 @@ class _PagedTableState<T> extends State<PagedTable<T>> {
 /// "All" plus one chip per value; [onSelected] gets null for "All".
 class FilterChips extends StatelessWidget {
   const FilterChips(
-      {super.key, required this.values, required this.selected, required this.onSelected, required this.labelOf});
+      {super.key,
+      required this.values,
+      required this.selected,
+      required this.onSelected,
+      required this.labelOf,
+      this.allLabel = 'All'});
   final List<String> values;
+
+  /// The chip for no filter (null).
+  final String allLabel;
   final String? selected;
   final ValueChanged<String?> onSelected;
   final String Function(String) labelOf;
@@ -129,7 +137,7 @@ class FilterChips extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: [
-          ChoiceChip(label: const Text('All'), selected: selected == null, onSelected: (_) => onSelected(null)),
+          ChoiceChip(label: Text(allLabel), selected: selected == null, onSelected: (_) => onSelected(null)),
           for (final v in values)
             ChoiceChip(label: Text(labelOf(v)), selected: selected == v, onSelected: (_) => onSelected(v)),
         ],

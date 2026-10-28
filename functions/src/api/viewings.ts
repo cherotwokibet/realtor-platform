@@ -3,7 +3,9 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { docId, kenyanPhone, lead, viewing } from '../model/schema';
-import { parseInput } from './auth';
+import { audit } from './audit';
+import { type Caller, isManager, parseInput, requireStaff } from './auth';
+import transitions from '../model/transitions.json';
 import { checkLimits, LIMITS } from './ratelimit';
 import { LEAD_RETENTION_DAYS } from './leads';
 
@@ -114,3 +116,49 @@ export async function bookViewing(db: Firestore, input: unknown, now = new Date(
   });
   return { viewingId, leadId: leadRef.id };
 }
+
+type ViewingStatus = 'requested' | 'confirmed' | 'done' | 'no-show' | 'cancelled';
+/** Allowed status moves, shared with the admin (model/transitions.json). */
+const VIEWING_MOVES = transitions.viewingStatus as Record<ViewingStatus, ViewingStatus[]>;
+
+export const updateViewingInput = z.object({
+  viewingId: docId,
+  status: z.enum(['confirmed', 'done', 'no-show', 'cancelled']),
+});
+
+/** "26 Oct, 10:30" in Nairobi time, for the audit label. */
+const nairobi = (d: Date) =>
+  d.toLocaleString('en-KE', { timeZone: 'Africa/Nairobi', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+
+/**
+ * P5-s05: the viewing's agent (or a manager) confirms it, marks it done or
+ * a no-show, or cancels it; a cancelled slot is free to book again. The
+ * audit names the listing and time, never the client.
+ */
+export async function updateViewingStatus(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ status: ViewingStatus }> {
+  requireStaff(caller);
+  const req = parseInput(updateViewingInput, input);
+  const ref = db.collection('viewings').doc(req.viewingId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'no such viewing');
+    if (!isManager(caller) && snap.get('agentId') !== caller.agentId) throw new HttpsError('permission-denied', 'not your viewing');
+    const from = snap.get('status') as ViewingStatus;
+    if (!VIEWING_MOVES[from]?.includes(req.status)) throw new HttpsError('failed-precondition', `a ${from} viewing cannot become ${req.status}`);
+    const slot = snap.get('slot').toDate() as Date;
+    if ((req.status === 'done' || req.status === 'no-show') && slot > now) {
+      throw new HttpsError('failed-precondition', 'the viewing has not happened yet');
+    }
+    const listing = await tx.get(db.collection('listings').doc(snap.get('listingId') as string));
+    const title = listing.get('title') as string | undefined;
+    tx.update(ref, { status: req.status, updatedAt: now });
+    audit(tx, db, caller, {
+      action: 'viewing.status',
+      target: { collection: 'viewings', id: ref.id, label: `Viewing${title ? ` of ${title}` : ''}, ${nairobi(slot)}` },
+      from,
+      to: req.status,
+    }, now);
+  });
+  return { status: req.status };
+}
+

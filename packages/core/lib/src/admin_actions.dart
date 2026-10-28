@@ -22,6 +22,21 @@ const listingStatusMoves = {
   'sold': <String>[],
 };
 
+const viewingStatusMoves = {
+  'requested': ['confirmed', 'cancelled'],
+  'confirmed': ['done', 'no-show', 'cancelled'],
+  'done': <String>[],
+  'no-show': <String>[],
+  'cancelled': <String>[],
+};
+
+/// The moves a viewing at [status] can take at [now]: done and no-show
+/// only once its time has passed (the Functions refuse them earlier).
+List<String> nextViewingStatuses(String status, DateTime slot, DateTime now) => [
+      for (final s in viewingStatusMoves[status] ?? const <String>[])
+        if ((s != 'done' && s != 'no-show') || !slot.isAfter(now)) s
+    ];
+
 /// `moderateListing` action → the status it sets.
 const moderationTargets = {'approve': 'live', 'reject': 'draft', 'expire': 'expired', 'let': 'let', 'sold': 'sold'};
 
@@ -83,6 +98,9 @@ abstract interface class AdminActions {
   /// live or expired listing is still available. It goes live, verified for
   /// another 30 days; completes with the new expiry.
   Future<DateTime> confirmListing(StaffUser who, {required String listingId});
+
+  /// `updateViewingStatus` (P5-s05): the viewing's agent, or a manager.
+  Future<void> updateViewing(StaffUser who, {required String viewingId, required String status});
 
   /// `featureListing` (P5-s02), managers: a live listing ranks first in
   /// search for [days]; 0 stops it. Completes with the new end, or null.

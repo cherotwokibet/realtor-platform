@@ -10,7 +10,7 @@ import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
 import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateListing, submitListing } from './listings';
-import { bookViewing } from './viewings';
+import { bookViewing, updateViewingStatus } from './viewings';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
@@ -541,6 +541,36 @@ describe('featuring and CSV import (P5-s02)', () => {
 
     await rejectsWith(importListings(db, wanjiku, { rows: [newListing] }, now), 'permission-denied');
     await rejectsWith(importListings(db, manager, { rows: [] }, now), 'invalid-argument');
+  });
+});
+
+describe('viewing status (P5-s05)', () => {
+  const slot = '2026-10-26T10:30:00+03:00';
+  const after = new Date('2026-10-26T09:00:00Z'); // 12:00 Nairobi, after the 10:30 viewing
+
+  test('the agent confirms, then marks done after the time; the audit names the listing and time, not the client', async () => {
+    const { viewingId } = await bookViewing(db, { listingId: 'listing-001', slot, client: { name: 'Amina', phone: '+254700001201' }, consent: true }, now);
+    await rejectsWith(updateViewingStatus(db, otieno, { viewingId, status: 'confirmed' }, now), 'permission-denied');
+    await rejectsWith(updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, now), 'failed-precondition'); // not confirmed yet
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'confirmed' }, now);
+    await rejectsWith(updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, now), 'failed-precondition'); // before 10:30
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'no-show' }, after);
+    assert.equal((await db.collection('viewings').doc(viewingId).get()).get('status'), 'no-show');
+    await rejectsWith(updateViewingStatus(db, manager, { viewingId, status: 'cancelled' }, after), 'failed-precondition'); // final
+
+    const log = (await db.collection('audit').where('action', '==', 'viewing.status').get()).docs.map((d) => d.data());
+    assert.deepEqual(log.map((e) => `${e.from}->${e.to}`).sort(), ['confirmed->no-show', 'requested->confirmed']);
+    assert.match(log[0].target.label, /^Viewing of .+, 26 Oct,? 10:30$/);
+    assert.ok(!JSON.stringify(log).includes('Amina') && !JSON.stringify(log).includes('700001201'));
+  });
+
+  test('a cancelled slot can be booked again', async () => {
+    const client = { name: 'Juma', phone: '+254700001202' };
+    const { viewingId } = await bookViewing(db, { listingId: 'listing-001', slot, client, consent: true }, now);
+    await updateViewingStatus(db, manager, { viewingId, status: 'cancelled' }, now);
+    const again = await bookViewing(db, { listingId: 'listing-001', slot, client: { name: 'Wairimu', phone: '+254700001203' }, consent: true }, now);
+    assert.equal(again.viewingId, viewingId);
+    assert.equal((await db.collection('viewings').doc(viewingId).get()).get('status'), 'requested');
   });
 });
 

@@ -32,6 +32,10 @@ class CallableAdminActions implements AdminActions {
   }
 
   @override
+  Future<void> updateViewing(StaffUser who, {required String viewingId, required String status}) =>
+      _run('updateViewingStatus', {'viewingId': viewingId, 'status': status});
+
+  @override
   Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
     final r = await _run('featureListing', {'listingId': listingId, 'days': days}) as Map<Object?, Object?>;
     final until = r['featuredUntil'] as String?;

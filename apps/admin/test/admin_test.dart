@@ -60,6 +60,13 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<void> updateViewing(StaffUser who, {required String viewingId, required String status}) async {
+    calls++;
+    await gate.future;
+    return inner.updateViewing(who, viewingId: viewingId, status: status);
+  }
+
+  @override
   Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
     calls++;
     await gate.future;
@@ -594,6 +601,48 @@ void main() {
     await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
     expect(find.text('Import CSV…'), findsNothing);
+  });
+
+  testWidgets('viewings: a past confirmed one comes first to close; marking it a no-show moves it to history',
+      (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    expect(location(), '/viewings');
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+    final openRows = (await container.read(adminRepositoryProvider).viewings(manager, from: from, limit: 50)).rows;
+    final past = openRows.first;
+    expect(past.slot.isBefore(now), isTrue, reason: 'earliest first: yesterday\'s confirmed viewing leads');
+    expect(openRows.every((v) => v.status == 'requested' || v.status == 'confirmed'), isTrue);
+
+    await tapVisible(tester, find.byTooltip('Update the viewing ${shortDateTime(past.slot)}'));
+    expect(find.text('Mark done'), findsOneWidget);
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Mark no-show'));
+    await tester.pumpAndSettle();
+    expect(find.text('Viewing ${shortDateTime(past.slot)}: No show'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'No show'));
+    await tester.pumpAndSettle();
+    final noShows = (await container.read(adminRepositoryProvider).viewings(manager, status: 'no-show', from: from)).rows;
+    expect(noShows.map((v) => v.id), contains(past.id));
+  });
+
+  testWidgets('a future viewing can only be confirmed or cancelled; agents see only their own', (tester) async {
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    final mine = (await container.read(adminRepositoryProvider).viewings(wanjiku, from: from, limit: 50)).rows;
+    expect(mine, isNotEmpty);
+    expect(mine.every((v) => v.agentId == 'agent-wanjiku'), isTrue);
+    final future = mine.firstWhere((v) => v.slot.isAfter(now) && v.status == 'requested');
+    await tapVisible(tester, find.byTooltip('Update the viewing ${shortDateTime(future.slot)}'));
+    expect(find.text('Mark done'), findsNothing);
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Confirm'));
+    await tester.pumpAndSettle();
+    expect(find.text('Viewing ${shortDateTime(future.slot)}: Confirmed'), findsOneWidget);
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

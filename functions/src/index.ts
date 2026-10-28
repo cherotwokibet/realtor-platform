@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, setStaffRole, dataRequest.
+ * Callables: createLead, logContactTap, bookViewing, updateViewingStatus, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, setStaffRole, dataRequest.
  * Scheduled, nightly: purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -48,6 +48,7 @@ export const health = onRequest((_req, res) => {
 export const createLead = onCall((req) => leads.createLead(getFirestore(), req.data));
 export const logContactTap = onCall((req) => leads.logContactTap(getFirestore(), req.data));
 export const bookViewing = onCall((req) => viewings.bookViewing(getFirestore(), req.data));
+export const updateViewingStatus = onCall((req) => viewings.updateViewingStatus(getFirestore(), callerFrom(req.auth), req.data));
 export const updateLeadStage = onCall((req) => leads.updateLeadStage(getFirestore(), callerFrom(req.auth), req.data));
 export const submitListing = onCall((req) => listings.submitListing(getFirestore(), callerFrom(req.auth), req.data));
 export const moderateListing = onCall((req) => listings.moderateListing(getFirestore(), callerFrom(req.auth), req.data));

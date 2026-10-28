@@ -21,6 +21,7 @@ class _Section {
 
 final _sections = [
   _Section(AdminSection.leads, 'Leads', Icons.inbox_outlined, () => const LeadsScreen()),
+  _Section(AdminSection.viewings, 'Viewings', Icons.event_outlined, () => const ViewingsScreen()),
   _Section(AdminSection.listings, 'Listings', Icons.home_work_outlined, () => const ListingsScreen()),
   _Section(AdminSection.team, 'Team', Icons.group_outlined, () => const TeamScreen()),
   _Section(AdminSection.audit, 'Audit log', Icons.history, () => const AuditScreen()),

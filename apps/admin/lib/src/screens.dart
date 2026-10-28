@@ -242,6 +242,95 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
   }
 }
 
+/// Viewings (P5-s05): upcoming ones soonest first, or the history by
+/// status. The agent (or a manager) confirms, cancels, and after the time
+/// marks each done or a no-show.
+class ViewingsScreen extends ConsumerStatefulWidget {
+  const ViewingsScreen({super.key});
+  @override
+  ConsumerState<ViewingsScreen> createState() => _ViewingsScreenState();
+}
+
+class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
+  String? _status;
+  var _reload = 0;
+  final _saving = <String, String>{}, _saved = <String, String>{};
+
+  Future<void> _move(StaffUser who, ViewingRow v, String to) async {
+    if (_saving.containsKey(v.id)) return;
+    setState(() => _saving[v.id] = to);
+    final ok = await _act(
+      context,
+      () => ref.read(adminActionsProvider).updateViewing(who, viewingId: v.id, status: to),
+      'Viewing ${shortDateTime(v.slot)}: ${label(to)}',
+    );
+    if (!mounted) return;
+    setState(() {
+      _saving.remove(v.id);
+      if (ok) {
+        _saved[v.id] = to;
+        _reload++;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final who = ref.watch(staffProvider)!;
+    final repo = ref.watch(adminRepositoryProvider);
+    return _TablePage(
+      title: 'Viewings',
+      subtitle: _status == null
+          ? 'Viewings to confirm or close, earliest first: past ones still need marking done or no-show.'
+          : 'Latest first.',
+      filters: FilterChips(
+        values: viewingHistory,
+        selected: _status,
+        allLabel: 'Open',
+        labelOf: label,
+        onSelected: (s) => setState(() => _status = s),
+      ),
+      table: PagedTable<ViewingRow>(
+        key: ValueKey(('viewings', who.uid, _status)),
+        empty: _status == null ? 'No open viewings.' : 'None.',
+        reload: _reload,
+        onLoaded: () {
+          if (_saved.isNotEmpty && mounted) setState(_saved.clear);
+        },
+        load: (after) {
+          final now = DateTime.now();
+          final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+          return repo.viewings(who, status: _status, from: from, after: after, limit: pageSize);
+        },
+        columns: [
+          TableColumn('When', (v) => Text(shortDateTime(v.slot))),
+          TableColumn('Listing', (v) => Text(v.listingTitle)),
+          TableColumn('Client', (v) => Text(v.clientName ?? '—')),
+          TableColumn('Phone', (v) => Text(v.clientPhone ?? '—')),
+          TableColumn('Status', (v) {
+            final status = _saving[v.id] ?? _saved[v.id] ?? v.status;
+            return _MenuCell(
+              text: label(status),
+              tooltip: 'Update the viewing ${shortDateTime(v.slot)}',
+              options: nextViewingStatuses(status, v.slot, DateTime.now()),
+              labelOf: (s) => switch (s) {
+                'confirmed' => 'Confirm',
+                'done' => 'Mark done',
+                'no-show' => 'Mark no-show',
+                'cancelled' => 'Cancel viewing',
+                _ => label(s),
+              },
+              saving: _saving.containsKey(v.id),
+              onSelected: (s) => _move(who, v, s),
+            );
+          }),
+          if (who.isManager) TableColumn('Agent', (v) => Text(v.agentName)),
+        ],
+      ),
+    );
+  }
+}
+
 class ListingsScreen extends ConsumerStatefulWidget {
   const ListingsScreen({super.key});
   @override

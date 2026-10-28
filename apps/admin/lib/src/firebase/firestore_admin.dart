@@ -85,6 +85,37 @@ class FirestoreAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<RowPage<ViewingRow>> viewings(StaffUser who,
+      {String? status, required DateTime from, String? after, int limit = 25}) async {
+    Query<Map<String, Object?>> q = _db.collection('viewings');
+    if (who.agentScope != null) q = q.where('agentId', isEqualTo: who.agentScope);
+    q = status == null
+        ? q
+            .where('status', whereIn: const ['requested', 'confirmed'])
+            .where('slot', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+            .orderBy('slot')
+        : q.where('status', isEqualTo: status).orderBy('slot', descending: true);
+    return _page('viewings', q, after, limit, (docs) async {
+      final names = await _agents();
+      final titles = await _listingTitles({for (final d in docs) _str(d, 'listingId')});
+      return [
+        for (final d in docs)
+          ViewingRow(
+            id: d.id,
+            listingId: _str(d, 'listingId'),
+            listingTitle: titles[_str(d, 'listingId')] ?? _str(d, 'listingId'),
+            agentId: _str(d, 'agentId'),
+            agentName: names[_str(d, 'agentId')] ?? _str(d, 'agentId'),
+            slot: _date(d.data()['slot']),
+            status: _str(d, 'status'),
+            clientName: _map(d, 'client')['name'] as String?,
+            clientPhone: _map(d, 'client')['phone'] as String?,
+          ),
+      ];
+    });
+  }
+
+  @override
   Future<RowPage<AuditRow>> audit(StaffUser who, {String? after, int limit = 25}) async {
     if (!who.canOpen(AdminSection.audit)) throw StaffAccessException('the audit log is for owners and managers');
     final q = _db.collection('audit').orderBy('at', descending: true);

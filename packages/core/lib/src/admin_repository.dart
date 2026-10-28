@@ -14,6 +14,45 @@ class RowPage<T> {
   final String? next;
 }
 
+/// A viewing as staff see it (viewings/{id}, P5-s05).
+class ViewingRow {
+  const ViewingRow({
+    required this.id,
+    required this.listingId,
+    required this.listingTitle,
+    required this.agentId,
+    required this.agentName,
+    required this.slot,
+    required this.status,
+    this.clientName,
+    this.clientPhone,
+  });
+  final String id, listingId, listingTitle, agentId, agentName, status;
+  final DateTime slot;
+  final String? clientName, clientPhone;
+
+  ViewingRow withStatus(String status) => ViewingRow(
+        id: id,
+        listingId: listingId,
+        listingTitle: listingTitle,
+        agentId: agentId,
+        agentName: agentName,
+        slot: slot,
+        status: status,
+        clientName: clientName,
+        clientPhone: clientPhone,
+      );
+}
+
+const viewingStatuses = ['requested', 'confirmed', 'done', 'no-show', 'cancelled'];
+
+/// The history filters of the Viewings page; null there means open.
+///
+/// Open viewings are shown from this many days back.
+const openViewingsDays = 14;
+
+const viewingHistory = ['done', 'no-show', 'cancelled'];
+
 class LeadRow {
   const LeadRow({
     required this.id,
@@ -143,6 +182,11 @@ class AgentOption {
 abstract interface class AdminRepository {
   /// Newest first, optionally one [stage].
   Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25});
+
+  /// [status] null: open ones (requested or confirmed) with a slot from
+  /// [from], earliest first, so past ones still to close come first;
+  /// otherwise that status, latest first.
+  Future<RowPage<ViewingRow>> viewings(StaffUser who, {String? status, required DateTime from, String? after, int limit = 25});
 
   /// Most recently updated first, optionally one [status].
   Future<RowPage<StaffListingRow>> listings(StaffUser who, {String? status, String? after, int limit = 25});

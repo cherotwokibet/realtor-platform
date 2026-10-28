@@ -80,6 +80,33 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         featuredUntil: i == 0 ? _now.add(const Duration(days: 12)) : null,
       ));
     }
+    // Viewings: some past (done, no-show, cancelled, one still confirmed to close), most this week.
+    for (var i = 0; i < 14; i++) {
+      final listing = _listings[(i * 5) % _listings.length];
+      // Around the real today, so "Open" always has something to show.
+      final today = _clock();
+      // The first four are in the past (4 to 1 days ago); the rest from tomorrow on.
+      final day = DateTime(today.year, today.month, today.day + (i < 4 ? i - 4 : i - 3));
+      final slot = day.add(Duration(hours: 9 + (i % 7), minutes: i.isEven ? 0 : 30));
+      final status = switch (i) {
+        0 => 'done',
+        1 => 'no-show',
+        2 => 'cancelled',
+        3 => 'confirmed', // yesterday: waiting to be marked done or no-show
+        _ => i.isEven ? 'requested' : 'confirmed',
+      };
+      _viewings.add(ViewingRow(
+        id: '${listing.agentId}_${slot.millisecondsSinceEpoch}',
+        listingId: listing.id,
+        listingTitle: listing.title,
+        agentId: listing.agentId,
+        agentName: listing.agentName,
+        slot: slot,
+        status: status,
+        clientName: '${_first[(i + 3) % _first.length]} ${String.fromCharCode(75 + i % 10)}.',
+        clientPhone: '+2547000003${i.toString().padLeft(2, '0')}',
+      ));
+    }
     for (var i = 0; i < 40; i++) {
       final listing = _listings[(i * 7) % _listings.length];
       _leads.add(LeadRow(
@@ -117,6 +144,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   final DateTime Function() _clock;
   final _listings = <StaffListingRow>[];
   final _leads = <LeadRow>[];
+  final _viewings = <ViewingRow>[];
   final _audit = <AuditRow>[];
 
   /// uid -> member; starts with the demo staff (the no-role account is not staff).
@@ -138,6 +166,31 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25}) async {
     final rows = scopedTo(who, _leads, (r) => r.agentId).where((r) => stage == null || r.stage == stage).toList();
     return pageAfter(rows, (r) => r.id, after: after, limit: limit);
+  }
+
+  @override
+  Future<RowPage<ViewingRow>> viewings(StaffUser who,
+      {String? status, required DateTime from, String? after, int limit = 25}) async {
+    final rows = scopedTo(who, _viewings, (v) => v.agentId)
+        .where((v) => status == null
+            ? (v.status == 'requested' || v.status == 'confirmed') && !v.slot.isBefore(from)
+            : v.status == status)
+        .toList()
+      ..sort((a, b) => status == null ? a.slot.compareTo(b.slot) : b.slot.compareTo(a.slot));
+    return pageAfter(rows, (v) => v.id, after: after, limit: limit);
+  }
+
+  @override
+  Future<void> updateViewing(StaffUser who, {required String viewingId, required String status}) async {
+    final i = _viewings.indexWhere((v) => v.id == viewingId);
+    if (i < 0) throw AdminActionException('not-found', 'no such viewing');
+    final v = _viewings[i];
+    if (!who.isManager && v.agentId != who.agentId) throw AdminActionException('permission-denied', 'not your viewing');
+    if (!nextViewingStatuses(v.status, v.slot, _clock()).contains(status)) {
+      throw AdminActionException('failed-precondition', 'a ${v.status} viewing cannot become $status now');
+    }
+    _viewings[i] = v.withStatus(status);
+    _log(who, 'viewing.status', 'Viewing of ${v.listingTitle}', v.status, status);
   }
 
   @override
