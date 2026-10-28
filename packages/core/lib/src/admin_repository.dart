@@ -59,10 +59,14 @@ class StaffListingRow {
     this.leads = 0,
     this.calls = 0,
     this.whatsapps = 0,
+    this.photoMatch = false,
   });
   final String id, slug, title, area, status, agentId, agentName;
   final int priceKES, leads, calls, whatsapps;
   final DateTime updatedAt;
+
+  /// A photo here matches another listing's (`photoFlags`, P6-s05). Managers only.
+  final bool photoMatch;
 
   StaffListingRow withStatus(String status, DateTime updatedAt) => StaffListingRow(
         id: id,
@@ -77,6 +81,7 @@ class StaffListingRow {
         leads: leads,
         calls: calls,
         whatsapps: whatsapps,
+        photoMatch: photoMatch,
       );
 }
 

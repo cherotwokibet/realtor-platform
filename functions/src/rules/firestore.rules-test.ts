@@ -170,6 +170,20 @@ describe('savedSearches', () => {
   });
 });
 
+describe('photo flags (P6-s05)', () => {
+  test('managers read flags; agents and visitors do not; nobody reads the hash index', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'photoFlags', 'listing-002_abc'), { listingId: 'listing-002', mediaId: 'abc', matches: [] });
+      await setDoc(doc(ctx.firestore(), 'photoHashes', '0_ab'), { entries: [] });
+    });
+    await assertSucceeds(getDoc(doc(manager(), 'photoFlags', 'listing-002_abc')));
+    await assertFails(getDoc(doc(agent(), 'photoFlags', 'listing-002_abc')));
+    await assertFails(getDoc(doc(visitor(), 'photoFlags', 'listing-002_abc')));
+    await assertFails(setDoc(doc(manager(), 'photoFlags', 'x'), { listingId: 'x' }));
+    await assertFails(getDoc(doc(manager(), 'photoHashes', '0_ab')));
+  });
+});
+
 describe('everything else', () => {
   test('unknown collections are closed', async () => {
     await assertFails(getDoc(doc(manager(), 'secrets', 'x')));

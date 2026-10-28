@@ -2,7 +2,7 @@
  * Photo normalisation (D6): one raw phone photo in, standard WebP variants,
  * a blurhash placeholder and size facts out. Pure: no Firebase here.
  */
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import { encode } from 'blurhash';
 
 /** Longest edge per variant, in pixels. */
@@ -18,6 +18,8 @@ export interface ProcessedImage {
   width: number;
   height: number;
   blurhash: string;
+  /** dHash of the photo before any watermark (see [dHash]). */
+  phash: string;
   variants: Record<VariantName, Buffer>;
 }
 
@@ -46,5 +48,28 @@ export async function processImage(input: Buffer, opts: { watermark?: Buffer } =
   const blurhash = encode(new Uint8ClampedArray(small.data), small.info.width, small.info.height, 4, 3);
 
   const full = await sharp(variants.full).metadata();
-  return { width: full.width!, height: full.height!, blurhash, variants };
+  return { width: full.width!, height: full.height!, blurhash, phash: await dHash(base), variants };
+}
+
+/**
+ * 64-bit difference hash as 16 hex digits: each bit says whether a pixel of
+ * a 9×8 greyscale thumbnail is brighter than its right-hand neighbour. It
+ * survives resizing, re-encoding, a watermark and small crops, so the same
+ * photo posted twice lands within a few bits.
+ */
+export async function dHash(img: Sharp): Promise<string> {
+  const { data } = await img.clone().greyscale().resize(9, 8, { fit: 'fill' }).raw().toBuffer({ resolveWithObject: true });
+  let bits = 0n;
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) bits = (bits << 1n) | (data[y * 9 + x] > data[y * 9 + x + 1] ? 1n : 0n);
+  }
+  return bits.toString(16).padStart(16, '0');
+}
+
+/** How many of the 64 bits differ between two hashes. */
+export function hammingDistance(a: string, b: string): number {
+  let x = BigInt(`0x${a}`) ^ BigInt(`0x${b}`);
+  let n = 0;
+  for (; x; x >>= 1n) n += Number(x & 1n);
+  return n;
 }

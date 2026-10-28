@@ -32,6 +32,8 @@ export const mediaItem = z.object({
   blurhash: z.string().optional(),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
+  /** dHash (16 hex digits) for duplicate detection, set by the media pipeline. */
+  phash: z.string().regex(/^[0-9a-f]{16}$/).optional(),
 });
 
 export const listing = z

@@ -46,6 +46,7 @@ class FirestoreAdminRepository implements AdminRepository {
     if (status != null) q = q.where('status', isEqualTo: status);
     return _page('listings', q.orderBy('updatedAt', descending: true), after, limit, (docs) async {
       final names = await _agents();
+      final flagged = who.isManager ? await _photoFlagged([for (final d in docs) d.id]) : const <String>{};
       return [
         for (final d in docs)
           StaffListingRow(
@@ -61,9 +62,23 @@ class FirestoreAdminRepository implements AdminRepository {
             leads: (_map(d, 'stats')['leads'] as num?)?.toInt() ?? 0,
             calls: (_map(d, 'stats')['calls'] as num?)?.toInt() ?? 0,
             whatsapps: (_map(d, 'stats')['whatsapps'] as num?)?.toInt() ?? 0,
+            photoMatch: flagged.contains(d.id),
           ),
       ];
     });
+  }
+
+  /// Which of [ids] have a photo flagged as matching another listing.
+  Future<Set<String>> _photoFlagged(List<String> ids) async {
+    final out = <String>{};
+    for (var i = 0; i < ids.length; i += 30) {
+      final chunk = ids.sublist(i, i + 30 > ids.length ? ids.length : i + 30);
+      final snap = await _db.collection('photoFlags').where('listingId', whereIn: chunk).get();
+      for (final d in snap.docs) {
+        out.add(d.data()['listingId'] as String? ?? '');
+      }
+    }
+    return out;
   }
 
   @override
