@@ -28,7 +28,7 @@ jobs:
       emulator: ${{ steps.f.outputs.emulator }}
       search: ${{ steps.f.outputs.search }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: f
@@ -58,8 +58,8 @@ jobs:
     name: Tenant files + tooling
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -83,8 +83,8 @@ jobs:
       run:
         working-directory: functions
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -98,8 +98,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.dart == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -149,8 +149,8 @@ jobs:
       matrix:
         tenant: [realtime-estates, demo-homes]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -177,7 +177,7 @@ jobs:
           flutter build web --release --wasm
           ! grep -q "A new Flutter project" build/web/index.html
           test -f build/web/main.dart.wasm
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-${{ matrix.tenant }}
           path: apps/realtor_app/build/web
@@ -189,8 +189,8 @@ jobs:
     needs: [changes, dart]
     if: needs.changes.outputs.admin == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -224,15 +224,15 @@ jobs:
           df -h /
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
           df -h /
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: tools/tenant-cli/package-lock.json
       - run: npm ci
         working-directory: tools/tenant-cli
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
@@ -299,8 +299,8 @@ jobs:
       run:
         working-directory: infra/terraform
     steps:
-      - uses: actions/checkout@v5
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false -input=false
         working-directory: infra/terraform/tenant
@@ -313,7 +313,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.share == 'true'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Build the Cloud Run image for demo-homes
         run: docker build -f apps/share_pages/Dockerfile --build-arg TENANT=demo-homes -t share-pages .
       - name: Smoke test the image
@@ -329,13 +329,13 @@ jobs:
     needs: changes
     if: needs.changes.outputs.emulator == 'true'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: functions/package-lock.json
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
@@ -372,8 +372,8 @@ jobs:
           TYPESENSE_API_KEY: ci-only-not-a-secret
           TYPESENSE_DATA_DIR: /tmp
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
