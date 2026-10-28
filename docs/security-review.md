@@ -17,10 +17,12 @@ A running record of what was checked, what was found and what is still open. Rev
 ### Fixed in this review
 - **Saved searches accepted any shape.** `filters` was any map and `channels` any list of up to 3 values, so a signed-in user could store junk the saved-search sweep would read. The rules now allow only the schema's filter keys (`purpose` from the known list, `types` ≤ 12, `areas` ≤ 20, integer `minBeds` 0–20 and `maxPriceKES`) and channels from `push` / `email` / `whatsapp`.
 
+- **No security headers anywhere.** Share pages now send a CSP (`default-src 'none'`, inline styles, `https:` images, same-origin forms, no framing), nosniff, `X-Frame-Options`, Referrer-Policy and Permissions-Policy on every response. The admin Hosting site sends nosniff, `DENY` framing and Referrer-Policy. The app's default site sends nosniff and Referrer-Policy (no framing headers: it serves the Auth iframe the admin embeds).
+
 ### Open
 | # | Finding | Risk | Plan |
 |---|---|---|---|
 | 1 | Public callables (`createLead`, `logContactTap`, `bookViewing`) have no App Check and no rate limit | Spam leads / inflated tap counts; cost | P6 fraud controls: App Check on web and app, per-IP and per-phone limits in the Functions |
 | 2 | Lead personal data is kept past `retainUntil` until the scheduled delete exists | DPA 2019 retention | P6 data protection: scheduled Function deletes expired leads (D12) |
 | 3 | No load test yet on search and listing pages | Unknown capacity | k6 against dev share pages once deployed |
-| 4 | No pen-test checklist run | — | Before prod: OWASP ASVS L1 pass over admin, share pages and callables |
+| 4 | ASVS L1 pass done (`docs/asvs-l1.md`): no critical findings. Open from it: server-side password policy (console, Boniface), full CSP on the Flutter sites, dependency updates and alerting | Low | Re-run before stage and prod; CSP report-only on dev first; Dependabot and alerts in P8-s02 |

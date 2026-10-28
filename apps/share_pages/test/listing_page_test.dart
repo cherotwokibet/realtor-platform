@@ -100,4 +100,18 @@ void main() {
     expect(b, contains('Demo Homes'));
     expect(b, isNot(contains('Realtime')));
   });
+
+  test('every response carries the security headers, and pages run no script the CSP would block', () async {
+    for (final path in ['/listing/${flat.slug}', '/listing/missing', '/robots.txt', '/sitemap.xml', '/']) {
+      final res = await get(path);
+      for (final e in securityHeaders.entries) {
+        expect(res.headers[e.key], e.value, reason: '$path ${e.key}');
+      }
+    }
+    final html = await (await get('/listing/${flat.slug}')).readAsString();
+    final scripts = RegExp(r'<script([^>]*)>').allMatches(html).map((m) => m.group(1)!.trim()).toList();
+    expect(scripts, everyElement('type="application/ld+json"'));
+    expect(html, isNot(contains('<link rel="stylesheet"')));
+    expect(RegExp(r'<[^>]+\son[a-z]+=').hasMatch(html), isFalse);
+  });
 }
