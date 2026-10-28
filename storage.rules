@@ -25,6 +25,11 @@ service firebase.storage {
       allow create: if isManager() && request.auth.uid == uid && isListingMedia();
     }
 
+    // Agent portraits (P5-s04): managers only, photos only.
+    match /uploads/staff/{uid}/agents/{agentId}/{file} {
+      allow create: if isManager() && request.auth.uid == uid && isPhoto();
+    }
+
     match /media/{path=**} {
       allow read: if true;
     }

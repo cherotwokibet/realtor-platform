@@ -84,6 +84,13 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<String> saveAgent(StaffUser who, AgentProfile profile) async {
+    calls++;
+    await gate.future;
+    return inner.saveAgent(who, profile);
+  }
+
+  @override
   Future<void> removeTimeOff(StaffUser who, {required String blockId}) async {
     calls++;
     await gate.future;
@@ -827,6 +834,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('None coming up.'), findsOneWidget);
     expect(await actions.rescheduleViewing(wanjiku, viewingId: v.id, slot: viewingSlot(day.value, '10:00')), isNotEmpty);
+  });
+
+  testWidgets('a manager adds an agent profile, then gives them a photo', (tester) async {
+    final picked = <PickedFile>[(name: 'mercy.jpg', bytes: Uint8List(4096), type: 'image/jpeg')];
+    await open(tester, as: manager, overrides: [filePickerProvider.overrideWithValue(_FakePicker(picked))]);
+    await tester.tap(find.text('Team'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Agent profiles…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add agent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter the EARB registration number.'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Mercy Wambui');
+    await tester.enterText(find.widgetWithText(TextField, 'EARB registration number'), 'EARB/2026/0412');
+    await tester.enterText(find.widgetWithText(TextField, 'Phone'), '0711 000 111');
+    await tester.tap(find.text('Kiswahili'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mercy Wambui'), findsOneWidget);
+
+    final made = (await container.read(adminRepositoryProvider).agentProfiles(manager)).singleWhere((a) => a.name == 'Mercy Wambui');
+    expect((made.id, made.phone, made.whatsapp), ('agent-mercy-wambui', '+254711000111', '+254711000111'));
+    expect(made.languages, ['en', 'sw']);
+    expect((await container.read(adminRepositoryProvider).agents(manager)).map((a) => a.id), contains('agent-mercy-wambui'));
+
+    await tester.tap(find.byTooltip('Edit Mercy Wambui'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Upload photo'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Uploaded.'), findsOneWidget);
+    expect((container.read(listingMediaProvider) as DemoListingMedia).agentPhotos, ['agent-mercy-wambui']);
+  });
+
+  testWidgets('agents do not see agent profiles', (tester) async {
+    await open(tester, as: wanjiku);
+    expect(find.text('Team'), findsNothing);
+    expect(() => container.read(adminRepositoryProvider).agentProfiles(wanjiku), throwsA(isA<StaffAccessException>()));
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

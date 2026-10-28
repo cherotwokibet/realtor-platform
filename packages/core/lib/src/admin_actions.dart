@@ -1,3 +1,4 @@
+import 'agent_profile.dart';
 import 'listing_draft.dart';
 import 'staff.dart';
 
@@ -112,6 +113,10 @@ abstract interface class AdminActions {
   /// offset) so no viewing is booked then. Managers name the agent; an agent
   /// always blocks for themself. Completes with the block's id.
   Future<String> addTimeOff(StaffUser who, {String? agentId, required String start, required String end, String? note});
+
+  /// `saveAgent` (P5-s04), managers: adds or edits an agent's profile.
+  /// Completes with the agent's id.
+  Future<String> saveAgent(StaffUser who, AgentProfile profile);
 
   /// `removeAgentBlock`: the agent's own, or any for managers.
   Future<void> removeTimeOff(StaffUser who, {required String blockId});

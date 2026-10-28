@@ -17,6 +17,7 @@ export interface AuditEvent {
     | 'viewing.reschedule'
     | 'agent.block'
     | 'agent.unblock'
+    | 'agent.save'
     | 'staff.role'
     | 'privacy.export'
     | 'privacy.delete';

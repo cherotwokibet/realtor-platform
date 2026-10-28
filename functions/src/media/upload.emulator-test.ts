@@ -14,7 +14,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { handleListingUpload, handleListingVideo, refuseVideo } from './upload';
+import { handleAgentPhoto, handleListingUpload, handleListingVideo, refuseVideo } from './upload';
 import { ffmpegBinary } from './video';
 
 let db: Firestore;
@@ -157,4 +157,22 @@ test('with no transcode job, a video is refused with a note on the listing and t
   const err = (await db.collection('listings').doc('listing-001').get()).get('lastMediaError');
   assert.deepEqual([err.file, err.reason], ['tour.mov', 'videos are not switched on for this site yet']);
   assert.equal((await bucket.file(path).exists())[0], false);
+});
+
+test("a manager's agent portrait becomes the agent's photo; a small one is refused on the agent", async () => {
+  const path = 'uploads/staff/boss/agents/agent-wanjiku/portrait.jpg';
+  await bucket.file(path).save(await photo(1600, 2000), { contentType: 'image/jpeg' });
+  assert.deepEqual(await handleListingUpload(bucket, db, path), { status: 'ignored' });
+  const r = await handleAgentPhoto(bucket, db, path);
+  if (r.status !== 'processed') return assert.fail(JSON.stringify(r));
+  const agent = (await db.collection('agents').doc('agent-wanjiku').get()).data()!;
+  assert.equal(agent.photo, r.variants.card);
+  assert.ok((await bucket.file(agent.photo).exists())[0]);
+  assert.equal((await bucket.file(path).exists())[0], false);
+
+  const small = 'uploads/staff/boss/agents/agent-wanjiku/tiny.jpg';
+  await bucket.file(small).save(await photo(400, 400), { contentType: 'image/jpeg' });
+  assert.equal((await handleAgentPhoto(bucket, db, small)).status, 'rejected');
+  assert.match((await db.collection('agents').doc('agent-wanjiku').get()).get('lastPhotoError').reason, /long edge/);
+  assert.deepEqual(await handleAgentPhoto(bucket, db, 'uploads/staff/boss/agents/agent-ghost/x.jpg'), { status: 'rejected', reason: 'no such agent' });
 });

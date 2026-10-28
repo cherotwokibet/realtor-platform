@@ -35,6 +35,12 @@ class StorageListingMedia implements ListingMedia {
   }
 
   @override
+  Future<void> uploadAgentPhoto(StaffUser who, String agentId, PickedFile file) async {
+    if (!photoTypes.contains(file.type) || file.bytes.length >= maxPhotoBytes) throw ArgumentError('${file.name}: a photo under 20 MB');
+    await _storage.ref(agentPhotoPath(who, agentId, file.name, _clock())).putData(file.bytes, SettableMetadata(contentType: file.type));
+  }
+
+  @override
   String? url(String path) =>
       'https://firebasestorage.googleapis.com/v0/b/${_storage.bucket}/o/${Uri.encodeComponent(path)}?alt=media';
 }

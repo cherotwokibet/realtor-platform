@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
 
+import 'agent_profiles.dart';
 import 'format.dart';
 import 'listing_editor.dart';
 import 'paged_table.dart';
@@ -615,6 +616,11 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     final who = ref.watch(staffProvider)!;
     return _TablePage(
       title: 'Team',
+      action: OutlinedButton.icon(
+        onPressed: () => showDialog<void>(context: context, builder: (_) => const AgentProfilesDialog()),
+        icon: const Icon(Icons.badge_outlined),
+        label: const Text('Agent profiles…'),
+      ),
       subtitle: who.canManageStaff
           ? 'Add people after they have signed in to this admin once. Changes apply on their next sign-in.'
           : 'Only owners change roles.',

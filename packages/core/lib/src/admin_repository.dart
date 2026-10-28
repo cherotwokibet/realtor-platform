@@ -1,3 +1,4 @@
+import 'agent_profile.dart';
 import 'listing_draft.dart';
 import 'staff.dart';
 
@@ -216,6 +217,9 @@ abstract interface class AdminRepository {
 
   /// The tenant's areas, by name, for the listing form.
   Future<List<AreaOption>> areas();
+
+  /// Every agent's profile, by name. Throws [StaffAccessException] for agents.
+  Future<List<AgentProfile>> agentProfiles(StaffUser who);
 
   /// Time off not yet over at [now], soonest first: an agent's own, or
   /// everyone's for managers.

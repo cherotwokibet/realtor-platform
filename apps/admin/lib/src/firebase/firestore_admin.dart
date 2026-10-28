@@ -187,6 +187,13 @@ class FirestoreAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<List<AgentProfile>> agentProfiles(StaffUser who) async {
+    if (!who.isManager) throw StaffAccessException('agent profiles are for owners and managers');
+    final snap = await _db.collection('agents').get();
+    return [for (final d in snap.docs) AgentProfile.fromDoc(d.id, d.data())]..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  @override
   Future<List<AgentBlock>> timeOff(StaffUser who, DateTime now) async {
     Query<Map<String, Object?>> q = _db.collection('agentBlocks');
     if (who.agentScope != null) q = q.where('agentId', isEqualTo: who.agentScope);

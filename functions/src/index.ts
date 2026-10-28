@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, setStaffRole, dataRequest.
+ * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, setStaffRole, dataRequest.
  * Scheduled, nightly: purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -23,7 +23,7 @@ import { type SearchConfig, searchConfig } from './search/config';
 import { searchRelevantChange, syncListing } from './search/sync';
 import { getStorage } from 'firebase-admin/storage';
 import { mediaBucketName } from './media/bucket';
-import { handleListingUpload, refuseVideo, UPLOAD_PATH, VIDEO_EXT } from './media/upload';
+import { AGENT_PHOTO_PATH, handleAgentPhoto, handleListingUpload, refuseVideo, UPLOAD_PATH, VIDEO_EXT } from './media/upload';
 import { startTranscode } from './media/transcode';
 import { callerFrom } from './api/auth';
 import * as leads from './api/leads';
@@ -31,6 +31,7 @@ import * as listings from './api/listings';
 import * as staff from './api/staff';
 import * as viewings from './api/viewings';
 import * as availability from './api/availability';
+import * as agents from './api/agents';
 import { dataRequest as runDataRequest } from './api/privacy';
 import { purgeExpired } from './api/retention';
 import { callableTwin, enforced, logAppCheck, type PublicCallable, sharePagesInvoker } from './api/appcheck';
@@ -81,6 +82,7 @@ export const moderateListing = onCall((req) => listings.moderateListing(getFires
 export const confirmListing = onCall((req) => listings.confirmListing(getFirestore(), callerFrom(req.auth), req.data));
 export const featureListing = onCall((req) => listings.featureListing(getFirestore(), callerFrom(req.auth), req.data));
 export const importListings = onCall({ timeoutSeconds: 120 }, (req) => listings.importListings(getFirestore(), callerFrom(req.auth), req.data));
+export const saveAgent = onCall((req) => agents.saveAgent(getFirestore(), callerFrom(req.auth), req.data));
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 export const dataRequest = onCall((req) => runDataRequest(getFirestore(), callerFrom(req.auth), req.data));
 
@@ -106,7 +108,10 @@ export const agentResponseTimes = onSchedule({ schedule: '30 3 * * *', timeZone:
 
 // Media pipeline (D6): raw listing photos -> WebP variants + blurhash.
 export const onListingPhoto = onObjectFinalized({ bucket: mediaBucketName(process.env), memory: '1GiB', timeoutSeconds: 120 }, async (event) => {
-  const r = await handleListingUpload(getStorage().bucket(event.data.bucket), getFirestore(), event.data.name);
+  const bucket = getStorage().bucket(event.data.bucket);
+  const r = AGENT_PHOTO_PATH.test(event.data.name)
+    ? await handleAgentPhoto(bucket, getFirestore(), event.data.name)
+    : await handleListingUpload(bucket, getFirestore(), event.data.name);
   if (r.status === 'rejected') console.warn(`rejected ${event.data.name}: ${r.reason}`);
 });
 

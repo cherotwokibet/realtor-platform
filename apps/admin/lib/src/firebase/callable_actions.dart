@@ -53,6 +53,12 @@ class CallableAdminActions implements AdminActions {
   }
 
   @override
+  Future<String> saveAgent(StaffUser who, AgentProfile profile) async {
+    final r = await _run('saveAgent', profile.toCallable()) as Map<Object?, Object?>;
+    return r['agentId'] as String;
+  }
+
+  @override
   Future<void> removeTimeOff(StaffUser who, {required String blockId}) => _run('removeAgentBlock', {'blockId': blockId});
 
   @override

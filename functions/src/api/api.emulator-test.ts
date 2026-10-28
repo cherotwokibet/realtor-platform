@@ -12,6 +12,7 @@ import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from 
 import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateListing, submitListing } from './listings';
 import { bookViewing, rescheduleViewing, updateViewingStatus } from './viewings';
 import { addAgentBlock, removeAgentBlock } from './availability';
+import { saveAgent } from './agents';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
@@ -627,5 +628,28 @@ describe('agent time off (P5-s05)', () => {
     await rejectsWith(addAgentBlock(db, wanjiku, { start: '2026-10-20T08:00:00+03:00', end: '2026-10-21T08:00:00+03:00' }, now), 'invalid-argument'); // past
     await rejectsWith(addAgentBlock(db, wanjiku, { start: '2026-10-25T08:00:00+03:00', end: '2026-12-25T08:00:00+03:00' }, now), 'invalid-argument'); // > 31 days
     await rejectsWith(addAgentBlock(db, manager, { start: '2026-10-30T08:00:00+03:00', end: '2026-10-30T09:00:00+03:00' }, now), 'invalid-argument'); // no agent
+  });
+});
+
+describe('agent profiles (P5-s04)', () => {
+  const profile = { name: 'Mercy Wambui', earbNo: 'EARB/2026/0412', phone: '+254711000111', whatsapp: '+254711000111', languages: ['en', 'sw'], active: true };
+
+  test('managers add an agent (id from the name, a number on a clash) and edit them; agents cannot', async () => {
+    await rejectsWith(saveAgent(db, wanjiku, profile, now), 'permission-denied');
+    const a = await saveAgent(db, manager, profile, now);
+    assert.equal(a.agentId, 'agent-mercy-wambui');
+    const b = await saveAgent(db, manager, { ...profile, phone: '+254711000222', whatsapp: '+254711000222' }, now);
+    assert.equal(b.agentId, 'agent-mercy-wambui-2');
+    const made = (await db.collection('agents').doc(a.agentId).get()).data()!;
+    assert.deepEqual([made.earbNo, made.rating, made.responseMins, made.active], ['EARB/2026/0412', null, null, true]);
+
+    await saveAgent(db, manager, { ...profile, agentId: a.agentId, languages: ['sw'], active: false }, now);
+    const edited = (await db.collection('agents').doc(a.agentId).get()).data()!;
+    assert.deepEqual([edited.languages, edited.active, edited.rating], [['sw'], false, null]);
+    await rejectsWith(saveAgent(db, manager, { ...profile, agentId: 'agent-ghost' }, now), 'not-found');
+    await rejectsWith(saveAgent(db, manager, { ...profile, phone: '0711000111' }, now), 'invalid-argument');
+
+    const log = (await db.collection('audit').where('action', '==', 'agent.save').get()).docs.map((d) => `${d.get('from')}->${d.get('to')}`);
+    assert.deepEqual(log.sort(), ['active->inactive', 'none->active', 'none->active']);
   });
 });

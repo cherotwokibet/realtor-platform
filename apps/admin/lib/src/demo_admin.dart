@@ -350,6 +350,52 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
 
   final _blocks = <AgentBlock>[];
 
+  /// Profiles for the demo agents, made up from their names.
+  late final _profiles = {
+    for (final (i, e) in _agents.entries.indexed)
+      e.key: AgentProfile(
+        id: e.key,
+        name: e.value,
+        earbNo: 'EARB/DEMO/${(i + 1).toString().padLeft(4, '0')}',
+        phone: '+2547000001${i.toString().padLeft(2, '0')}',
+        whatsapp: '+2547000001${i.toString().padLeft(2, '0')}',
+        languages: const ['en', 'sw'],
+        responseMins: _demoReplies[e.key],
+      ),
+  };
+
+  @override
+  Future<List<AgentProfile>> agentProfiles(StaffUser who) async {
+    if (!who.isManager) throw StaffAccessException('agent profiles are for owners and managers');
+    return _profiles.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  @override
+  Future<String> saveAgent(StaffUser who, AgentProfile profile) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final problems = profile.problems();
+    if (problems.isNotEmpty) throw AdminActionException('invalid-argument', problems.entries.map((e) => '${e.key}: ${e.value}').join('; '));
+    final slug = profile.name.trim().toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-');
+    final id = profile.id ?? (_profiles.containsKey('agent-$slug') ? 'agent-$slug-${_profiles.length + 1}' : 'agent-$slug');
+    if (profile.id != null && !_profiles.containsKey(id)) throw AdminActionException('not-found', 'no agent "$id"');
+    final before = _profiles[id];
+    final input = profile.toCallable();
+    _profiles[id] = AgentProfile(
+      id: id,
+      name: input['name']! as String,
+      earbNo: input['earbNo']! as String,
+      phone: input['phone']! as String,
+      whatsapp: input['whatsapp']! as String,
+      languages: profile.languages,
+      active: profile.active,
+      photo: before?.photo,
+      rating: before?.rating,
+      responseMins: before?.responseMins,
+    );
+    _log(who, 'agent.save', profile.name.trim(), before == null ? 'none' : (before.active ? 'active' : 'inactive'), profile.active ? 'active' : 'inactive');
+    return id;
+  }
+
   @override
   Future<List<AgentBlock>> timeOff(StaffUser who, DateTime now) async =>
       scopedTo(who, _blocks, (b) => b.agentId).where((b) => b.end.isAfter(now)).toList()..sort((a, b) => a.start.compareTo(b.start));
@@ -448,7 +494,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
 
   @override
   Future<List<AgentOption>> agents(StaffUser who) async =>
-      [for (final e in _agents.entries) AgentOption(e.key, e.value)]..sort((a, b) => a.name.compareTo(b.name));
+      [for (final p in _profiles.values) AgentOption(p.id!, p.name)]..sort((a, b) => a.name.compareTo(b.name));
 
   @override
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) async {

@@ -24,6 +24,10 @@ abstract interface class ListingMedia {
   Future<ListingMediaState> state(StaffUser who, String listingId);
   Future<void> upload(StaffUser who, String listingId, PickedFile file);
 
+  /// A manager's upload of an agent's portrait (P5-s04): the pipeline makes
+  /// it the agent's photo.
+  Future<void> uploadAgentPhoto(StaffUser who, String agentId, PickedFile file);
+
   /// Public URL of a media path, or null where there is none (demo).
   String? url(String path);
 }
@@ -49,6 +53,9 @@ String? uploadProblem(PickedFile f) {
 
 /// `uploads/agents/<agentId>/...` for agents, `uploads/staff/<uid>/...` for
 /// managers (storage.rules); a time prefix keeps same-named files apart.
+String agentPhotoPath(StaffUser who, String agentId, String fileName, DateTime at) =>
+    'uploads/staff/${who.uid}/agents/$agentId/${at.millisecondsSinceEpoch}-${fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-')}';
+
 String uploadPath(StaffUser who, String listingId, String fileName, DateTime at) {
   final safe = fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-');
   final owner = who.isManager ? 'staff/${who.uid}' : 'agents/${who.agentId}';
@@ -74,6 +81,15 @@ class DemoListingMedia implements ListingMedia {
       (_photos[listingId] ??= []).add('media/listings/$listingId/${file.name}/thumb.webp');
     }
   }
+
+  @override
+  Future<void> uploadAgentPhoto(StaffUser who, String agentId, PickedFile file) async {
+    if (!photoTypes.contains(file.type)) throw ArgumentError('${file.name}: not a photo');
+    agentPhotos.add(agentId);
+  }
+
+  /// Agents given a portrait in the demo.
+  final agentPhotos = <String>[];
 
   @override
   String? url(String path) => null;

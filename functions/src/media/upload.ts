@@ -149,3 +149,41 @@ export async function handleListingVideo(bucket: Bucket, db: Firestore, path: st
     await rm(work, { recursive: true, force: true });
   }
 }
+
+/** A manager's upload of an agent's portrait (P5-s04). */
+export const AGENT_PHOTO_PATH = /^uploads\/staff\/([A-Za-z0-9_-]{1,128})\/agents\/([A-Za-z0-9_-]{1,128})\/[^/]+$/;
+
+/**
+ * uploads/staff/<uid>/agents/<agentId>/<file> -> the card variant (800 px,
+ * no watermark) at media/agents/<agentId>/<mediaId>.webp, set as the agent's
+ * photo. storage.rules lets only managers write there. The raw is deleted.
+ */
+export async function handleAgentPhoto(bucket: Bucket, db: Firestore, path: string, now = new Date()): Promise<UploadResult> {
+  const m = AGENT_PHOTO_PATH.exec(path);
+  if (!m || VIDEO_EXT.test(path)) return { status: 'ignored' };
+  const agentRef = db.collection('agents').doc(m[2]);
+  const raw = bucket.file(path);
+  try {
+    if (!(await agentRef.get()).exists) return { status: 'rejected', reason: 'no such agent' };
+    const [input] = await raw.download();
+    const mediaId = createHash('sha256').update(input).digest('hex').slice(0, 16);
+    let out;
+    try {
+      out = await processImage(input, {});
+    } catch (e) {
+      const reason = e instanceof LowResolutionError ? e.message : 'not a readable image';
+      await agentRef.update({ lastPhotoError: { reason, at: now } });
+      return { status: 'rejected', reason };
+    }
+    const dest = `media/agents/${m[2]}/${mediaId}.webp`;
+    await bucket.file(dest).save(out.variants.card, {
+      contentType: 'image/webp',
+      metadata: { cacheControl: 'public, max-age=31536000, immutable' },
+      resumable: false,
+    });
+    await agentRef.update({ photo: dest, lastPhotoError: FieldValue.delete(), updatedAt: now });
+    return { status: 'processed', mediaId, variants: { card: dest }, duplicates: [] };
+  } finally {
+    await raw.delete({ ignoreNotFound: true });
+  }
+}
