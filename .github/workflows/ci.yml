@@ -49,7 +49,7 @@ jobs:
           if [ "$DRAFT" = true ]; then echo "app=false" >> "$GITHUB_OUTPUT"; echo "admin=false" >> "$GITHUB_OUTPUT"
           else out app "$shared|^(packages/ui|apps/realtor_app)/"; out admin "$shared|^(packages/ui|apps/admin)/"; fi
           out infra '^infra/|^tenants/|^(firestore|storage)\.rules$'
-          out share '^(packages/core|packages/tokens|tenants|apps/share_pages)/|^\.dockerignore$'
+          out share '^(packages/core|packages/tokens|tenants|fonts|apps/share_pages)/|^\.dockerignore$'
           out emulator '^(functions|apps/share_pages|packages/core|tools/load)/|^(firestore|storage)\.rules$|^firestore\.indexes\.json$|^firebase\.json$'
           out search '^functions/(src/search|src/seed|src/model|package)'
           cat "$GITHUB_OUTPUT"
@@ -321,6 +321,7 @@ jobs:
           docker run -d --name sp -p 8080:8080 -e FIRESTORE_EMULATOR_HOST=localhost:1 share-pages
           for i in $(seq 1 20); do curl -fsS localhost:8080/healthz && break; sleep 1; done
           curl -fsS localhost:8080/robots.txt | grep -q '^Sitemap: https://'
+          curl -fsS localhost:8080/fonts/Manrope-Regular.ttf -o /tmp/f.ttf && test $(stat -c %s /tmp/f.ttf) -gt 10000
           docker logs sp
 
   emulator:
