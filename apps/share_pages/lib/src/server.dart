@@ -9,6 +9,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'agent_page.dart';
 import 'app_links.dart';
 import 'area_page.dart';
+import 'fonts.dart';
 import 'home_page.dart';
 import 'lead_api.dart';
 import 'listing.dart';
@@ -22,8 +23,9 @@ final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 /// `/listing/<slug>/viewing`),
 /// `/go/whatsapp/<slug>`, `/area/<slug>`, `/agent/<id>`, `/sitemap.xml`,
 /// `/robots.txt` and the App Links / Universal Links files in `/.well-known/`. Without [leads] there is no enquiry form and WhatsApp
-/// taps are not counted.
-shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? leads, DateTime Function()? now}) {
+/// taps are not counted. With [fontsDir] the tenant's bundled fonts are served
+/// at `/fonts/<Family>-<Weight>.ttf`, which the pages' `@font-face` rules use.
+shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? leads, DateTime Function()? now, String? fontsDir}) {
   final clock = now ?? DateTime.now;
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
       {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {
@@ -148,6 +150,7 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
           'User-agent: *\nAllow: /\nDisallow: /go/\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n',
           headers: {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400'},
         ));
+  if (fontsDir != null) router.get('/fonts/<file>', (shelf.Request _, String file) => serveFont(tenant, fontsDir, file));
   return router.call;
 }
 

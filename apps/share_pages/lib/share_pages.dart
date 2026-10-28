@@ -5,6 +5,7 @@ export 'src/agent_page.dart';
 export 'src/app_links.dart';
 export 'src/area_page.dart';
 export 'src/firestore_source.dart';
+export 'src/fonts.dart';
 export 'src/home_page.dart';
 export 'src/lead_api.dart';
 export 'src/listing.dart';
