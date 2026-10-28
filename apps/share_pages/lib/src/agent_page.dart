@@ -43,7 +43,7 @@ class AgentPage extends StatelessComponent {
         '@type': 'RealEstateAgent',
         'name': agent.name,
         'url': canonical,
-        if (photo != null) 'image': photo,
+        'image': ?photo,
         'telephone': agent.phone,
         'knowsLanguage': agent.languages,
         'parentOrganization': {'@type': 'RealEstateAgent', 'name': tenant.name, 'url': 'https://${tenant.shareDomain}/'},
