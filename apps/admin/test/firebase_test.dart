@@ -131,6 +131,13 @@ void main() {
       expect((l2.priceKES, l2.leads, l2.calls, l2.whatsapps, l2.agentName), (50002, 2, 4, 0, 'Agent A'));
     });
 
+    test('managers see which listings have a photo flagged; agents do not', () async {
+      await db.collection('photoFlags').doc('l2_abc').set({'listingId': 'l2', 'mediaId': 'abc', 'matches': []});
+      final rows = (await repo.listings(manager)).rows;
+      expect(rows.where((r) => r.photoMatch).map((r) => r.id), ['l2']);
+      expect((await repo.listings(agent)).rows.any((r) => r.photoMatch), isFalse);
+    });
+
     test('the team: managers only, by email, with agent names; unknown roles skipped', () async {
       await db.collection('staff').doc('u2').set({'email': 'b@example.com', 'role': 'agent', 'agentId': 'agent-a'});
       await db.collection('staff').doc('u1').set({'email': 'a@example.com', 'name': 'Boss', 'role': 'owner'});
@@ -189,6 +196,18 @@ void main() {
       expect(calls[3].$2, {'email': 'a@example.com', 'role': 'agent', 'agentId': 'agent-a'});
       expect(calls[4].$2, {'email': 'b@example.com', 'role': 'manager'});
       expect(calls[5].$2, {'email': 'c@example.com', 'role': null});
+    });
+
+    test('confirmListing sends the id and reads the new expiry', () async {
+      final calls = <(String, Map<String, Object?>)>[];
+      final actions = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return {'expiresAt': '2026-11-27T09:00:00.000Z'};
+      });
+      final until = await actions.confirmListing(agent, listingId: 'l2');
+      expect(calls.single.$1, 'confirmListing');
+      expect(calls.single.$2, {'listingId': 'l2'});
+      expect(until, DateTime.utc(2026, 11, 27, 9));
     });
 
     test('data requests send the kind and the person, and read back counts and the export', () async {

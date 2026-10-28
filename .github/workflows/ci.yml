@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -13,15 +13,25 @@ concurrency:
 # Actions minutes are limited, so each job runs only when files it checks
 # change (pull requests: against the base; main: against the previous push).
 # Editing this file runs everything. The Android and web builds, the slowest
-# jobs, also wait until a pull request is out of draft.
+# jobs (most of a full run), run on pull requests only: not in draft, not on
+# main pushes (the pull request already built the same code), and not for
+# changes in packages/core, tokens or fonts alone, which `dart analyze
+# packages apps` already compiles every app against. Android builds only when
+# flavors could change (tenants, brand, tenant CLI, dependencies); the web
+# build does one tenant unless tenants or brand change. The `full-ci` label
+# on a pull request runs everything. Every job has a timeout.
 jobs:
   changes:
     name: What changed
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       functions: ${{ steps.f.outputs.functions }}
       dart: ${{ steps.f.outputs.dart }}
       app: ${{ steps.f.outputs.app }}
+      android: ${{ steps.f.outputs.android }}
+      tenants: ${{ steps.f.outputs.tenants }}
+      tooling: ${{ steps.f.outputs.tooling }}
       admin: ${{ steps.f.outputs.admin }}
       infra: ${{ steps.f.outputs.infra }}
       share: ${{ steps.f.outputs.share }}
@@ -35,19 +45,34 @@ jobs:
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           DRAFT: ${{ github.event.pull_request.draft == true }}
+          FULL: ${{ contains(github.event.pull_request.labels.*.name, 'full-ci') }}
+          OTHER_LABEL: ${{ github.event.action == 'labeled' && github.event.label.name != 'full-ci' }}
         run: |
+          if [ "$OTHER_LABEL" = true ]; then  # only the full-ci label starts a run
+            for o in tooling functions dart app admin android tenants infra share emulator search; do echo "$o=false" >> "$GITHUB_OUTPUT"; done
+            exit 0
+          fi
           all=0; files=""
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then all=1
           else files=$(git diff --name-only "$BASE" HEAD); fi
           printf '%s\n' "$files" | grep -q '^\.github/workflows/' && all=1
           echo "all=$all"; printf '%s\n' "$files"
+          if [ "$FULL" = true ]; then all=1; fi  # the full-ci label runs everything
           has() { [ "$all" = 1 ] || printf '%s\n' "$files" | grep -qE "$1"; }
           out() { if has "$2"; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
           shared='^(packages/core|packages/tokens|tenants|brand|fonts|tools/tenant-cli)/|^pubspec\.'
+          out tooling '^(tenants|brand|fonts|tools/tenant-cli)/'
           out functions '^functions/|^(firestore|storage)\.rules$'
           out dart "$shared|^(packages|apps)/|^analysis_options\.yaml$|^functions/src/model/transitions\.json$"
-          if [ "$DRAFT" = true ]; then echo "app=false" >> "$GITHUB_OUTPUT"; echo "admin=false" >> "$GITHUB_OUTPUT"
-          else out app "$shared|^(packages/ui|apps/realtor_app)/"; out admin "$shared|^(packages/ui|apps/admin)/"; fi
+          builds='^(tenants|brand|tools/tenant-cli)/|^pubspec\.'
+          # Android (the slowest job) only when flavors could change, or with the full-ci label.
+          flavors='^(tenants|brand|tools/tenant-cli)/|^pubspec\.|^apps/realtor_app/(pubspec|flutter_launcher_icons|flutter_native_splash)'
+          if [ "$DRAFT" = true ] || [ "$GITHUB_EVENT_NAME" = push ]; then
+            for o in app admin android tenants; do echo "$o=false" >> "$GITHUB_OUTPUT"; done
+          else
+            out app "$builds|^(packages/ui|apps/realtor_app)/"; out admin "$builds|^(packages/ui|apps/admin)/"
+            out android "$flavors"; out tenants '^(tenants|brand)/'
+          fi
           out infra '^infra/|^tenants/|^(firestore|storage)\.rules$'
           out share '^(packages/core|packages/tokens|tenants|fonts|apps/share_pages)/|^\.dockerignore$'
           out emulator '^(functions|apps/share_pages|packages/core|tools/load)/|^(firestore|storage)\.rules$|^firestore\.indexes\.json$|^firebase\.json$'
@@ -56,7 +81,10 @@ jobs:
 
   tenants:
     name: Tenant files + tooling
+    needs: changes
+    if: needs.changes.outputs.tooling == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -77,6 +105,7 @@ jobs:
   functions:
     name: Cloud Functions
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.functions == 'true'
     defaults:
@@ -95,6 +124,7 @@ jobs:
   dart:
     name: Dart + Flutter packages
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.dart == 'true'
     steps:
@@ -143,11 +173,13 @@ jobs:
   web:
     name: Web build per tenant (proves the clone)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [changes, dart]
     if: needs.changes.outputs.app == 'true'
     strategy:
       matrix:
-        tenant: [realtime-estates, demo-homes]
+        # The second tenant proves the clone; it builds only when tenants or brand change.
+        tenant: ${{ fromJSON(needs.changes.outputs.tenants == 'true' && '["realtime-estates","demo-homes"]' || '["demo-homes"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -177,15 +209,11 @@ jobs:
           flutter build web --release --wasm
           ! grep -q "A new Flutter project" build/web/index.html
           test -f build/web/main.dart.wasm
-      - uses: actions/upload-artifact@v7
-        with:
-          name: web-${{ matrix.tenant }}
-          path: apps/realtor_app/build/web
-          retention-days: 7
 
   admin:
     name: Admin web build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [changes, dart]
     if: needs.changes.outputs.admin == 'true'
     steps:
@@ -214,8 +242,9 @@ jobs:
   android:
     name: Android flavors (every tenant, side by side)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: [changes, dart]
-    if: needs.changes.outputs.app == 'true'
+    if: needs.changes.outputs.android == 'true'
     steps:
       # A dead runner uploads no log at all; a full disk is the usual cause.
       # Drop toolchains this job never uses (.NET, Haskell, CodeQL, Swift).
@@ -293,6 +322,7 @@ jobs:
   terraform:
     name: Terraform (format + validate, never applied)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.infra == 'true'
     defaults:
@@ -310,6 +340,7 @@ jobs:
   share-image:
     name: Share pages image (docker build + smoke)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.share == 'true'
     steps:
@@ -327,6 +358,7 @@ jobs:
   emulator:
     name: Emulators (seed, rules, callable API, media)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.emulator == 'true'
     steps:
@@ -362,6 +394,7 @@ jobs:
   search:
     name: Typesense search (integration)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.search == 'true'
     services:

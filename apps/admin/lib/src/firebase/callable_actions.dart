@@ -26,6 +26,12 @@ class CallableAdminActions implements AdminActions {
       _run('moderateListing', {'listingId': listingId, 'action': action, if (reason != null) 'reason': reason});
 
   @override
+  Future<DateTime> confirmListing(StaffUser who, {required String listingId}) async {
+    final r = await _run('confirmListing', {'listingId': listingId}) as Map<Object?, Object?>;
+    return DateTime.parse(r['expiresAt'] as String);
+  }
+
+  @override
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) =>
       _run('setStaffRole', {
         'email': email.trim(),

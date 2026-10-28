@@ -66,6 +66,14 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         leads: (i * 3) % 7,
         calls: (i * 5) % 11,
         whatsapps: (i * 7) % 13,
+        // Live ones were verified some days ago; expired ones ran out.
+        expiresAt: switch (listingStatuses[(i * 5 + 2) % listingStatuses.length]) {
+          'live' => _now.add(Duration(days: 30 - i)),
+          'expired' => _now.subtract(Duration(days: i + 1)),
+          _ => null,
+        },
+        // One demo listing reuses another's photo, so the flag shows.
+        photoMatch: i == 4,
       ));
     }
     for (var i = 0; i < 40; i++) {
@@ -129,7 +137,10 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
 
   @override
   Future<RowPage<StaffListingRow>> listings(StaffUser who, {String? status, String? after, int limit = 25}) async {
-    final rows = scopedTo(who, _listings, (r) => r.agentId).where((r) => status == null || r.status == status).toList();
+    final rows = scopedTo(who, _listings, (r) => r.agentId)
+        .where((r) => status == null || r.status == status)
+        .map((r) => who.isManager || !r.photoMatch ? r : _unflagged(r))
+        .toList();
     return pageAfter(rows, (r) => r.id, after: after, limit: limit);
   }
 
@@ -170,6 +181,22 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     final at = _clock();
     _listings[i] = listing.withStatus(to, at);
     _log(who, 'listing.$action', listing.title, listing.status, to, reason: reason?.trim(), at: at);
+  }
+
+  @override
+  Future<DateTime> confirmListing(StaffUser who, {required String listingId}) async {
+    final i = _listings.indexWhere((l) => l.id == listingId);
+    if (i < 0) throw AdminActionException('not-found', 'no such listing');
+    final listing = _listings[i];
+    if (!who.isManager && listing.agentId != who.agentId) throw AdminActionException('permission-denied', 'not your listing');
+    if (listing.status != 'live' && listing.status != 'expired') {
+      throw AdminActionException('failed-precondition', 'a ${listing.status} listing cannot be confirmed');
+    }
+    final at = _clock();
+    final expiresAt = at.add(const Duration(days: 30));
+    _listings[i] = listing.withStatus('live', at, expiresAt: expiresAt);
+    _log(who, 'listing.confirm', listing.title, listing.status, 'live', at: at);
+    return expiresAt;
   }
 
   /// How many times the team was read (tests check screens don't refetch needlessly).
@@ -267,6 +294,23 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         ),
       );
 }
+
+/// Agents never see photo flags (the Firestore repository only reads them for managers).
+StaffListingRow _unflagged(StaffListingRow r) => StaffListingRow(
+      id: r.id,
+      slug: r.slug,
+      title: r.title,
+      area: r.area,
+      priceKES: r.priceKES,
+      status: r.status,
+      agentId: r.agentId,
+      agentName: r.agentName,
+      updatedAt: r.updatedAt,
+      leads: r.leads,
+      calls: r.calls,
+      whatsapps: r.whatsapps,
+      expiresAt: r.expiresAt,
+    );
 
 String _areaName(String slug) =>
     slug.split('-').map((w) => w.length <= 1 ? w.toUpperCase() : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');

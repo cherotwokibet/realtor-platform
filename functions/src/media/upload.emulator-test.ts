@@ -20,8 +20,9 @@ before(async () => {
   if (!getApps().length) initializeApp({ projectId: 'demo-realtor', storageBucket: 'demo-realtor.appspot.com' });
   db = getFirestore();
   bucket = getStorage().bucket('demo-realtor.appspot.com');
-  const l = seedDocs().find((d) => d.id === 'listing-001')!;
-  await db.collection('listings').doc('listing-001').set(l.data);
+  for (const id of ['listing-001', 'listing-002']) {
+    await db.collection('listings').doc(id).set(seedDocs().find((d) => d.id === id)!.data);
+  }
 });
 
 const photo = (w: number, h: number) =>
@@ -66,3 +67,51 @@ test("an agent's upload to someone else's listing is rejected and deleted", asyn
 test('paths outside uploads/ are ignored', async () => {
   assert.deepEqual(await handleListingUpload({} as Bucket, {} as Firestore, 'brand/watermark.png'), { status: 'ignored' });
 });
+
+/** A photo-like picture (soft shapes from [seed]) at 1600×1200. */
+async function scene(seed: number): Promise<Buffer> {
+  const [width, height] = [1600, 1200];
+  const raw = Buffer.alloc(width * height * 3);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const v = 128 + 60 * Math.sin((x / width) * (3 + seed) + seed) + 50 * Math.cos((y / height) * (2 + seed * 1.7) - seed);
+      const i = (y * width + x) * 3;
+      raw[i] = raw[i + 1] = raw[i + 2] = Math.max(0, Math.min(255, v));
+    }
+  }
+  return sharp(raw, { raw: { width, height, channels: 3 } }).jpeg({ quality: 90 }).toBuffer();
+}
+
+test("the same photo on another agent's listing is flagged for managers; plain photos are not", async () => {
+  const otieno = (await db.collection('listings').doc('listing-002').get()).get('agentId');
+  const first = 'uploads/agents/agent-wanjiku/listings/listing-001/lounge.jpg';
+  await bucket.file(first).save(await scene(1), { contentType: 'image/jpeg' });
+  const a = await handleListingUpload(bucket, db, first);
+  assert.equal(a.status, 'processed');
+  if (a.status !== 'processed') return;
+  assert.deepEqual(a.duplicates, []);
+
+  // Someone takes it, re-saves it smaller and posts it on their listing.
+  const copy = `uploads/agents/${otieno}/listings/listing-002/my-lounge.jpg`;
+  await bucket.file(copy).save(await sharp(await scene(1)).resize(1280).jpeg({ quality: 60 }).toBuffer(), { contentType: 'image/jpeg' });
+  const b = await handleListingUpload(bucket, db, copy);
+  if (b.status !== 'processed') return assert.fail(JSON.stringify(b));
+  assert.equal(b.duplicates.length, 1);
+  assert.equal(b.duplicates[0].listingId, 'listing-001');
+  assert.equal(b.duplicates[0].mediaId, a.mediaId);
+  const flag = (await db.collection('photoFlags').doc(`listing-002_${b.mediaId}`).get()).data()!;
+  assert.equal(flag.matches[0].listingId, 'listing-001');
+  const media = (await db.collection('listings').doc('listing-002').get()).get('media');
+  assert.match(media.at(-1).phash, /^[0-9a-f]{16}$/);
+
+  // A different photo, and a plain one, raise nothing.
+  const other = `uploads/agents/${otieno}/listings/listing-002/kitchen.jpg`;
+  await bucket.file(other).save(await scene(4), { contentType: 'image/jpeg' });
+  const c = await handleListingUpload(bucket, db, other);
+  assert.deepEqual(c.status === 'processed' && c.duplicates, []);
+  const plain = `uploads/agents/${otieno}/listings/listing-002/wall.jpg`;
+  await bucket.file(plain).save(await photo(4000, 3000), { contentType: 'image/jpeg' });
+  const d = await handleListingUpload(bucket, db, plain);
+  assert.deepEqual(d.status === 'processed' && d.duplicates, []);
+});
+

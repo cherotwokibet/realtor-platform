@@ -28,6 +28,13 @@ const moderationTargets = {'approve': 'live', 'reject': 'draft', 'expire': 'expi
 /// The stages a lead at [stage] can move to.
 List<String> nextLeadStages(String stage) => leadStageMoves[stage] ?? const [];
 
+/// What [who] may do to a listing from its status menu: managers moderate,
+/// and the listing's agent (or a manager) confirms a live or expired one.
+List<String> listingActionsFor(StaffUser who, {required String status, required String agentId}) => [
+      if (who.isManager) ...moderationsFor(status),
+      if ((status == 'live' || status == 'expired') && (who.isManager || who.agentId == agentId)) 'confirm',
+    ];
+
 /// The moderation actions a listing at [status] can take, in table order.
 List<String> moderationsFor(String status) {
   final moves = listingStatusMoves[status] ?? const [];
@@ -57,6 +64,11 @@ abstract interface class AdminActions {
 
   /// `moderateListing`: approve, reject (needs [reason]), expire, let or sold. Managers only.
   Future<void> moderateListing(StaffUser who, {required String listingId, required String action, String? reason});
+
+  /// `confirmListing` (P6-s02): the listing's agent, or a manager, confirms a
+  /// live or expired listing is still available. It goes live, verified for
+  /// another 30 days; completes with the new expiry.
+  Future<DateTime> confirmListing(StaffUser who, {required String listingId});
 
   /// `setStaffRole`, owners only: give an account that has signed in once a
   /// role (an agent needs [agentId]), or take it away with a null [role].

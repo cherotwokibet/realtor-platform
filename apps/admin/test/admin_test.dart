@@ -52,6 +52,13 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<DateTime> confirmListing(StaffUser who, {required String listingId}) async {
+    calls++;
+    await gate.future;
+    return inner.confirmListing(who, listingId: listingId);
+  }
+
+  @override
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) async {
     calls++;
     await gate.future;
@@ -115,6 +122,27 @@ void main() {
 
   group('DemoAdminRepository', () {
     final repo = DemoAdminRepository();
+
+    test('confirming: own or manager, live or expired only', () async {
+      final otieno = demoStaff.firstWhere((s) => s.agentId == 'agent-otieno');
+      final all = (await repo.listings(manager, limit: 50)).rows;
+      final wanjikus = all.firstWhere((r) => r.agentId == 'agent-wanjiku' && r.status == 'live');
+      await expectLater(repo.confirmListing(otieno, listingId: wanjikus.id),
+          throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'permission-denied')));
+      final pending = all.firstWhere((r) => r.status == 'pending');
+      await expectLater(repo.confirmListing(manager, listingId: pending.id),
+          throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'failed-precondition')));
+      expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-otieno'), ['confirm']);
+      expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-wanjiku'), isEmpty);
+      expect(listingActionsFor(manager, status: 'live', agentId: 'x'), [...moderationsFor('live'), 'confirm']);
+    });
+
+    test('photo flags are for managers: the agent gets the listing without the flag', () async {
+      final otieno = demoStaff.firstWhere((s) => s.agentId == 'agent-otieno');
+      final asManager = (await repo.listings(manager, limit: 50)).rows.firstWhere((r) => r.id == 'listing-005');
+      final asAgent = (await repo.listings(otieno, limit: 50)).rows.firstWhere((r) => r.id == 'listing-005');
+      expect((asManager.photoMatch, asAgent.photoMatch), (true, false));
+    });
 
     test('agents get only their own leads and listings, and no audit log', () async {
       final leads = await repo.leads(wanjiku, limit: 100);
@@ -290,11 +318,28 @@ void main() {
     expect(slow.calls, 1);
   });
 
-  testWidgets('agents get no moderation menu on listings', (tester) async {
+  testWidgets('agents get no moderation, only "Confirm still available" on their live or expired listings',
+      (tester) async {
     await open(tester, as: wanjiku);
     await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
-    expect(find.byType(PopupMenuButton<String>), findsNothing);
+    final mine = (await container.read(adminRepositoryProvider).listings(wanjiku, limit: 50)).rows;
+    final confirmable = mine.where((r) => r.status == 'live' || r.status == 'expired').toList();
+    expect(confirmable, isNotEmpty);
+    expect(find.byType(PopupMenuButton<String>), findsNWidgets(confirmable.length));
+
+    final picked = confirmable.first;
+    await tapVisible(tester, find.byTooltip('Change ${picked.title}'));
+    expect(find.text('Approve'), findsNothing);
+    expect(find.text('Mark expired'), findsNothing);
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Confirm still available'));
+    await tester.pumpAndSettle();
+    expect(find.text('${picked.title}: confirmed, verified for 30 days'), findsOneWidget);
+    final after = (await container.read(adminRepositoryProvider).listings(wanjiku, limit: 50))
+        .rows
+        .firstWhere((r) => r.id == picked.id);
+    expect(after.status, 'live');
+    expect(after.expiresAt!.isAfter(DateTime.now().add(const Duration(days: 29))), isTrue);
   });
 
   testWidgets('a manager rejects a pending listing with a reason, and the audit log shows it', (tester) async {
@@ -441,6 +486,23 @@ void main() {
     container.read(routerProvider).go('/privacy');
     await tester.pumpAndSettle();
     expect(location(), '/leads');
+  });
+
+  testWidgets('managers see a flag on a listing whose photo matches another; agents do not', (tester) async {
+    const why = 'A photo here matches another listing. Check it is theirs to use.';
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip(why), findsOneWidget);
+    await tester.tap(find.byTooltip('Sign out (${manager.name})'));
+    await tester.pumpAndSettle();
+    // listing-005 (the flagged one) is Brian Otieno's.
+    final otieno = demoStaff.firstWhere((s) => s.agentId == 'agent-otieno');
+    await tester.tap(find.text(otieno.name));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip(why), findsNothing);
   });
 
   testWidgets('signing out returns to sign in', (tester) async {
