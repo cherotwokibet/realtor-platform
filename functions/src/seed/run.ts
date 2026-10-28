@@ -2,13 +2,16 @@
  * Loads the demo seed, then checks it reads back.
  *   Emulator: firebase emulators:exec --only firestore --project demo-realtor "npm --prefix functions run seed"
  *   Dev project: SEED_PROJECT=<project-id-ending-in-dev> npm --prefix functions run seed   (Application Default Credentials)
+ *   SEED_TENANT=<id> picks the tenant file for config/tenant (default demo-homes).
  * Stage and prod are refused (see target.ts).
  */
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { collections } from '../model/schema';
 import { seedDocs } from './data';
+import { join } from 'node:path';
 import { seedTarget } from './target';
+import { seedTenantId, tenantConfigDoc } from './tenant';
 
 async function main(): Promise<void> {
   const target = seedTarget(process.env);
@@ -24,7 +27,11 @@ async function main(): Promise<void> {
 
   const batch = db.batch();
   for (const d of docs) batch.set(db.collection(d.collection).doc(d.id), d.data);
+  // D17: the tenant's switches, read by Functions (lib/seed -> repo root).
+  const tenant = tenantConfigDoc(join(__dirname, '..', '..', '..'), seedTenantId(process.env));
+  batch.set(db.collection('config').doc('tenant'), tenant);
   await batch.commit();
+  console.log(`✓ config/tenant: ${tenant.id}`);
 
   const expected = new Map<string, number>();
   for (const d of docs) expected.set(d.collection, (expected.get(d.collection) ?? 0) + 1);
