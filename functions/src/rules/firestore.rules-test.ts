@@ -157,6 +157,17 @@ describe('savedSearches', () => {
     await assertFails(updateDoc(doc(user(), 'savedSearches', 'ss-1'), { userId: 'bob' }));
     await assertFails(setDoc(doc(user(), 'savedSearches', 'ss-5'), { ...mine, admin: true, createdAt: serverTimestamp() }));
   });
+  test('only the shape the sweep expects: known filters, bounded lists, known channels', async () => {
+    const make = (over: object) => setDoc(doc(user(), 'savedSearches', `ss-${Math.random()}`), { ...mine, ...over, createdAt: serverTimestamp() });
+    await assertSucceeds(make({ filters: { purpose: 'sale', types: ['apartment'], areas: ['kilimani'], minBeds: 2, maxPriceKES: 15000000 } }));
+    await assertFails(make({ filters: { purpose: 'rent', notes: 'x'.repeat(5000) } }));
+    await assertFails(make({ filters: { purpose: 'lease' } }));
+    await assertFails(make({ filters: { purpose: 'rent', areas: Array.from({ length: 21 }, (_, i) => `area-${i}`) } }));
+    await assertFails(make({ filters: { purpose: 'rent', minBeds: 2.5 } }));
+    await assertFails(make({ channels: ['sms'] }));
+    await assertFails(updateDoc(doc(user(), 'savedSearches', 'ss-1'), { channels: ['push', 'fax'] }));
+    await assertFails(updateDoc(doc(user(), 'savedSearches', 'ss-1'), { filters: { purpose: 'rent', junk: true } }));
+  });
 });
 
 describe('everything else', () => {
