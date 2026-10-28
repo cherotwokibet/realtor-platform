@@ -24,7 +24,7 @@ Check that the plain demo runs: `node tools/tenant-cli/src/cli.ts prepare demo-h
    ```
    If their colour is too light for white text or for links, it is darkened just enough and the command says so ("adjusted: …"). That is a talking point: the platform keeps every realtor's app readable (WCAG AA).
 3. Run both and walk through:
-   - **App** (`apps/realtor_app`, `flutter run -d chrome`): search by area and budget, a listing with photos and the *Verified* badge, *Ask about this home*, *Book a viewing*, WhatsApp.
+   - **App** (`apps/realtor_app`, `flutter run -d chrome`): search by area and budget, a listing with the *Verified* badge (demo listings have no photos yet: show a real listing's share page for photos once one is live), *Ask about this home*, *Book a viewing*, WhatsApp.
    - **Admin** (`apps/admin`, `flutter run -d chrome`, pick *Demo Owner*): new leads with how long they have waited, an agent moving a lead on, a manager approving a listing, confirming a listing is still available, the Team page with each agent's typical reply time, the photo-match flag, the Privacy page, the audit log.
 4. Switching prospects is the same two commands with another id.
 
