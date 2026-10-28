@@ -171,7 +171,10 @@ void main() {
 
     test('calls the Functions by name with only what they need', () async {
       final calls = <(String, Map<String, Object?>)>[];
-      final actions = CallableAdminActions((name, data) async => calls.add((name, data)));
+      final actions = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return null;
+      });
       await actions.moveLead(agent, leadId: 'lead1', stage: 'contacted');
       await actions.moderateListing(manager, listingId: 'l0', action: 'approve');
       await actions.moderateListing(manager, listingId: 'l1', action: 'reject', reason: 'Blurry');
@@ -186,6 +189,35 @@ void main() {
       expect(calls[3].$2, {'email': 'a@example.com', 'role': 'agent', 'agentId': 'agent-a'});
       expect(calls[4].$2, {'email': 'b@example.com', 'role': 'manager'});
       expect(calls[5].$2, {'email': 'c@example.com', 'role': null});
+    });
+
+    test('data requests send the kind and the person, and read back counts and the export', () async {
+      final calls = <(String, Map<String, Object?>)>[];
+      final actions = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return data['kind'] == 'export'
+            ? {
+                'kind': 'export',
+                'data': {
+                  'leads': [
+                    {'id': 'l1', 'contact': {'phone': '+254712345678'}}
+                  ],
+                  'viewings': <Object?>[],
+                },
+              }
+            : {
+                'kind': 'delete',
+                'deleted': {'leads': 2, 'viewings': 1},
+              };
+      });
+      final export = await actions.dataRequest(manager, kind: DataRequestKind.export, phone: '+254712345678');
+      expect(calls.single.$1, 'dataRequest');
+      expect(calls.single.$2, {'kind': 'export', 'phone': '+254712345678'});
+      expect([export.leads, export.viewings], [1, 0]);
+      expect(export.exportJson, contains('"phone": "+254712345678"'));
+      final delete = await actions.dataRequest(manager, kind: DataRequestKind.delete, email: ' a@example.com ');
+      expect(calls.last.$2, {'kind': 'delete', 'email': 'a@example.com'});
+      expect([delete.leads, delete.viewings, delete.exportJson], [2, 1, null]);
     });
 
     test('a refusal becomes an AdminActionException with the callable code', () async {

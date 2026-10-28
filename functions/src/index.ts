@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing, setStaffRole.
+ * Callables: createLead, logContactTap, bookViewing, updateLeadStage, submitListing, moderateListing, setStaffRole, dataRequest.
  * Scheduled: purgeExpiredLeads (D12 retention, nightly).
  *
  * Planned (see tracker):
@@ -31,6 +31,7 @@ import * as leads from './api/leads';
 import * as listings from './api/listings';
 import * as staff from './api/staff';
 import * as viewings from './api/viewings';
+import { dataRequest as runDataRequest } from './api/privacy';
 import { purgeExpired } from './api/retention';
 import { REGION, verificationExpiry } from './listing-rules';
 
@@ -51,6 +52,7 @@ export const updateLeadStage = onCall((req) => leads.updateLeadStage(getFirestor
 export const submitListing = onCall((req) => listings.submitListing(getFirestore(), callerFrom(req.auth), req.data));
 export const moderateListing = onCall((req) => listings.moderateListing(getFirestore(), callerFrom(req.auth), req.data));
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
+export const dataRequest = onCall((req) => runDataRequest(getFirestore(), callerFrom(req.auth), req.data));
 
 // Retention (D12): every night, delete leads and viewings past their date.
 // Only counts are logged, never what was deleted.

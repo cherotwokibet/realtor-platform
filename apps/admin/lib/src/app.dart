@@ -24,6 +24,7 @@ final _sections = [
   _Section(AdminSection.listings, 'Listings', Icons.home_work_outlined, () => const ListingsScreen()),
   _Section(AdminSection.team, 'Team', Icons.group_outlined, () => const TeamScreen()),
   _Section(AdminSection.audit, 'Audit log', Icons.history, () => const AuditScreen()),
+  _Section(AdminSection.privacy, 'Privacy', Icons.privacy_tip_outlined, () => const PrivacyScreen()),
 ];
 
 const signInPath = '/sign-in';

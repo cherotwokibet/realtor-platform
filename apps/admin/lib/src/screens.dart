@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
 
@@ -544,3 +545,149 @@ class _StaffDialogState extends State<_StaffDialog> {
         ],
       );
 }
+
+/// Data subject requests (DPA 2019): find what is held about one person by
+/// the phone or email they gave, then export it or delete it. The Functions
+/// do both, and the audit log records each request without the person's details.
+class PrivacyScreen extends ConsumerStatefulWidget {
+  const PrivacyScreen({super.key});
+  @override
+  ConsumerState<PrivacyScreen> createState() => _PrivacyScreenState();
+}
+
+class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
+  final _phone = TextEditingController();
+  final _email = TextEditingController();
+  bool _busy = false;
+  DataRequestResult? _result;
+  String? _error;
+
+  @override
+  void dispose() {
+    _phone.dispose();
+    _email.dispose();
+    super.dispose();
+  }
+
+  String? get _phoneValue => _phone.text.trim().isEmpty ? null : normaliseKenyanPhone(_phone.text);
+  bool get _phoneInvalid => _phone.text.trim().isNotEmpty && _phoneValue == null;
+  String? get _emailValue => _email.text.trim().contains('@') ? _email.text.trim() : null;
+  bool get _ready => !_busy && !_phoneInvalid && (_phoneValue != null || _emailValue != null);
+  String get _who => [_phoneValue, _emailValue].whereType<String>().join(' / ');
+
+  Future<void> _run(DataRequestKind kind) async {
+    if (kind == DataRequestKind.delete) {
+      final yes = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Delete everything held about $_who?'),
+          content: const Text('Their enquiries and viewing requests are deleted for good. This cannot be undone. '
+              'Export first if they also asked for a copy.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+          ],
+        ),
+      );
+      if (yes != true || !mounted) return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+      _result = null;
+    });
+    try {
+      final r = await ref
+          .read(adminActionsProvider)
+          .dataRequest(ref.read(staffProvider)!, kind: kind, phone: _phoneValue, email: _emailValue);
+      if (mounted) setState(() => _result = r);
+    } on AdminActionException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final r = _result;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Privacy requests', style: t.headlineSmall),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            'Under the Data Protection Act 2019 a person may ask for a copy of what we hold about them, '
+            'or for it to be deleted. Find them by the phone or email they gave.',
+            style: t.bodyMedium,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            TextField(
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'Phone',
+                hintText: '0712 345 678',
+                errorText: _phoneInvalid ? 'Enter a Kenyan mobile number' : null,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'Email'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, children: [
+              FilledButton(onPressed: _ready ? () => _run(DataRequestKind.export) : null, child: const Text('Export')),
+              OutlinedButton(onPressed: _ready ? () => _run(DataRequestKind.delete) : null, child: const Text('Delete…')),
+            ]),
+          ]),
+        ),
+        if (_busy) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text("Couldn't do that: $_error", style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        if (r != null) ...[
+          const SizedBox(height: 16),
+          Text(
+            r.kind == DataRequestKind.delete
+                ? 'Deleted ${r.leads} enquiries and ${r.viewings} viewing requests.'
+                : r.foundNothing
+                    ? 'Nothing is held for $_who.'
+                    : 'Found ${r.leads} enquiries and ${r.viewings} viewing requests. Send them this copy.',
+            style: t.titleMedium,
+          ),
+          if (r.exportJson != null && !r.foundNothing) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: r.exportJson!));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied.')));
+                  }
+                },
+                icon: const Icon(Icons.copy),
+                label: const Text('Copy'),
+              ),
+            ),
+            Card(child: Padding(padding: const EdgeInsets.all(12), child: SelectableText(r.exportJson!))),
+          ],
+        ],
+      ],
+    );
+  }
+}
+

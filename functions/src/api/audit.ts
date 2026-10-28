@@ -11,9 +11,11 @@ export interface AuditEvent {
     | 'listing.expire'
     | 'listing.let'
     | 'listing.sold'
-    | 'staff.role';
+    | 'staff.role'
+    | 'privacy.export'
+    | 'privacy.delete';
   /** label: what the admin shows for it (a listing title, a staff email), kept as it was then. */
-  target: { collection: 'leads' | 'listings' | 'staff'; id: string; label?: string };
+  target: { collection: 'leads' | 'listings' | 'staff' | 'people'; id: string; label?: string };
   from?: string | null;
   to?: string;
   reason?: string;

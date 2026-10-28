@@ -31,7 +31,7 @@ One Firestore database per tenant project (D1), so documents carry no tenant id.
 | `rateLimits/{sha256}` | window, count, expiresAt (one-hour windows per contact and per listing, P6-s05; no contact details, id is a hash; Firestore TTL deletes it) | *Functions only*; no client access |
 | `config/tenant` | Read-only copy of the tenant file for runtime flags | Deploy step |
 
-**Data Protection Act 2019:** every lead records when consent was given (`consentAt`) and when the record is to be deleted (`retainUntil`, after `consentAt`). A lead needs a phone or an email. The scheduled `purgeExpiredLeads` Function (03:15 Nairobi time, nightly) deletes leads past `retainUntil`, and viewings whose slot is 24 months old (a viewing's client details come with the same consent as its lead). It logs only counts. Export and delete requests are P6 "Data protection compliance".
+**Data Protection Act 2019:** every lead records when consent was given (`consentAt`) and when the record is to be deleted (`retainUntil`, after `consentAt`). A lead needs a phone or an email. The scheduled `purgeExpiredLeads` Function (03:15 Nairobi time, nightly) deletes leads past `retainUntil`, and viewings whose slot is 24 months old (a viewing's client details come with the same consent as its lead). It logs only counts. Export and delete requests go through `dataRequest` (the admin's *Privacy* page). `createLead` stores emails lowercased so one address finds all its leads.
 
 ## Callable API (P2-s03)
 
@@ -45,6 +45,7 @@ Inputs are validated with zod in `functions/src/api/`, and the stored document i
 | `updateLeadStage` | the lead's agent, or a manager | new → contacted → viewing → offer → won, any stage → lost, and lost → contacted |
 | `submitListing` | agents (as themselves), managers (for any agent) | Create or edit → `pending`; sets slug (unique), geohash, stats and timestamps; the area must exist. `media` may only reorder or drop the listing's own pipeline-made entries (the stored copies are kept); left out, the media stay as they are |
 | `moderateListing` | managers | approve (live, verified for 30 days), reject (needs a reason), expire, let, sold; status moves from `listing-rules.ts` |
+| `dataRequest` | owners and managers | DPA 2019 subject request: finds a person's leads and viewings by phone or email and returns them as JSON (`export`) or deletes them (`delete`); audited as `privacy.export` / `privacy.delete` with counts only. Admin: *Privacy* |
 
 Still to come: rate limits on the public callables (P6 fraud controls), confirming and cancelling viewings from admin (P5 bookings), and agent availability instead of fixed hours.
 
