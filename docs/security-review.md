@@ -19,6 +19,8 @@ A running record of what was checked, what was found and what is still open. Rev
 
 - **No security headers anywhere.** Share pages now send a CSP (`default-src 'none'`, inline styles, `https:` images, same-origin forms, no framing), nosniff, `X-Frame-Options`, Referrer-Policy and Permissions-Policy on every response. The admin Hosting site sends nosniff, `DENY` framing and Referrer-Policy. The app's default site sends nosniff and Referrer-Policy (no framing headers: it serves the Auth iframe the admin embeds).
 
+- **Listings could borrow any media.** `submitListing` stored the `media` array a client sent, so an agent could point a listing at another listing's photos, or at any path, without the media pipeline (checks, watermark). It now accepts only the listing's own pipeline-made entries, by path, and keeps the stored copies; an edit without `media` no longer wipes the photos.
+
 ### Open
 | # | Finding | Risk | Plan |
 |---|---|---|---|

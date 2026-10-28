@@ -25,7 +25,14 @@ export const submitListingInput = z.object({
   estate: z.string().max(80).optional(),
   amenities: z.array(z.string().max(40)).max(40).default([]),
   utilities: z.object({ water: z.boolean(), electricity: z.boolean(), wifi: z.boolean() }).partial().default({}),
-  media: z.array(mediaItem).max(60).default([]),
+  /**
+   * The listing's own photos and videos, in the order to show them. Only
+   * entries the media pipeline added to this listing are accepted (matched by
+   * their `full` or `hls` path) and the stored copy is kept, so a listing
+   * can reorder or drop its media but never borrow another's. Leave it out
+   * to keep the media as it is.
+   */
+  media: z.array(mediaItem).max(60).optional(),
   /** Managers may submit for an agent; an agent always submits as themself. */
   agentId: docId.optional(),
 });
@@ -50,9 +57,11 @@ export async function submitListing(db: Firestore, caller: Caller, input: unknow
         throw new HttpsError('failed-precondition', `a ${from} listing cannot be resubmitted`);
     }
     finalSlug = existing.exists ? (existing.get('slug') as string) : await uniqueSlug(db, base, ref.id);
-    const { listingId: _id, lat, lng, agentId: _a, ...fields } = req;
+    const { listingId: _id, lat, lng, agentId: _a, media: wanted, ...fields } = req;
+    const stored = (existing.exists ? existing.get('media') ?? [] : []) as z.infer<typeof mediaItem>[];
     const doc = {
       ...fields,
+      media: wanted === undefined ? stored : ownMedia(stored, wanted),
       slug: finalSlug,
       geo: { lat, lng, geohash: geohash(lat, lng) },
       agentId,
@@ -70,6 +79,21 @@ export async function submitListing(db: Firestore, caller: Caller, input: unknow
     audit(tx, db, caller, { action: 'listing.submit', target: { collection: 'listings', id: ref.id, label: req.title }, from, to: 'pending' }, now);
   });
   return { listingId: ref.id, slug: finalSlug };
+}
+
+const mediaKey = (m: { variants: Record<string, string> }) => m.variants.full ?? m.variants.hls ?? null;
+
+/** [wanted] as entries of [stored], in the order asked for; anything else is refused. */
+function ownMedia(stored: z.infer<typeof mediaItem>[], wanted: z.infer<typeof mediaItem>[]): z.infer<typeof mediaItem>[] {
+  const byKey = new Map(stored.map((m) => [mediaKey(m), m]));
+  const seen = new Set<string>();
+  return wanted.map((m) => {
+    const key = mediaKey(m);
+    const own = key ? byKey.get(key) : undefined;
+    if (!own || seen.has(key!)) throw new HttpsError('invalid-argument', "media: only this listing's own uploads, each once");
+    seen.add(key!);
+    return own;
+  });
 }
 
 async function uniqueSlug(db: Firestore, base: string, id: string): Promise<string> {
