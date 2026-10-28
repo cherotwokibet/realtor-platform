@@ -148,8 +148,25 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
           'User-agent: *\nAllow: /\nDisallow: /go/\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n',
           headers: {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400'},
         ));
-  return router.call;
+  return (shelf.Request req) async => _secured(await router.call(req));
 }
+
+/// Headers on every response. The pages run no script (JSON-LD is a data
+/// block), load styles inline and images from the media CDN, post forms only
+/// to themselves and are never framed.
+const securityHeaders = {
+  'content-security-policy': "default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline'; "
+      "form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+};
+
+shelf.Response _secured(shelf.Response r) => r.change(headers: {
+      for (final e in securityHeaders.entries)
+        if (!r.headers.containsKey(e.key)) e.key: e.value,
+    });
 
 /// [private] pages show a visitor's own form input or thank-you note, so
 /// the CDN must not keep them.
