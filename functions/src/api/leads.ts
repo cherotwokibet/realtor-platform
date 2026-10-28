@@ -13,7 +13,8 @@ export const LEAD_RETENTION_DAYS = 730;
 export const createLeadInput = z.object({
   listingId: docId,
   channel: leadChannel,
-  contact: z.object({ name: z.string().max(80).optional(), phone: kenyanPhone.optional(), email: z.email().optional() }),
+  // Emails are stored lowercased, so data requests and rate limits find every lead of one address.
+  contact: z.object({ name: z.string().max(80).optional(), phone: kenyanPhone.optional(), email: z.email().toLowerCase().optional() }),
   message: z.string().max(2000).optional(),
   /** The consent tick on the form. Without it nothing is stored. */
   consent: z.literal(true),

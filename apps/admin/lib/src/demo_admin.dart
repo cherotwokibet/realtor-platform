@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:realtor_core/realtor_core.dart';
 
 /// Demo accounts for the sign-in screen until Firebase Auth is connected.
@@ -214,7 +216,42 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     _log(who, 'staff.role', email.trim().toLowerCase(), before ?? 'none', role?.name ?? 'none');
   }
 
-  void _log(StaffUser who, String action, String target, String from, String to, {String? reason, DateTime? at}) =>
+  @override
+  Future<DataRequestResult> dataRequest(StaffUser who,
+      {required DataRequestKind kind, String? phone, String? email}) async {
+    if (!who.canOpen(AdminSection.privacy)) throw AdminActionException('permission-denied', 'owner or manager only');
+    if (phone == null && (email == null || email.trim().isEmpty)) {
+      throw AdminActionException('invalid-argument', 'a phone or an email');
+    }
+    // Demo leads keep a phone only, and demo viewings are not modelled.
+    final found = phone == null ? <LeadRow>[] : _leads.where((l) => l.contactPhone == phone).toList();
+    final counts = '${found.length} leads, 0 viewings';
+    if (kind == DataRequestKind.delete) _leads.removeWhere(found.contains);
+    _log(who, 'privacy.${kind.name}', counts, null, null);
+    return DataRequestResult(
+      kind: kind,
+      leads: found.length,
+      viewings: 0,
+      exportJson: kind == DataRequestKind.export
+          ? const JsonEncoder.withIndent('  ').convert({
+              'leads': [
+                for (final l in found)
+                  {
+                    'id': l.id,
+                    'listingId': l.listingId,
+                    'channel': l.channel,
+                    'stage': l.stage,
+                    'contact': {'name': l.contactName, 'phone': l.contactPhone},
+                    'createdAt': l.createdAt.toIso8601String(),
+                  }
+              ],
+              'viewings': [],
+            })
+          : null,
+    );
+  }
+
+  void _log(StaffUser who, String action, String target, String? from, String? to, {String? reason, DateTime? at}) =>
       _audit.insert(
         0,
         AuditRow(
