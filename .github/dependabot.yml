@@ -7,6 +7,10 @@ updates:
     directories: ["/functions", "/tools/tenant-cli"]
     schedule: { interval: weekly, day: monday, time: "05:00", timezone: Africa/Nairobi }
     open-pull-requests-limit: 3
+    ignore:
+      # Types follow the Node runtime (22, functions and tenant-cli engines).
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
     groups:
       npm-minor:
         update-types: [minor, patch]
