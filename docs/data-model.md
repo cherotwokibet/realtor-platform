@@ -28,6 +28,7 @@ One Firestore database per tenant project (D1), so documents carry no tenant id.
 | `staff/{uid}` | email, name, role (owner / manager / agent), agentId, updatedAt | *Functions only* (`setStaffRole`, mirror of the custom claims); managers read all, staff read their own |
 | `audit/{id}` | at, actor {uid, role, agentId}, action (lead.stage / listing.submit / listing.approve / …), target {collection, id, label}, from, to, reason | *Functions only*, in the same transaction as the change; owners and managers read. Ids, states and a label (listing title, staff email); no client personal data |
 | `areas/{slug}` | name, county, centre (geo), guide, amenities[], stats {medianRentKES, listings} | Admin; stats *Functions* |
+| `rateLimits/{sha256}` | window, count, expiresAt (one-hour windows per contact and per listing, P6-s05; no contact details, id is a hash; Firestore TTL deletes it) | *Functions only*; no client access |
 | `config/tenant` | Read-only copy of the tenant file for runtime flags | Deploy step |
 
 **Data Protection Act 2019:** every lead records when consent was given (`consentAt`) and when the record is to be deleted (`retainUntil`, after `consentAt`). A lead needs a phone or an email. The scheduled `purgeExpiredLeads` Function (03:15 Nairobi time, nightly) deletes leads past `retainUntil`, and viewings whose slot is 24 months old (a viewing's client details come with the same consent as its lead). It logs only counts. Export and delete requests are P6 "Data protection compliance".

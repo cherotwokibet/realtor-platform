@@ -68,6 +68,9 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
         // Personal data stays out of logs: only the status is printed.
         stderr.writeln('createLead failed: ${e.status}');
         if (e.status == 'NOT_FOUND') return _notFound(tenant);
+        if (e.status == 'RESOURCE_EXHAUSTED') {
+          return listingPage(req, listing, form: EnquiryFormState(values: values, notice: _tooMany(tenant)), status: 429);
+        }
         return listingPage(req, listing, form: EnquiryFormState(values: values, failed: true), status: 503);
       } on Exception catch (e) {
         stderr.writeln('createLead failed: ${e.runtimeType}');
@@ -96,6 +99,7 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
         return switch (e.status) {
           'NOT_FOUND' => _notFound(tenant),
           'ALREADY_EXISTS' => listingPage(req, listing, viewingForm: again(notice: 'That time is taken. Please pick another.'), status: 409),
+          'RESOURCE_EXHAUSTED' => listingPage(req, listing, viewingForm: again(notice: _tooMany(tenant)), status: 429),
           // The Function explains which slot rule failed ("slot: book at least 2 hours ahead").
           'INVALID_ARGUMENT' when e.message.startsWith('slot: ') =>
             listingPage(req, listing, viewingForm: again(notice: 'Please pick another time: ${e.message.substring(6)}.'), status: 400),
@@ -150,6 +154,10 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
         ));
   return (shelf.Request req) async => _secured(await router.call(req));
 }
+
+/// Shown when the rate limits in Functions refuse a form (P6-s05).
+String _tooMany(TenantConfig tenant) =>
+    'We already have a few requests from you this hour. ${tenant.name} will be in touch; you can also ask on WhatsApp.';
 
 /// Headers on every response. The pages run no script (JSON-LD is a data
 /// block), load styles inline and images from the media CDN, post forms only

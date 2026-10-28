@@ -13,7 +13,8 @@ Status: ✅ holds · ⚠️ gap, with plan · ➖ not applicable. Grouped by ASV
 - ✅ Every callable parses its input with zod and rejects unknown shapes (`functions/src/api/*`).
 - ✅ Money, approval, verification and commission logic is in Functions only (D7). Clients only read, except their own `savedSearches`, whose shape the rules now pin.
 - ✅ State changes follow `functions/src/model/transitions.json`. An invalid move is a `failed-precondition`.
-- ⚠️ No anti-automation on public callables (`createLead`, `logContactTap`, `bookViewing`). The share pages form has a honeypot, but the callables can be called directly. **Plan:** P6 adds App Check and per-IP and per-phone limits. `maxInstances: 10` caps the cost meanwhile.
+- ✅ Public callables are rate-limited per contact and per listing, inside the same transaction, so a refused call writes nothing (`functions/src/api/ratelimit.ts`). The share pages form has a honeypot and answers a limit with 429 and a plain message. Limits are not per IP: the share pages call from one server address.
+- ⚠️ No App Check yet. **Plan:** P6-s05 adds it to the app and web, then enforces it.
 
 ## V3 Web frontend security
 - ✅ Share pages send CSP `default-src 'none'` with only inline styles, `https:` images and same-origin form posts. They also send `frame-ancestors 'none'`, nosniff, `X-Frame-Options: DENY`, a strict Referrer-Policy and a closed Permissions-Policy (test: *every response carries the security headers*).
@@ -79,7 +80,7 @@ Status: ✅ holds · ⚠️ gap, with plan · ➖ not applicable. Grouped by ASV
 
 ## Summary
 There are no critical findings. These gaps are open, each with an owner:
-1. Anti-automation (P6)
+1. App Check (P6-s05)
 2. Server-side password policy (Boniface, console)
 3. Full CSP on the Flutter sites (before prod)
 4. Alerting (P8-s02)
