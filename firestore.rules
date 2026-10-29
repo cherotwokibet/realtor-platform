@@ -48,6 +48,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Saved-search alerts (D17): the owner reads them, marks them read
+    // (readAt only) and clears them; the hourly sweep writes them.
+    match /users/{uid}/alerts/{id} {
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt'])
+        && request.resource.data.readAt is timestamp;
+    }
+
     // Reviews (P6-s03): approved ones are public; managers see all.
     // Review links are read only by the Functions.
     match /reviews/{id} {
@@ -105,7 +114,7 @@ service cloud.firestore {
           && d.userId == request.auth.uid
           && validFilters(d.filters)
           && d.channels is list && d.channels.size() > 0 && d.channels.size() <= 3
-          && d.channels.hasOnly(['push', 'email', 'whatsapp']);
+          && d.channels.hasOnly(['inbox', 'push', 'email', 'whatsapp']);
       }
       allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
       allow create: if signedIn() && valid(request.resource.data)

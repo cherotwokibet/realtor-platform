@@ -16,6 +16,7 @@ import { saveAgent } from './agents';
 import { monthlyReport } from './reports';
 import { MIN_RENTALS, refreshAreaStats, saveArea } from './areas';
 import { moderateReview, submitReview } from './reviews';
+import { sweepSavedSearches } from './alerts';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
@@ -781,5 +782,27 @@ describe('reviews and data requests', () => {
     assert.ok(del.kind === 'delete' && del.deleted.reviews === 1);
     assert.equal((await db.collection('reviews').doc(reviewId).get()).exists, false);
     assert.equal((await db.collection('agents').doc('agent-wanjiku').get()).get('ratingCount'), 0);
+  });
+});
+
+describe('saved-search alerts (D17)', () => {
+  test('a listing going live lands once in the inbox of each matching saved search', async () => {
+    await db.collection('savedSearches').doc('ss-kili').set({ userId: 'alice', filters: { purpose: 'rent', areas: ['kilimani'], maxPriceKES: 200000 }, channels: ['inbox'], lastNotifiedAt: null, createdAt: now });
+    await db.collection('savedSearches').doc('ss-sale').set({ userId: 'bob', filters: { purpose: 'sale' }, channels: ['inbox'], lastNotifiedAt: null, createdAt: now });
+    await db.collection('config').doc('alerts').set({ lastSweepAt: new Date(now.getTime() - 60_000) });
+    const { listingId } = await submitListing(db, wanjiku, { ...newListing, priceKES: 60000 }, now);
+    const at = new Date(now.getTime() + 60_000);
+    await moderateListing(db, manager, { listingId, action: 'approve' }, at);
+
+    const r = await sweepSavedSearches(db, new Date(at.getTime() + 1000));
+    assert.ok(r.listings >= 1);
+    const alice = (await db.collection('users').doc('alice').collection('alerts').get()).docs.map((d) => d.data());
+    assert.ok(alice.some((a) => a.listingId === listingId && a.priceKES === 60000 && a.readAt === null));
+    const bob = (await db.collection('users').doc('bob').collection('alerts').get()).docs;
+    assert.ok(!bob.some((d) => d.get('listingId') === listingId), 'a sale search gets no rental');
+    assert.notEqual((await db.collection('savedSearches').doc('ss-kili').get()).get('lastNotifiedAt'), null);
+
+    const again = await sweepSavedSearches(db, new Date(at.getTime() + 3_600_000));
+    assert.equal(again.listings, 0, 'the next sweep starts where this one stopped');
   });
 });

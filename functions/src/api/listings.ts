@@ -124,7 +124,8 @@ export async function moderateListing(db: Firestore, caller: Caller, input: unkn
     tx.update(ref, {
       status: to,
       updatedAt: now,
-      ...(to === 'live' ? { verifiedAt: now, expiresAt: verificationExpiry(now) } : {}),
+      // liveAt: when it (re)joined the market; saved-search alerts look for it.
+      ...(to === 'live' ? { verifiedAt: now, expiresAt: verificationExpiry(now), liveAt: now } : {}),
       ...(req.action === 'reject' ? { rejection: { reason: req.reason, at: now, by: caller.uid } } : {}),
     });
     audit(tx, db, caller, { action: `listing.${req.action}`, target: { collection: 'listings', id: ref.id, label: snap.get('title') as string | undefined }, from, to, reason: req.reason }, now);
@@ -150,7 +151,7 @@ export async function confirmListing(db: Firestore, caller: Caller, input: unkno
     if (!isManager(caller) && snap.get('agentId') !== caller.agentId) throw new HttpsError('permission-denied', 'not your listing');
     const from = snap.get('status') as ListingStatus;
     if (from !== 'live' && from !== 'expired') throw new HttpsError('failed-precondition', `a ${from} listing cannot be confirmed`);
-    tx.update(ref, { status: 'live', verifiedAt: now, expiresAt, updatedAt: now });
+    tx.update(ref, { status: 'live', verifiedAt: now, expiresAt, updatedAt: now, ...(from === 'expired' ? { liveAt: now } : {}) });
     audit(tx, db, caller, { action: 'listing.confirm', target: { collection: 'listings', id: ref.id, label: snap.get('title') as string | undefined }, from, to: 'live' }, now);
   });
   return { expiresAt: expiresAt.toISOString() };

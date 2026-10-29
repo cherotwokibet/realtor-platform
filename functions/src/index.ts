@@ -3,7 +3,7 @@
  * verification or commissions happens here, never in a client.
  *
  * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, setStaffRole, dataRequest.
- * Scheduled, nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
+ * Scheduled, hourly: savedSearchAlerts (D17). Nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
  *   P4  sendPush        -> FCM HTTP v1 (replaces the legacy server key)
@@ -36,6 +36,7 @@ import * as reports from './api/reports';
 import * as areas from './api/areas';
 import * as reviews from './api/reviews';
 import { refreshAreaStats } from './api/areas';
+import { sweepSavedSearches } from './api/alerts';
 import { dataRequest as runDataRequest } from './api/privacy';
 import { purgeExpired } from './api/retention';
 import { callableTwin, enforced, logAppCheck, type PublicCallable, sharePagesInvoker } from './api/appcheck';
@@ -97,6 +98,12 @@ export const saveArea = onCall((req) => areas.saveArea(getFirestore(), callerFro
 export const moderateReview = onCall((req) => reviews.moderateReview(getFirestore(), callerFrom(req.auth), req.data));
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 export const dataRequest = onCall((req) => runDataRequest(getFirestore(), callerFrom(req.auth), req.data));
+
+// Saved-search alerts (D17): every hour, new live listings to matching inboxes.
+export const savedSearchAlerts = onSchedule({ schedule: 'every 60 minutes', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
+  const r = await sweepSavedSearches(getFirestore());
+  console.log(`alerts: ${r.listings} new listings, ${r.alerts} alerts`);
+});
 
 // Area guides (P3-s05): every night, each area's live listings and median rent.
 export const areaStats = onSchedule({ schedule: '0 4 * * *', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {

@@ -42,6 +42,7 @@ beforeEach(async () => {
     await setDoc(doc(db, 'reviews', 'rev-ok'), { agentId: 'agent-wanjiku', rating: 5, status: 'approved' });
     await setDoc(doc(db, 'reviews', 'rev-new'), { agentId: 'agent-wanjiku', rating: 2, status: 'pending' });
     await setDoc(doc(db, 'reviewInvites', 'tok'), { agentId: 'agent-wanjiku' });
+    await setDoc(doc(db, 'users', 'alice', 'alerts', 'a1'), { listingId: 'listing-001', readAt: null });
     await setDoc(doc(db, 'config', 'tenant'), { id: 'demo' });
     await setDoc(doc(db, 'savedSearches', 'ss-1'), { userId: 'alice', filters: { purpose: 'rent' }, channels: ['push'], lastNotifiedAt: null, createdAt: new Date() });
   });
@@ -104,6 +105,24 @@ describe('leads (personal data)', () => {
     await assertFails(setDoc(doc(visitor(), 'leads', 'spam'), { agentId: 'agent-wanjiku', stage: 'new' }));
     await assertFails(updateDoc(doc(agent('agent-wanjiku'), 'leads', 'lead-001'), { stage: 'won' }));
     await assertFails(deleteDoc(doc(manager(), 'leads', 'lead-001')));
+  });
+});
+
+describe('saved-search alerts', () => {
+  test('only the owner reads, marks read and clears their alerts; nobody creates them', async () => {
+    await assertSucceeds(getDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a1')));
+    await assertFails(getDoc(doc(user('bob'), 'users', 'alice', 'alerts', 'a1')));
+    await assertFails(getDoc(doc(manager(), 'users', 'alice', 'alerts', 'a1')));
+    await assertSucceeds(updateDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a1'), { readAt: new Date() }));
+    await assertFails(updateDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a1'), { listingId: 'other' }));
+    await assertFails(setDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a2'), { listingId: 'x', readAt: null }));
+    await assertSucceeds(deleteDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a1')));
+  });
+
+  test('a saved search may ask for the in-app inbox', async () => {
+    await assertSucceeds(setDoc(doc(user('alice'), 'savedSearches', 'ss-inbox'), {
+      userId: 'alice', filters: { purpose: 'rent', areas: ['kilimani'] }, channels: ['inbox'], lastNotifiedAt: null, createdAt: serverTimestamp(),
+    }));
   });
 });
 
