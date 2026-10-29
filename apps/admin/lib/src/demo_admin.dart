@@ -198,7 +198,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     if (!nextViewingStatuses(v.status, v.slot, _clock()).contains(status)) {
       throw AdminActionException('failed-precondition', 'a ${v.status} viewing cannot become $status now');
     }
-    _viewings[i] = v.withStatus(status);
+    _viewings[i] = v.withStatus(status, reviewToken: status == 'done' ? 'demo-review-${v.id}'.replaceAll(RegExp('[^A-Za-z0-9_-]'), '-') : null);
     _log(who, 'viewing.status', 'Viewing of ${v.listingTitle}', v.status, status);
   }
 
@@ -483,6 +483,33 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   Future<List<AreaOption>> areas() async => [
         for (final g in _guides.values) (slug: g.slug!, name: g.name, lat: g.lat, lng: g.lng),
       ]..sort((a, b) => a.name.compareTo(b.name));
+
+  /// Two demo reviews waiting for a manager, and one shown.
+  late final _reviews = <ReviewRow>[
+    ReviewRow(id: 'review-1', agentId: 'agent-wanjiku', agentName: 'Wanjiku Mwangi', rating: 5, status: 'pending', createdAt: _now.subtract(const Duration(hours: 3)), comment: 'Showed us three flats in one afternoon.', name: 'Akinyi'),
+    ReviewRow(id: 'review-2', agentId: 'agent-otieno', agentName: 'Brian Otieno', rating: 2, status: 'pending', createdAt: _now.subtract(const Duration(hours: 9)), comment: 'Came 40 minutes late.'),
+    ReviewRow(id: 'review-3', agentId: 'agent-wanjiku', agentName: 'Wanjiku Mwangi', rating: 4, status: 'approved', createdAt: _now.subtract(const Duration(days: 4)), name: 'Juma'),
+  ];
+
+  @override
+  Future<List<ReviewRow>> reviews(StaffUser who, {String status = 'pending'}) async {
+    if (!who.isManager) throw StaffAccessException('reviews are for owners and managers');
+    return _reviews.where((r) => r.status == status).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  @override
+  Future<({double? rating, int count})> moderateReview(StaffUser who, {required String reviewId, required String action}) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final i = _reviews.indexWhere((r) => r.id == reviewId);
+    if (i < 0) throw AdminActionException('not-found', 'no such review');
+    final r = _reviews[i];
+    final status = action == 'approve' ? 'approved' : 'hidden';
+    _reviews[i] = ReviewRow(id: r.id, agentId: r.agentId, agentName: r.agentName, rating: r.rating, status: status, createdAt: r.createdAt, comment: r.comment, name: r.name);
+    final ratings = [for (final x in _reviews) if (x.agentId == r.agentId && x.status == 'approved') x.rating];
+    final rating = ratings.isEmpty ? null : (ratings.reduce((a, b) => a + b) / ratings.length * 10).round() / 10;
+    _log(who, 'review.moderate', 'Review of ${r.agentName}, ${r.rating} stars', r.status, status);
+    return (rating: rating, count: ratings.length);
+  }
 
   @override
   Future<List<AreaGuide>> areaGuides() async => _guides.values.toList()..sort((a, b) => a.name.compareTo(b.name));

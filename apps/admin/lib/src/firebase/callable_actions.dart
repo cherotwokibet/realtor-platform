@@ -57,6 +57,12 @@ class CallableAdminActions implements AdminActions {
       MonthlyReport.fromJson(await _run('monthlyReport', {'month': month}) as Map<Object?, Object?>);
 
   @override
+  Future<({double? rating, int count})> moderateReview(StaffUser who, {required String reviewId, required String action}) async {
+    final r = await _run('moderateReview', {'reviewId': reviewId, 'action': action}) as Map<Object?, Object?>;
+    return (rating: (r['rating'] as num?)?.toDouble(), count: (r['ratingCount'] as num?)?.toInt() ?? 0);
+  }
+
+  @override
   Future<String> saveArea(StaffUser who, AreaGuide area) async {
     final r = await _run('saveArea', area.toCallable()) as Map<Object?, Object?>;
     return r['slug'] as String;

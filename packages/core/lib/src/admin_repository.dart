@@ -29,12 +29,16 @@ class ViewingRow {
     required this.status,
     this.clientName,
     this.clientPhone,
+    this.reviewToken,
   });
   final String id, listingId, listingTitle, agentId, agentName, status;
   final DateTime slot;
   final String? clientName, clientPhone;
 
-  ViewingRow withStatus(String status) => ViewingRow(
+  /// The one-time review link's token once the viewing is done (P6-s03).
+  final String? reviewToken;
+
+  ViewingRow withStatus(String status, {String? reviewToken}) => ViewingRow(
         id: id,
         listingId: listingId,
         listingTitle: listingTitle,
@@ -44,6 +48,7 @@ class ViewingRow {
         status: status,
         clientName: clientName,
         clientPhone: clientPhone,
+        reviewToken: reviewToken ?? this.reviewToken,
       );
 }
 
@@ -174,6 +179,27 @@ class StaffMember {
 
 /// An agent record staff accounts can act as.
 /// Time an agent blocked out (P5-s05): no viewing can be booked in it.
+/// A client's review of an agent (P6-s03), as managers moderate it.
+class ReviewRow {
+  const ReviewRow({
+    required this.id,
+    required this.agentId,
+    required this.agentName,
+    required this.rating,
+    required this.status,
+    required this.createdAt,
+    this.comment,
+    this.name,
+  });
+  final String id, agentId, agentName, status;
+  final int rating;
+  final DateTime createdAt;
+  final String? comment, name;
+}
+
+/// Review statuses: new ones wait as pending until a manager acts.
+const reviewStatuses = ['pending', 'approved', 'hidden'];
+
 class AgentBlock {
   const AgentBlock({required this.id, required this.agentId, required this.agentName, required this.start, required this.end, this.note});
   final String id, agentId, agentName;
@@ -218,6 +244,9 @@ abstract interface class AdminRepository {
 
   /// The tenant's areas, by name, for the listing form.
   Future<List<AreaOption>> areas();
+
+  /// Reviews with [status], newest first. Throws [StaffAccessException] for agents.
+  Future<List<ReviewRow>> reviews(StaffUser who, {String status = 'pending'});
 
   /// Every area's guide, by name (the guides are public).
   Future<List<AreaGuide>> areaGuides();

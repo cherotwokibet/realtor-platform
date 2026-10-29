@@ -110,6 +110,7 @@ class FirestoreAdminRepository implements AdminRepository {
             status: _str(d, 'status'),
             clientName: _map(d, 'client')['name'] as String?,
             clientPhone: _map(d, 'client')['phone'] as String?,
+            reviewToken: d.data()['reviewToken'] as String?,
           ),
       ];
     });
@@ -184,6 +185,26 @@ class FirestoreAdminRepository implements AdminRepository {
       if (e.code == 'permission-denied') return null;
       rethrow;
     }
+  }
+
+  @override
+  Future<List<ReviewRow>> reviews(StaffUser who, {String status = 'pending'}) async {
+    if (!who.isManager) throw StaffAccessException('reviews are for owners and managers');
+    final snap = await _db.collection('reviews').where('status', isEqualTo: status).limit(200).get();
+    final names = await _agents();
+    return [
+      for (final d in snap.docs)
+        ReviewRow(
+          id: d.id,
+          agentId: _str(d, 'agentId'),
+          agentName: names[_str(d, 'agentId')] ?? _str(d, 'agentId'),
+          rating: (d.data()['rating'] as num?)?.toInt() ?? 0,
+          status: _str(d, 'status'),
+          createdAt: _date(d.data()['createdAt']),
+          comment: d.data()['comment'] as String?,
+          name: d.data()['name'] as String?,
+        ),
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   @override

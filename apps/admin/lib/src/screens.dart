@@ -6,7 +6,9 @@ import 'package:realtor_core/realtor_core.dart';
 import 'agent_profiles.dart';
 import 'area_guides.dart';
 import 'format.dart';
+import 'links.dart';
 import 'listing_editor.dart';
+import 'reviews_dialog.dart';
 import 'paged_table.dart';
 import 'providers.dart';
 
@@ -277,6 +279,15 @@ class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
     });
   }
 
+  /// Sends the client their one-time review link on WhatsApp (P6-s03).
+  void _askReview(ViewingRow v) {
+    final tenant = ref.read(tenantProvider);
+    final link = 'https://${shareHost(tenant.shareDomain, ref.read(adminBaseProvider))}/review/${v.reviewToken}';
+    final text = 'Hi${v.clientName == null ? '' : ' ${v.clientName!.split(' ').first}'}, thank you for viewing '
+        '${v.listingTitle} with ${tenant.name}. How did it go? It takes a minute: $link';
+    ref.read(linkOpenerProvider).open(Uri.https('wa.me', '/${v.clientPhone!.replaceAll('+', '')}', {'text': text}));
+  }
+
   Future<void> _reschedule(StaffUser who, ViewingRow v) async {
     final slot = await showDialog<String>(context: context, builder: (_) => _RescheduleDialog(from: v.slot));
     if (slot == null || !mounted) return;
@@ -339,9 +350,11 @@ class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
               options: [
                 ...nextViewingStatuses(status, v.slot, DateTime.now()),
                 if (status == 'requested' || status == 'confirmed') 'reschedule',
+                if (status == 'done' && v.reviewToken != null && v.clientPhone != null) 'review',
               ],
               labelOf: (s) => switch (s) {
                 'reschedule' => 'Reschedule…',
+                'review' => 'Ask for a review…',
                 'confirmed' => 'Confirm',
                 'done' => 'Mark done',
                 'no-show' => 'Mark no-show',
@@ -349,7 +362,11 @@ class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
                 _ => label(s),
               },
               saving: _saving.containsKey(v.id),
-              onSelected: (s) => s == 'reschedule' ? _reschedule(who, v) : _move(who, v, s),
+              onSelected: (s) => switch (s) {
+                'reschedule' => _reschedule(who, v),
+                'review' => _askReview(v),
+                _ => _move(who, v, s),
+              },
             );
           }),
           if (who.isManager) TableColumn('Agent', (v) => Text(v.agentName)),
@@ -623,11 +640,18 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     final who = ref.watch(staffProvider)!;
     return _TablePage(
       title: 'Team',
-      action: OutlinedButton.icon(
-        onPressed: () => showDialog<void>(context: context, builder: (_) => const AgentProfilesDialog()),
-        icon: const Icon(Icons.badge_outlined),
-        label: const Text('Agent profiles…'),
-      ),
+      action: Wrap(spacing: 8, runSpacing: 8, children: [
+        OutlinedButton.icon(
+          onPressed: () => showDialog<void>(context: context, builder: (_) => const ReviewsDialog()),
+          icon: const Icon(Icons.star_outline),
+          label: const Text('Reviews…'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => showDialog<void>(context: context, builder: (_) => const AgentProfilesDialog()),
+          icon: const Icon(Icons.badge_outlined),
+          label: const Text('Agent profiles…'),
+        ),
+      ]),
       subtitle: who.canManageStaff
           ? 'Add people after they have signed in to this admin once. Changes apply on their next sign-in.'
           : 'Only owners change roles.',

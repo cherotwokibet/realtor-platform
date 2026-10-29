@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_admin/src/app.dart';
 import 'package:realtor_admin/src/demo_admin.dart';
 import 'package:realtor_admin/src/format.dart';
+import 'package:realtor_admin/src/links.dart';
 import 'package:realtor_admin/src/listing_media.dart';
 import 'package:realtor_admin/src/providers.dart';
 import 'package:realtor_admin/src/reports.dart';
@@ -89,6 +90,10 @@ class SlowActions implements AdminActions {
 
   @override
   Future<String> saveArea(StaffUser who, AreaGuide area) => inner.saveArea(who, area);
+
+  @override
+  Future<({double? rating, int count})> moderateReview(StaffUser who, {required String reviewId, required String action}) =>
+      inner.moderateReview(who, reviewId: reviewId, action: action);
 
   @override
   Future<String> saveAgent(StaffUser who, AgentProfile profile) async {
@@ -933,6 +938,54 @@ void main() {
     await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
     expect(find.text('Areas…'), findsNothing);
+  });
+
+  testWidgets('a done viewing offers its review link on WhatsApp to the client', (tester) async {
+    final links = MemoryLinkOpener();
+    await open(tester, as: manager, overrides: [linkOpenerProvider.overrideWithValue(links)]);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+    final past = (await container.read(adminRepositoryProvider).viewings(manager, from: from, limit: 50))
+        .rows
+        .firstWhere((v) => v.status == 'confirmed' && v.slot.isBefore(now));
+    await tapVisible(tester, find.byTooltip('Update the viewing ${shortDateTime(past.slot)}'));
+    expect(find.text('Ask for a review…'), findsNothing, reason: 'not done yet');
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Mark done'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Done'));
+    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byTooltip('Update the viewing ${shortDateTime(past.slot)}'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Ask for a review…'));
+    await tester.pumpAndSettle();
+    final uri = links.opened.single;
+    expect(uri.host, 'wa.me');
+    expect(uri.path, '/${past.clientPhone!.replaceAll('+', '')}');
+    expect(uri.queryParameters['text'], contains('https://realtimeestates.co.ke/review/demo-review-'));
+  });
+
+  test('review links point at the share site next to this admin', () {
+    expect(shareHost('realtimeestates.co.ke', Uri.parse('https://rte-realtor-dev-admin.web.app/viewings')), 'rte-realtor-dev-share.web.app');
+    expect(shareHost('realtimeestates.co.ke', Uri.parse('https://admin.realtimeestates.co.ke/')), 'realtimeestates.co.ke');
+    expect(shareHost('realtimeestates.co.ke', Uri.parse('http://localhost:8080/')), 'realtimeestates.co.ke');
+  });
+
+  testWidgets('a manager approves a waiting review and sees the new rating', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Team'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reviews…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Showed us three flats'), findsOneWidget);
+    await tester.tap(find.text('Approve').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Wanjiku Mwangi is now rated 4.5 from 2 reviews.'), findsOneWidget);
+    expect(find.textContaining('Showed us three flats'), findsNothing);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Approved'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Showed us three flats'), findsOneWidget);
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

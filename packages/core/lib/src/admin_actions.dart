@@ -119,6 +119,10 @@ abstract interface class AdminActions {
   /// `monthlyReport` (P5-s08), managers: [month] is `YYYY-MM`.
   Future<MonthlyReport> monthlyReport(StaffUser who, String month);
 
+  /// `moderateReview` (P6-s03), managers: `approve` shows a review, `hide`
+  /// takes it down. Completes with the agent's new rating (null with none).
+  Future<({double? rating, int count})> moderateReview(StaffUser who, {required String reviewId, required String action});
+
   /// `saveArea` (P3-s05), managers: adds or edits an area guide. Completes
   /// with its slug.
   Future<String> saveArea(StaffUser who, AreaGuide area);

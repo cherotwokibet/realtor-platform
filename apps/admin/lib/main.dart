@@ -15,6 +15,8 @@ import 'src/firebase/firestore_admin.dart';
 import 'src/firebase/storage_media.dart';
 import 'src/firebase/web_file_picker.dart';
 import 'src/firebase/web_file_saver.dart';
+import 'src/firebase/web_links.dart';
+import 'src/links.dart';
 import 'src/listing_media.dart';
 import 'src/reports.dart';
 import 'src/providers.dart';
@@ -27,6 +29,7 @@ Future<void> main() async {
     tenantProvider.overrideWithValue(tenant),
     filePickerProvider.overrideWithValue(WebFilePicker()),
     fileSaverProvider.overrideWithValue(WebFileSaver()),
+    linkOpenerProvider.overrideWithValue(WebLinkOpener()),
   ];
   // On Firebase Hosting: real sign-in, Firestore and the Functions. Anywhere
   // else (flutter run, a plain web server): demo accounts over demo data.
