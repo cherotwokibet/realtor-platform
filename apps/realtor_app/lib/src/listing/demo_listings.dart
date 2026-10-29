@@ -47,7 +47,7 @@ class DemoListingRepository implements ListingRepository {
     final a = _agents.where((a) => a.id == id).firstOrNull;
     return a == null
         ? null
-        : AgentProfile(id: a.id, name: a.name, earbNo: 'EARB/DEMO', phone: a.phone, whatsapp: a.whatsapp, languages: const ['en', 'sw'], responseMins: 25);
+        : AgentProfile(id: a.id, name: a.name, earbNo: 'EARB/DEMO', phone: a.phone, whatsapp: a.whatsapp, languages: const ['en', 'sw'], responseMins: 25, rating: 4.5);
   }
 
   @override

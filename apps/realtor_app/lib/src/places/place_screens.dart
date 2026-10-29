@@ -104,7 +104,12 @@ class AgentScreen extends ConsumerWidget {
                 Text(a.name, style: text.headlineSmall),
                 SizedBox(height: b.spacing.xs),
                 Text(
-                  ['EARB reg. ${a.earbNo}', 'Speaks $speaks', if (a.responseMins != null) 'Usually replies within ${a.responseMins} min']
+                  [
+                    'EARB reg. ${a.earbNo}',
+                    'Speaks $speaks',
+                    if (a.responseMins != null) 'Usually replies within ${a.responseMins} min',
+                    if (a.rating != null) 'Rated ${a.rating!.toStringAsFixed(1)} of 5',
+                  ]
                       .join(' · '),
                   style: text.bodySmall?.copyWith(color: b.textMuted),
                 ),

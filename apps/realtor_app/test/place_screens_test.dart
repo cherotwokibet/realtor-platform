@@ -40,6 +40,7 @@ void main() {
     final (_, opened) = await open(tester, '/agent/agent-wanjiku');
     expect(find.text('Wanjiku Mwangi'), findsWidgets);
     expect(find.textContaining('EARB reg.'), findsOneWidget);
+    expect(find.textContaining('Rated 4.5 of 5'), findsOneWidget);
     await tester.tap(find.text('WhatsApp'));
     await tester.pump();
     expect(opened.single.host, 'wa.me');
