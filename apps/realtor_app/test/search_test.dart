@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_app/src/app.dart';
 import 'package:realtor_app/src/listing/listing_screen.dart';
+import 'package:realtor_app/src/places/place_screens.dart';
 import 'package:realtor_app/src/providers.dart';
 import 'package:realtor_app/src/search/demo_search.dart';
 import 'package:realtor_core/realtor_core.dart';
@@ -55,7 +56,8 @@ void main() {
       final h = await open(tester, path);
       expect(h.location, path);
       expect(find.textContaining('Page Not Found'), findsNothing, reason: path);
-      expect(find.byType(path.startsWith('/listing/') ? ListingScreen : PlaceholderScreen), findsOneWidget, reason: path);
+      final screen = switch (path.split('/')[1]) { 'listing' => ListingScreen, 'area' => AreaScreen, _ => AgentScreen };
+      expect(find.byType(screen), findsOneWidget, reason: path);
     }
   });
 

@@ -101,6 +101,35 @@ class FirestoreListingRepository implements ListingRepository {
           : ListingAgent(id: agentId!, name: a['name'] as String? ?? '', phone: a['phone'] as String? ?? '', whatsapp: a['whatsapp'] as String? ?? ''),
     );
   }
+
+  @override
+  Future<AreaGuide?> area(String slug) async {
+    final d = await _db.collection('areas').doc(slug).get();
+    return d.exists ? AreaGuide.fromDoc(d.id, d.data()!) : null;
+  }
+
+  @override
+  Future<AgentProfile?> agent(String id) async {
+    try {
+      final d = await _db.collection('agents').doc(id).get();
+      final data = d.data();
+      return data == null || data['active'] != true ? null : AgentProfile.fromDoc(d.id, data);
+    } on FirebaseException {
+      return null; // the rules hide inactive agents from the public
+    }
+  }
+
+  @override
+  Future<List<ListingSummary>> live({String? area, String? agentId, int limit = 30}) async {
+    Query<Map<String, Object?>> q = _db.collection('listings').where('status', isEqualTo: 'live');
+    if (area != null) q = q.where('area', isEqualTo: area);
+    if (agentId != null) q = q.where('agentId', isEqualTo: agentId);
+    final snap = await q.limit(200).get();
+    final now = _clock();
+    final rows = [for (final d in snap.docs) (summaryFromDoc(d.id, d.data(), bucket: bucket, now: now), _time(d.data()['updatedAt']))]
+      ..sort((a, b) => (b.$2 ?? DateTime(0)).compareTo(a.$2 ?? DateTime(0)));
+    return [for (final r in rows.take(limit)) r.$1];
+  }
 }
 
 /// Calls one callable Function by name with [data]; completes with its answer.

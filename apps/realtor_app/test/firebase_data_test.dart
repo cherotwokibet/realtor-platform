@@ -81,6 +81,25 @@ void main() {
     expect(await down.openTimes(listingId: 'l1', day: '2026-10-30'), isNull);
   });
 
+  test('area guide, active agent only, and live homes by area or agent', () async {
+    await db.collection('areas').doc('kilimani').set({
+      'name': 'Kilimani',
+      'county': 'Nairobi',
+      'centre': {'lat': -1.29, 'lng': 36.78},
+      'guide': 'Leafy.',
+      'amenities': ['Yaya Centre'],
+      'stats': {'medianRentKES': 70000, 'listings': 1},
+    });
+    final repo = FirestoreListingRepository(db, bucket: 'b', clock: () => now);
+    expect((await repo.area('kilimani'))!.medianRentKES, 70000);
+    expect(await repo.area('nowhere'), isNull);
+    expect((await repo.agent('agent-a'))!.whatsapp, '+254700000002');
+    expect((await repo.live(area: 'kilimani')).map((l) => l.slug), ['flat-1']);
+    expect((await repo.live(agentId: 'agent-a')).map((l) => l.slug).toSet(), {'flat-1', 'flat-2', 'house-4'});
+    await db.collection('agents').doc('agent-a').update({'active': false});
+    expect(await repo.agent('agent-a'), isNull);
+  });
+
   test('leads go to the Functions with consent; refusals become LeadException', () async {
     final calls = <(String, Map<String, Object?>)>[];
     final leads = CallableLeadRepository((name, data) async {

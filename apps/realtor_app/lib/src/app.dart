@@ -7,6 +7,7 @@ import 'package:realtor_core/realtor_core.dart';
 
 import 'home_screen.dart';
 import 'listing/listing_screen.dart';
+import 'places/place_screens.dart';
 import 'providers.dart';
 import 'saved/saved_screen.dart';
 import 'search/purpose.dart';
@@ -53,11 +54,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/area/:slug',
-        builder: (context, state) => PlaceholderScreen(title: 'Area ${state.pathParameters['slug']}'),
+        builder: (context, state) => AreaScreen(slug: state.pathParameters['slug']!),
       ),
       GoRoute(
         path: '/agent/:id',
-        builder: (context, state) => PlaceholderScreen(title: 'Agent ${state.pathParameters['id']}'),
+        builder: (context, state) => AgentScreen(id: state.pathParameters['id']!),
       ),
     ],
   );
