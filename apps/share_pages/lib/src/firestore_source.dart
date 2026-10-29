@@ -102,6 +102,27 @@ class FirestoreListingSource implements ListingSource {
   }
 
   @override
+  Future<({String title, String body, DateTime? updatedAt})?> page(String slug) async {
+    final doc = await _get('pages/${Uri.encodeComponent(slug)}');
+    if (doc == null) return null;
+    final f = _decodeFields(_map(doc['fields']));
+    if (f['published'] != true) return null;
+    return (title: f['title']! as String, body: (f['body'] as String?) ?? '', updatedAt: f['updatedAt'] is DateTime ? f['updatedAt'] as DateTime : null);
+  }
+
+  @override
+  Future<List<({String slug, String title})>> publishedPages() async {
+    final docs = await _query({
+      'from': [{'collectionId': 'pages'}],
+      'where': {'fieldFilter': {'field': {'fieldPath': 'published'}, 'op': 'EQUAL', 'value': {'booleanValue': true}}},
+      'limit': 20,
+    });
+    return [
+      for (final d in docs) (slug: (d['name']! as String).split('/').last, title: _decodeFields(_map(d['fields']))['title']! as String),
+    ];
+  }
+
+  @override
   Future<List<ShareReview>> reviews(String agentId, {int limit = 5}) async {
     final docs = await _query({
       'from': [{'collectionId': 'reviews'}],

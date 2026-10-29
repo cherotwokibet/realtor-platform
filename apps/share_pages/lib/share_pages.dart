@@ -12,5 +12,6 @@ export 'src/listing.dart';
 export 'src/listing_page.dart';
 export 'src/page_shell.dart';
 export 'src/review_page.dart';
+export 'src/site_page.dart';
 export 'src/seo.dart';
 export 'src/server.dart';

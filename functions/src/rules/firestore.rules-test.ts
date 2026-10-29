@@ -43,6 +43,8 @@ beforeEach(async () => {
     await setDoc(doc(db, 'reviews', 'rev-new'), { agentId: 'agent-wanjiku', rating: 2, status: 'pending' });
     await setDoc(doc(db, 'reviewInvites', 'tok'), { agentId: 'agent-wanjiku' });
     await setDoc(doc(db, 'users', 'alice', 'alerts', 'a1'), { listingId: 'listing-001', readAt: null });
+    await setDoc(doc(db, 'pages', 'about'), { title: 'About', body: 'x', published: true });
+    await setDoc(doc(db, 'pages', 'faq'), { title: 'FAQ', body: 'draft', published: false });
     await setDoc(doc(db, 'config', 'tenant'), { id: 'demo' });
     await setDoc(doc(db, 'savedSearches', 'ss-1'), { userId: 'alice', filters: { purpose: 'rent' }, channels: ['push'], lastNotifiedAt: null, createdAt: new Date() });
   });
@@ -105,6 +107,16 @@ describe('leads (personal data)', () => {
     await assertFails(setDoc(doc(visitor(), 'leads', 'spam'), { agentId: 'agent-wanjiku', stage: 'new' }));
     await assertFails(updateDoc(doc(agent('agent-wanjiku'), 'leads', 'lead-001'), { stage: 'won' }));
     await assertFails(deleteDoc(doc(manager(), 'leads', 'lead-001')));
+  });
+});
+
+describe('site pages', () => {
+  test('published pages are public; drafts only for managers; nobody writes', async () => {
+    await assertSucceeds(getDoc(doc(visitor(), 'pages', 'about')));
+    await assertFails(getDoc(doc(visitor(), 'pages', 'faq')));
+    await assertFails(getDoc(doc(agent('agent-wanjiku'), 'pages', 'faq')));
+    await assertSucceeds(getDoc(doc(manager(), 'pages', 'faq')));
+    await assertFails(setDoc(doc(manager(), 'pages', 'about'), { title: 'x', body: 'y', published: true }));
   });
 });
 

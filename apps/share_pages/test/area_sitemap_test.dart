@@ -91,4 +91,23 @@ void main() {
       expect((await dev(path)).headers['x-robots-tag'], 'noindex', reason: path);
     }
   });
+
+  test('published site pages render as plain text and show in every footer; drafts and others are 404', () async {
+    final src = InMemoryListingSource(const [flat], areas: const [kilimani])
+      ..sitePages = {
+        'privacy': (title: 'Privacy notice', body: '# Who we are\nRealtime Estates <b>Ltd</b>.\nNairobi.\n\n- your rights\n- our duties'),
+      };
+    final h = shareHandler(tenant, src);
+    Future<shelf.Response> go(String path) => Future.value(h(shelf.Request('GET', Uri.parse('https://x$path'))));
+    final html = await (await go('/privacy')).readAsString();
+    expect(html, contains('<h1>Privacy notice</h1>'));
+    expect(html, contains('<h2>Who we are</h2>'));
+    expect(html, contains('<p>Realtime Estates &lt;b&gt;Ltd&lt;/b&gt;. Nairobi.</p>'));
+    expect(html, contains('<li>your rights</li>'));
+    expect(await (await go('/')).readAsString(), contains('href="/privacy"'));
+    expect((await go('/about')).statusCode, 404);
+    expect((await go('/secret')).statusCode, 404);
+    expect((await go('/robots.txt')).statusCode, 200);
+    expect((await go('/sitemap.xml')).statusCode, 200);
+  });
 }

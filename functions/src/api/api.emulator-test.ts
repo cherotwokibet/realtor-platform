@@ -17,6 +17,7 @@ import { monthlyReport } from './reports';
 import { MIN_RENTALS, refreshAreaStats, saveArea } from './areas';
 import { moderateReview, submitReview } from './reviews';
 import { sweepSavedSearches } from './alerts';
+import { savePage } from './pages';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
@@ -804,5 +805,18 @@ describe('saved-search alerts (D17)', () => {
 
     const again = await sweepSavedSearches(db, new Date(at.getTime() + 3_600_000));
     assert.equal(again.listings, 0, 'the next sweep starts where this one stopped');
+  });
+});
+
+describe('site pages (P5-s07)', () => {
+  test('managers save and publish a page; agents cannot; only known pages', async () => {
+    await rejectsWith(savePage(db, wanjiku, { slug: 'about', title: 'About us', body: 'Hi', published: true }, now), 'permission-denied');
+    await savePage(db, manager, { slug: 'privacy', title: 'Privacy notice', body: '# Who we are\nRealtime.', published: false }, now);
+    await savePage(db, manager, { slug: 'privacy', title: 'Privacy notice', body: '# Who we are\nRealtime.', published: true }, now);
+    const p = (await db.collection('pages').doc('privacy').get()).data()!;
+    assert.deepEqual([p.title, p.published], ['Privacy notice', true]);
+    await rejectsWith(savePage(db, manager, { slug: 'secret', title: 'x', body: '', published: true }, now), 'invalid-argument');
+    const log = (await db.collection('audit').where('action', '==', 'page.save').get()).docs.map((d) => `${d.get('from')}->${d.get('to')}`);
+    assert.deepEqual(log.sort(), ['draft->published', 'none->draft']);
   });
 });

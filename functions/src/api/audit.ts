@@ -20,11 +20,12 @@ export interface AuditEvent {
     | 'agent.save'
     | 'area.save'
     | 'review.moderate'
+    | 'page.save'
     | 'staff.role'
     | 'privacy.export'
     | 'privacy.delete';
   /** label: what the admin shows for it (a listing title, a staff email), kept as it was then. */
-  target: { collection: 'leads' | 'listings' | 'staff' | 'people' | 'viewings' | 'agents' | 'areas'; id: string; label?: string };
+  target: { collection: 'leads' | 'listings' | 'staff' | 'people' | 'viewings' | 'agents' | 'areas' | 'pages'; id: string; label?: string };
   from?: string | null;
   to?: string;
   reason?: string;

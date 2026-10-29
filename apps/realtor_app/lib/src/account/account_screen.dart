@@ -170,6 +170,15 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           _Searches(uid: customer.uid),
         ],
         if (_status != null) Padding(padding: EdgeInsets.only(top: b.spacing.md), child: Text(_status!, style: text.bodyMedium)),
+        SizedBox(height: b.spacing.xl),
+        // Site pages live on the share site (P5-s07); they open in the browser.
+        Wrap(spacing: b.spacing.sm, children: [
+          for (final (slug, name) in const [('about', 'About'), ('privacy', 'Privacy'), ('terms', 'Terms')])
+            TextButton(
+              onPressed: () => ref.read(urlOpenerProvider)(Uri.https(ref.read(tenantProvider).shareDomain, '/$slug')),
+              child: Text(name),
+            ),
+        ]),
         if (_error != null)
           Padding(
             padding: EdgeInsets.only(top: b.spacing.md),

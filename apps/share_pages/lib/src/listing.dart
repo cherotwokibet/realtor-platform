@@ -100,6 +100,12 @@ abstract interface class ListingSource {
   /// An agent's live listings, newest first, at most [limit].
   Future<List<ShareListing>> liveByAgent(String agentId, {int limit = 24});
 
+  /// A published site page (about, privacy, ...), else null.
+  Future<({String title, String body, DateTime? updatedAt})?> page(String slug);
+
+  /// Published site pages, for the footer.
+  Future<List<({String slug, String title})>> publishedPages();
+
   /// An agent's approved reviews, newest first, at most [limit].
   Future<List<ShareReview>> reviews(String agentId, {int limit = 5});
 
@@ -120,6 +126,16 @@ class InMemoryListingSource implements ListingSource {
 
   /// Agent id -> approved reviews, newest first.
   final Map<String, List<ShareReview>> agentReviews;
+
+  /// Published site pages by slug.
+  Map<String, ({String title, String body})> sitePages = {};
+
+  @override
+  Future<({String title, String body, DateTime? updatedAt})?> page(String slug) async =>
+      sitePages[slug] == null ? null : (title: sitePages[slug]!.title, body: sitePages[slug]!.body, updatedAt: null);
+
+  @override
+  Future<List<({String slug, String title})>> publishedPages() async => [for (final e in sitePages.entries) (slug: e.key, title: e.value.title)];
 
   @override
   Future<List<ShareReview>> reviews(String agentId, {int limit = 5}) async => [...?agentReviews[agentId]].take(limit).toList();

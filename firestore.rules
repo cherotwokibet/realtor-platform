@@ -48,6 +48,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Site pages (P5-s07): published ones are public; managers see drafts.
+    match /pages/{slug} {
+      allow read: if resource.data.published == true || isManager();
+      allow write: if false;
+    }
+
     // Saved-search alerts (D17): the owner reads them, marks them read
     // (readAt only) and clears them; the hourly sweep writes them.
     match /users/{uid}/alerts/{id} {

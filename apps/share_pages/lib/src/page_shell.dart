@@ -7,6 +7,7 @@ import 'package:realtor_tokens/realtor_tokens.dart';
 
 import 'fonts.dart';
 import 'listing.dart';
+import 'site_page.dart';
 
 /// Layout only; every colour, font and radius comes from the tenant's CSS
 /// variables (packages/tokens), so a re-brand needs no change here.
@@ -21,6 +22,9 @@ h2{font-family:var(--font-display);font-size:var(--text-title);color:var(--color
 .price{font-size:var(--text-title);color:var(--color-primary);font-weight:600;margin:0 0 8px}
 .facts{color:var(--color-text-muted);margin:0 0 16px}
 .insight{color:var(--color-success);font-weight:600;margin:-8px 0 16px}
+footer{max-width:720px;margin:0 auto;padding:24px 16px;border-top:1px solid var(--color-border)}
+footer nav{display:flex;flex-wrap:wrap;gap:16px}
+footer a{color:var(--color-text-muted)}
 fieldset.stars{border:1px solid var(--color-border);border-radius:var(--radius-sm);margin:0 0 16px}
 fieldset.stars label{display:block;padding:4px 0}
 .reviews{list-style:none;padding:0}
@@ -92,6 +96,10 @@ Component sharePage({
         ]),
       ]),
       main_(body),
+      if (footerPages.isNotEmpty)
+        footer([
+          nav([for (final pg in footerPages) a(href: '/${pg.slug}', [Component.text(pg.title)])]),
+        ]),
     ]),
   );
 }

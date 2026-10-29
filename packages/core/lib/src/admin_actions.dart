@@ -1,3 +1,4 @@
+import 'admin_repository.dart' show SitePageRow;
 import 'agent_profile.dart';
 import 'area_guide.dart';
 import 'listing_draft.dart';
@@ -122,6 +123,10 @@ abstract interface class AdminActions {
   /// `moderateReview` (P6-s03), managers: `approve` shows a review, `hide`
   /// takes it down. Completes with the agent's new rating (null with none).
   Future<({double? rating, int count})> moderateReview(StaffUser who, {required String reviewId, required String action});
+
+  /// `savePage` (P5-s07), managers: a site page's title, text and whether
+  /// the share site shows it.
+  Future<void> savePage(StaffUser who, SitePageRow page);
 
   /// `saveArea` (P3-s05), managers: adds or edits an area guide. Completes
   /// with its slug.

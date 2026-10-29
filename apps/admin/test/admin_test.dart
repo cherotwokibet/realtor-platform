@@ -92,6 +92,9 @@ class SlowActions implements AdminActions {
   Future<String> saveArea(StaffUser who, AreaGuide area) => inner.saveArea(who, area);
 
   @override
+  Future<void> savePage(StaffUser who, SitePageRow page) => inner.savePage(who, page);
+
+  @override
   Future<({double? rating, int count})> moderateReview(StaffUser who, {required String reviewId, required String action}) =>
       inner.moderateReview(who, reviewId: reviewId, action: action);
 
@@ -986,6 +989,24 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, 'Approved'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Showed us three flats'), findsOneWidget);
+  });
+
+  testWidgets('a manager writes and publishes the privacy notice', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Privacy'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Site pages…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Published · /about'), findsOneWidget);
+    await tester.tap(find.text('Privacy notice'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Text'), '# Who we are\nRealtime Estates Ltd.');
+    await tester.tap(find.text('Published'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Published · /privacy'), findsOneWidget);
+    final privacy = (await container.read(adminRepositoryProvider).sitePages(manager)).firstWhere((p) => p.slug == 'privacy');
+    expect((privacy.title, privacy.published, privacy.body.startsWith('# Who we are')), ('Privacy notice', true, true));
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

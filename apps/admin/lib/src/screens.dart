@@ -9,6 +9,7 @@ import 'format.dart';
 import 'links.dart';
 import 'listing_editor.dart';
 import 'reviews_dialog.dart';
+import 'site_pages.dart';
 import 'paged_table.dart';
 import 'providers.dart';
 
@@ -867,7 +868,14 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Privacy requests', style: t.headlineSmall),
+        Row(children: [
+          Expanded(child: Text('Privacy requests', style: t.headlineSmall)),
+          OutlinedButton.icon(
+            onPressed: () => showDialog<void>(context: context, builder: (_) => const SitePagesDialog()),
+            icon: const Icon(Icons.article_outlined),
+            label: const Text('Site pages…'),
+          ),
+        ]),
         Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(

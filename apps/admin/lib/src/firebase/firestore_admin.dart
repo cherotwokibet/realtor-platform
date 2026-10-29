@@ -188,6 +188,23 @@ class FirestoreAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<List<SitePageRow>> sitePages(StaffUser who) async {
+    if (!who.isManager) throw StaffAccessException('site pages are for owners and managers');
+    final snap = await _db.collection('pages').get();
+    final byId = {for (final d in snap.docs) d.id: d.data()};
+    return [
+      for (final s in sitePageSlugs)
+        SitePageRow(
+          slug: s,
+          title: byId[s]?['title'] as String? ?? '',
+          body: byId[s]?['body'] as String? ?? '',
+          published: byId[s]?['published'] == true,
+          updatedAt: byId[s]?['updatedAt'] == null ? null : _date(byId[s]!['updatedAt']),
+        ),
+    ];
+  }
+
+  @override
   Future<List<ReviewRow>> reviews(StaffUser who, {String status = 'pending'}) async {
     if (!who.isManager) throw StaffAccessException('reviews are for owners and managers');
     final snap = await _db.collection('reviews').where('status', isEqualTo: status).limit(200).get();

@@ -197,6 +197,17 @@ class ReviewRow {
   final String? comment, name;
 }
 
+/// A site page (P5-s07): about, privacy, terms, faq, contact.
+class SitePageRow {
+  const SitePageRow({required this.slug, this.title = '', this.body = '', this.published = false, this.updatedAt});
+  final String slug, title, body;
+  final bool published;
+  final DateTime? updatedAt;
+}
+
+/// The pages the share site can show, in footer order.
+const sitePageSlugs = ['about', 'privacy', 'terms', 'faq', 'contact'];
+
 /// Review statuses: new ones wait as pending until a manager acts.
 const reviewStatuses = ['pending', 'approved', 'hidden'];
 
@@ -244,6 +255,9 @@ abstract interface class AdminRepository {
 
   /// The tenant's areas, by name, for the listing form.
   Future<List<AreaOption>> areas();
+
+  /// Every site page, saved or not, in [sitePageSlugs] order. Managers only.
+  Future<List<SitePageRow>> sitePages(StaffUser who);
 
   /// Reviews with [status], newest first. Throws [StaffAccessException] for agents.
   Future<List<ReviewRow>> reviews(StaffUser who, {String status = 'pending'});

@@ -64,6 +64,29 @@ void main() {
     expect(find.textContaining('Check amina@example.com'), findsOneWidget);
   });
 
+  testWidgets('Account links to the site pages on the share site', (tester) async {
+    final opened = <Uri>[];
+    tester.view.physicalSize = const Size(412, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final c = ProviderContainer(overrides: [
+      tenantProvider.overrideWithValue(tenant()),
+      demoAccountProvider.overrideWithValue(account),
+      pendingEmailProvider.overrideWithValue(pending),
+      openedAtProvider.overrideWithValue(Uri.parse('https://app.example/account')),
+      urlOpenerProvider.overrideWithValue((u) async {
+        opened.add(u);
+        return true;
+      }),
+    ]);
+    addTearDown(c.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(container: c, child: const RealtorApp()));
+    c.read(routerProvider).go('/account');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Privacy'));
+    expect(opened.single.toString(), 'https://realtimeestates.co.ke/privacy');
+  });
+
   testWidgets('opening the link signs in; a saved search and its alerts show in Account', (tester) async {
     pending.email = 'amina@example.com';
     final c = await open(tester, '/account', openedAt: Uri.parse('https://app.example/account?mode=signIn&oobCode=abc&apiKey=k'));

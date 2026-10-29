@@ -15,6 +15,7 @@ import 'lead_api.dart';
 import 'listing.dart';
 import 'listing_page.dart';
 import 'review_page.dart';
+import 'site_page.dart';
 import 'seo.dart';
 
 final _slug = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
@@ -210,7 +211,32 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
         ));
   if (fontsDir != null) router.get('/fonts/<file>', (shelf.Request _, String file) => serveFont(tenant, fontsDir, file));
   if (brandDir != null) router.get(logoPath, (shelf.Request _) => serveLogo(tenant, brandDir));
+  // Last: one-segment paths left over may be site pages (/about, /privacy...).
+  router.get('/<page>', (shelf.Request req, String page) async {
+    if (!sitePageSlugs.contains(page)) return _notFound(tenant);
+    final found = await source.page(page);
+    if (found == null) return _notFound(tenant);
+    return _html(await renderComponent(
+      SitePageView(tenant: tenant, page: (slug: page, title: found.title, body: found.body, updatedAt: found.updatedAt)),
+      request: req,
+    ));
+  });
+  // Footer links to published site pages, read at most every 5 minutes.
+  DateTime? footerAt;
+  Future<void> refreshFooter() async {
+    final now = clock();
+    if (footerAt != null && now.difference(footerAt!) < const Duration(minutes: 5)) return;
+    footerAt = now;
+    try {
+      final pages = await source.publishedPages();
+      footerPages = [for (final s in sitePageSlugs) ...pages.where((p) => p.slug == s)];
+    } on Exception {
+      // Keep the last list; pages still open without the footer.
+    }
+  }
+
   return (shelf.Request req) async {
+    await refreshFooter();
     final r = _secured(await router.call(req));
     return indexable ? r : r.change(headers: {'x-robots-tag': 'noindex'});
   };

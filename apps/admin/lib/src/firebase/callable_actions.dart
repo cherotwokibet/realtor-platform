@@ -63,6 +63,10 @@ class CallableAdminActions implements AdminActions {
   }
 
   @override
+  Future<void> savePage(StaffUser who, SitePageRow page) =>
+      _run('savePage', {'slug': page.slug, 'title': page.title.trim(), 'body': page.body, 'published': page.published});
+
+  @override
   Future<String> saveArea(StaffUser who, AreaGuide area) async {
     final r = await _run('saveArea', area.toCallable()) as Map<Object?, Object?>;
     return r['slug'] as String;

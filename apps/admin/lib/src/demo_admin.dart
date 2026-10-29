@@ -484,6 +484,26 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         for (final g in _guides.values) (slug: g.slug!, name: g.name, lat: g.lat, lng: g.lng),
       ]..sort((a, b) => a.name.compareTo(b.name));
 
+  final _pages = <String, SitePageRow>{
+    'about': const SitePageRow(slug: 'about', title: 'About us', body: 'A demo page.', published: true),
+  };
+
+  @override
+  Future<List<SitePageRow>> sitePages(StaffUser who) async {
+    if (!who.isManager) throw StaffAccessException('site pages are for owners and managers');
+    return [for (final s in sitePageSlugs) _pages[s] ?? SitePageRow(slug: s)];
+  }
+
+  @override
+  Future<void> savePage(StaffUser who, SitePageRow page) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    if (page.title.trim().length < 2) throw AdminActionException('invalid-argument', 'title: at least 2 characters');
+    final before = _pages[page.slug];
+    _pages[page.slug] = SitePageRow(slug: page.slug, title: page.title.trim(), body: page.body, published: page.published, updatedAt: _clock());
+    _log(who, 'page.save', page.title.trim(), before == null ? 'none' : (before.published ? 'published' : 'draft'),
+        page.published ? 'published' : 'draft');
+  }
+
   /// Two demo reviews waiting for a manager, and one shown.
   late final _reviews = <ReviewRow>[
     ReviewRow(id: 'review-1', agentId: 'agent-wanjiku', agentName: 'Wanjiku Mwangi', rating: 5, status: 'pending', createdAt: _now.subtract(const Duration(hours: 3)), comment: 'Showed us three flats in one afternoon.', name: 'Akinyi'),
