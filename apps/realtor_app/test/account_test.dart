@@ -1,0 +1,94 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:realtor_app/src/account/account_data.dart';
+import 'package:realtor_app/src/account/account_screen.dart';
+import 'package:realtor_app/src/app.dart';
+import 'package:realtor_app/src/providers.dart';
+import 'package:realtor_app/src/search/demo_search.dart';
+import 'package:realtor_core/realtor_core.dart';
+
+import 'listing_screen_test.dart' show tenant;
+
+class MemoryPendingEmail implements PendingEmail {
+  String? email;
+  @override
+  Future<String?> read() async => email;
+  @override
+  Future<void> write(String? e) async => email = e;
+}
+
+late DemoAccount account;
+late MemoryPendingEmail pending;
+
+Future<ProviderContainer> open(WidgetTester tester, String path, {Uri? openedAt}) async {
+  tester.view.physicalSize = const Size(412, 1600);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  final c = ProviderContainer(overrides: [
+    tenantProvider.overrideWithValue(tenant()),
+    demoAccountProvider.overrideWithValue(account),
+    pendingEmailProvider.overrideWithValue(pending),
+    openedAtProvider.overrideWithValue(openedAt ?? Uri.parse('https://app.example$path')),
+  ]);
+  addTearDown(c.dispose);
+  await tester.pumpWidget(UncontrolledProviderScope(container: c, child: const RealtorApp()));
+  await tester.pumpAndSettle();
+  c.read(routerProvider).go(path);
+  await tester.pumpAndSettle();
+  return c;
+}
+
+void main() {
+  setUp(() {
+    account = DemoAccount();
+    pending = MemoryPendingEmail();
+  });
+
+  test('alerts keep only what they can match on', () {
+    const f = ListingFilters(purpose: Purpose.rent, q: 'quiet', types: ['apartment'], areas: ['kilimani'], minBeds: 2, maxPriceKES: 60000);
+    expect(alertFilters(f), {'purpose': 'rent', 'types': ['apartment'], 'areas': ['kilimani'], 'minBeds': 2, 'maxPriceKES': 60000});
+    expect(describeSearch(filtersFromAlert(alertFilters(f))), 'Rent · Apartment · Kilimani · 2+ bed · up to KES 60,000');
+  });
+
+  testWidgets('signed out, "Get alerts" asks to sign in; the emailed link signs in on this device', (tester) async {
+    await open(tester, '/rent/apartments');
+    await tester.tap(find.text('Get alerts for new matches'));
+    await tester.pumpAndSettle();
+    expect(find.text('Email me a sign-in link'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('email')), 'amina@example.com');
+    await tester.tap(find.text('Email me a sign-in link'));
+    await tester.pumpAndSettle();
+    expect(account.sentLinks, ['amina@example.com']);
+    expect(pending.email, 'amina@example.com');
+    expect(find.textContaining('Check amina@example.com'), findsOneWidget);
+  });
+
+  testWidgets('opening the link signs in; a saved search and its alerts show in Account', (tester) async {
+    pending.email = 'amina@example.com';
+    final c = await open(tester, '/account', openedAt: Uri.parse('https://app.example/account?mode=signIn&oobCode=abc&apiKey=k'));
+    expect(find.text('amina@example.com'), findsOneWidget);
+    expect(pending.email, isNull);
+
+    c.read(routerProvider).go('/rent/apartments/kilimani');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Get alerts for new matches'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Saved: Rent · Apartment · Kilimani'), findsOneWidget);
+
+    final l = demoListings.firstWhere((l) => l.purpose == Purpose.rent);
+    account.addAlert((id: 'a1', slug: l.slug, title: l.title, priceKES: l.priceKES, purpose: l.purpose, area: l.area, createdAt: DateTime(2026, 10, 29), read: false));
+    c.read(routerProvider).go('/account');
+    await tester.pumpAndSettle();
+    expect(find.text('Rent · Apartment · Kilimani'), findsOneWidget);
+    await tester.tap(find.text(l.title));
+    await tester.pumpAndSettle();
+    expect(c.read(routerProvider).routerDelegate.currentConfiguration.uri.path, '/listing/${l.slug}');
+
+    c.read(routerProvider).go('/account');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Stop these alerts'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('then tap "Get alerts"'), findsOneWidget);
+  });
+}

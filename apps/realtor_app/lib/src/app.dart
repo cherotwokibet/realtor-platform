@@ -5,6 +5,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'package:realtor_core/realtor_core.dart';
 
+import 'account/account_screen.dart';
 import 'home_screen.dart';
 import 'listing/listing_screen.dart';
 import 'places/place_screens.dart';
@@ -29,6 +30,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               builder: (context, state) => switch (s.path) {
                 '/' => const HomeScreen(),
                 '/saved' => const SavedScreen(),
+                '/account' => const AccountScreen(),
                 _ => PlaceholderScreen(title: s.label),
               },
             ),

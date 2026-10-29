@@ -5,6 +5,7 @@ import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
 import '../providers.dart';
+import '../account/account_screen.dart';
 import '../saved/favourites.dart';
 import 'purpose.dart';
 
@@ -63,7 +64,13 @@ class ResultsScreen extends ConsumerWidget {
               ],
             ),
             SizedBox(height: b.spacing.md),
-            Text('${r.found} ${r.found == 1 ? 'home' : 'homes'}', style: text.labelLarge),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: b.spacing.md,
+              runSpacing: b.spacing.sm,
+              children: [Text('${r.found} ${r.found == 1 ? 'home' : 'homes'}', style: text.labelLarge), AlertButton(filters: filters)],
+            ),
             SizedBox(height: b.spacing.sm),
             if (r.hits.isEmpty)
               Padding(

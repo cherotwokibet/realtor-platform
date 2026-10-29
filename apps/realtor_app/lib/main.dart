@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
@@ -7,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
 import 'src/app.dart';
+import 'src/account/account_data.dart';
+import 'src/firebase/firebase_account.dart';
 import 'src/firebase/firebase_data.dart';
 import 'src/providers.dart';
 
@@ -24,6 +27,8 @@ Future<void> main() async {
     overrides.addAll([
       listingSearchProvider.overrideWithValue(FirestoreListingSearch(db, bucket: bucket)),
       listingRepositoryProvider.overrideWithValue(FirestoreListingRepository(db, bucket: bucket)),
+      customerAccountProvider.overrideWithValue(FirebaseCustomerAccount(FirebaseAuth.instance)),
+      alertsRepositoryProvider.overrideWithValue(FirestoreAlerts(db)),
       leadRepositoryProvider.overrideWithValue(
         CallableLeadRepository.firebase(FirebaseFunctions.instanceFor(region: tenant.firebaseRegion)),
       ),
