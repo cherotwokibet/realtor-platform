@@ -44,6 +44,12 @@ class FakeLeads implements LeadApi {
 
   final reviews = <Map<String, Object?>>[];
 
+  /// Day -> free times; a day missing means openSlots couldn't answer.
+  final free = <String, List<String>>{};
+
+  @override
+  Future<List<String>?> openTimes({required String listingId, required String day}) async => free[day];
+
   @override
   Future<void> submitReview({required String token, required int rating, String? comment, String? name}) async {
     if (fail != null) throw fail!;
@@ -152,6 +158,30 @@ void main() {
     fake.fail = LeadApiException('UNAVAILABLE', 'down');
     expect((await send('GET', '/go/whatsapp/2-bedroom-apartment-kilimani')).statusCode, 302, reason: 'counting never blocks WhatsApp');
     expect((await send('GET', '/go/whatsapp/no-such-home')).statusCode, 404);
+  });
+
+  group('free times', () {
+    const page = '/listing/2-bedroom-apartment-kilimani';
+    test('"Show free times" lists only that day\'s free times, keeps the day, and is not cached', () async {
+      fake.free['2026-10-27'] = ['08:00', '15:30'];
+      final r = await send('GET', '$page?day=2026-10-27');
+      final html = await r.readAsString();
+      expect(r.headers['cache-control'], contains('no-store'));
+      expect(html, contains('Free times on Tue 27 Oct'));
+      expect(html, contains('<input type="hidden" name="day" value="2026-10-27"'));
+      expect(html, contains('<option value="15:30">15:30</option>'));
+      expect(html, isNot(contains('<option value="10:00">10:00</option>')));
+    });
+
+    test('a full day says so; without a day, or when openSlots fails, every time is offered', () async {
+      fake.free['2026-10-28'] = [];
+      expect(await (await send('GET', '$page?day=2026-10-28')).readAsString(), contains('No free times that day.'));
+      final plain = await (await send('GET', page)).readAsString();
+      expect(plain, contains('Show free times'));
+      expect(plain, contains('<option value="10:00">10:00</option>'));
+      expect(await (await send('GET', '$page?day=2026-10-29')).readAsString(), contains('<option value="10:00">10:00</option>'));
+      expect(await (await send('GET', '$page?day=junk')).readAsString(), contains('<option value="10:00">10:00</option>'));
+    });
   });
 
   group('reviews', () {
@@ -310,6 +340,23 @@ void main() {
       expect(audiences, [for (final r in seen) r.url]);
       expect(seen.first.headers['authorization'], 'Bearer tok');
       expect(jsonDecode(seen.first.body)['data']['consent'], true);
+    });
+
+    test('openSlots is called plainly (public, no twin, no token) and read back', () async {
+      late http.Request seen;
+      final api = CallableLeadApi(
+        functionsBase('demo-project'),
+        idToken: (aud) async => 'tok',
+        client: MockClient((req) async {
+          seen = req;
+          return http.Response('{"result":{"times":["08:00","15:30"]}}', 200);
+        }),
+      );
+      expect(await api.openTimes(listingId: 'l1', day: '2026-10-27'), ['08:00', '15:30']);
+      expect(seen.url.path, '/openSlots');
+      expect(seen.headers.containsKey('authorization'), isFalse);
+      final down = CallableLeadApi(functionsBase('demo-project'), client: MockClient((req) async => http.Response('', 503)));
+      expect(await down.openTimes(listingId: 'l1', day: '2026-10-27'), isNull);
     });
 
     test('metadata ID tokens are fetched per audience and reused for 50 minutes', () async {

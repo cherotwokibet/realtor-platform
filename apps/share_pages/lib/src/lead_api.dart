@@ -25,6 +25,9 @@ abstract interface class LeadApi {
   /// `bookViewing`: [slot] is ISO 8601 with the Nairobi offset.
   Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message});
 
+  /// `openSlots` (P4-s04): the free times on [day]; null when unknown.
+  Future<List<String>?> openTimes({required String listingId, required String day});
+
   /// `submitReview` (P6-s03): the review link's [token] is the permission.
   Future<void> submitReview({required String token, required int rating, String? comment, String? name});
 }
@@ -53,15 +56,15 @@ class CallableLeadApi implements LeadApi {
   final IdTokenSource? idToken;
   final http.Client _client;
 
-  Future<void> _call(String name, Map<String, Object?> data) async {
-    final fn = idToken == null ? name : 'share${name[0].toUpperCase()}${name.substring(1)}';
+  Future<Object?> _call(String name, Map<String, Object?> data, {bool twin = true}) async {
+    final fn = idToken == null || !twin ? name : 'share${name[0].toUpperCase()}${name.substring(1)}';
     final url = Uri.parse('${base.toString().replaceFirst(RegExp(r'/$'), '')}/$fn');
     final res = await _client
         .post(url,
-            headers: {'content-type': 'application/json', if (idToken != null) 'authorization': 'Bearer ${await idToken!(url)}'},
+            headers: {'content-type': 'application/json', if (idToken != null && twin) 'authorization': 'Bearer ${await idToken!(url)}'},
             body: jsonEncode({'data': data}))
         .timeout(const Duration(seconds: 8));
-    if (res.statusCode == 200) return;
+    if (res.statusCode == 200) return (_tryDecode(res.body) as Map?)?['result'];
     final error = switch (_tryDecode(res.body)) {
       {'error': {'status': final String s, 'message': final String m}} => LeadApiException(s, m),
       _ => LeadApiException('HTTP_${res.statusCode}', 'callable $name failed'),
@@ -85,6 +88,17 @@ class CallableLeadApi implements LeadApi {
         'message': ?message,
         'consent': true,
       });
+
+  /// Read-only and public, so it needs no twin.
+  @override
+  Future<List<String>?> openTimes({required String listingId, required String day}) async {
+    try {
+      final r = await _call('openSlots', {'listingId': listingId, 'day': day}, twin: false) as Map?;
+      return [for (final t in (r?['times'] as List?) ?? const []) '$t'];
+    } on Object {
+      return null;
+    }
+  }
 
   @override
   Future<void> submitReview({required String token, required int rating, String? comment, String? name}) =>

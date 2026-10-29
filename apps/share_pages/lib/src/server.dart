@@ -34,6 +34,11 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
   final clock = now ?? DateTime.now;
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
       {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {
+    // "Show free times": ?day=YYYY-MM-DD asks openSlots for that day.
+    final day = req.url.queryParameters['day'];
+    final times = leads != null && day != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(day)
+        ? await leads.openTimes(listingId: listing.id, day: day)
+        : null;
     final (agent, area) = await (
       listing.agentId == null || !_docId.hasMatch(listing.agentId!) ? Future<ShareAgent?>.value() : source.agent(listing.agentId!),
       listing.purpose == Purpose.rent && _slug.hasMatch(listing.area) ? source.area(listing.area) : Future<ShareArea?>.value(),
@@ -50,11 +55,12 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
         viewing: viewing,
         viewingDays: viewingDays(clock()),
         areaMedianRentKES: area?.medianRentKES,
+        freeTimes: times == null ? null : (day: day!, times: times),
       ),
       request: req,
     );
     bool own(EnquiryFormState? f) => f != null && (f.sent || f.values.isNotEmpty);
-    return _html(r, status: status, private: own(enquiry) || own(viewing));
+    return _html(r, status: status, private: own(enquiry) || own(viewing) || times != null);
   }
 
   final router = Router()
