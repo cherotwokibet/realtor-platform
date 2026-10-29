@@ -16,6 +16,8 @@
 |---|---|---|
 | Send an enquiry about a home | Your phone (or email), and your name and message if you give them; which home; when you agreed | To reply about that home (your consent, given with the tick box) |
 | Book a viewing | Your name, phone, the home and the time | To arrange and confirm the viewing (your consent) |
+| Leave a review after a viewing | Your stars, your comment and first name if you give them, and which viewing it was for (not your phone) | To show other people how our agents do; a manager reads every review before it is shown (your consent: you choose to send it) |
+| Save a home | Nothing: saved homes stay on your phone or browser | — |
 | Tap "Call" or "WhatsApp" | Nothing about you: only a count on the home | To know which homes interest people |
 | Browse the site or app | No account is needed. Standard technical logs (for example your IP address) are kept by our hosting provider for security | Our legitimate interest in running the service safely |
 | Save a search (signed-in users) | The filters you chose and how you want to hear about matches | To send you the alerts you asked for (consent) |
@@ -30,7 +32,7 @@ We do not sell your information, and we do not use it for advertising.
 
 ### How long we keep it
 
-Enquiries and viewing requests are deleted automatically **24 months** after you agree (viewing requests 24 months after the viewing time). Counts of calls and WhatsApp taps hold no personal information.
+Enquiries and viewing requests are deleted automatically **24 months** after you agree (viewing requests 24 months after the viewing time). Approved reviews stay on the agent's page until you ask us to remove them; a request to delete your information removes them too. Counts of calls and WhatsApp taps hold no personal information.
 
 ### Your rights
 
@@ -59,6 +61,7 @@ We will post any change here, with the date. Last updated: [date].
 | Statement | Where it is enforced |
 |---|---|
 | Consent tick on enquiries and viewings | `createLead` / `bookViewing` require `consent: true`; the share pages form quotes the retention |
+| Reviews hold no phone; removed with a delete request | `submitReview` keeps rating, comment and a first name; `dataRequest` finds them through the person's viewings |
 | Taps carry no personal data | D13; `logContactTap` |
 | Agents see only their own leads | `firestore.rules` (`isOwnAgent`); rules tests |
 | 24-month deletion | D12; nightly `purgeExpiredLeads` |
