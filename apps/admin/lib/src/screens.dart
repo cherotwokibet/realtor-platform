@@ -914,10 +914,10 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
           const SizedBox(height: 16),
           Text(
             r.kind == DataRequestKind.delete
-                ? 'Deleted ${r.leads} enquiries and ${r.viewings} viewing requests.'
+                ? 'Deleted ${r.leads} enquiries, ${r.viewings} viewing requests and ${r.reviews} reviews.'
                 : r.foundNothing
                     ? 'Nothing is held for $_who.'
-                    : 'Found ${r.leads} enquiries and ${r.viewings} viewing requests. Send them this copy.',
+                    : 'Found ${r.leads} enquiries, ${r.viewings} viewing requests and ${r.reviews} reviews. Send them this copy.',
             style: t.titleMedium,
           ),
           if (r.exportJson != null && !r.foundNothing) ...[

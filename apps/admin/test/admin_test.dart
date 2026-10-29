@@ -543,7 +543,7 @@ void main() {
     await tester.pump();
     await tester.tap(export);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Found 1 enquiries and 0 viewing requests'), findsOneWidget);
+    expect(find.textContaining('Found 1 enquiries, 0 viewing requests and 0 reviews'), findsOneWidget);
     expect(find.textContaining('"phone": "+254700000201"'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(OutlinedButton, 'Delete…'));
@@ -551,7 +551,7 @@ void main() {
     expect(find.text('Delete everything held about +254700000201?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
-    expect(find.text('Deleted 1 enquiries and 0 viewing requests.'), findsOneWidget);
+    expect(find.text('Deleted 1 enquiries, 0 viewing requests and 0 reviews.'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Export'));
     await tester.pumpAndSettle();

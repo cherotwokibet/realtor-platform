@@ -122,11 +122,17 @@ class CallableAdminActions implements AdminActions {
         kind: kind,
         leads: (data['leads'] as List).length,
         viewings: (data['viewings'] as List).length,
+        reviews: (data['reviews'] as List?)?.length ?? 0,
         exportJson: const JsonEncoder.withIndent('  ').convert(data),
       );
     }
     final deleted = r['deleted'] as Map<Object?, Object?>;
-    return DataRequestResult(kind: kind, leads: deleted['leads'] as int, viewings: deleted['viewings'] as int);
+    return DataRequestResult(
+      kind: kind,
+      leads: deleted['leads'] as int,
+      viewings: deleted['viewings'] as int,
+      reviews: (deleted['reviews'] as num?)?.toInt() ?? 0,
+    );
   }
 
   Future<Object?> _run(String name, Map<String, Object?> data) async {

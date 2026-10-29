@@ -451,13 +451,13 @@ describe('data requests (DPA 2019, P6-s04)', () => {
     await aminaAsked();
     const before = (await db.collection('leads').count().get()).data().count;
     const r = await dataRequest(db, manager, { kind: 'delete', phone: amina.phone }, now);
-    assert.deepEqual(r, { kind: 'delete', deleted: { leads: 2, viewings: 1 } });
+    assert.deepEqual(r, { kind: 'delete', deleted: { leads: 2, viewings: 1, reviews: 0 } });
     const r2 = await dataRequest(db, manager, { kind: 'delete', email: 'amina@example.com' }, now);
-    assert.deepEqual(r2, { kind: 'delete', deleted: { leads: 1, viewings: 0 } });
+    assert.deepEqual(r2, { kind: 'delete', deleted: { leads: 1, viewings: 0, reviews: 0 } });
     assert.equal((await db.collection('leads').count().get()).data().count, before - 3);
     assert.equal((await db.collection('leads').where('contact.phone', '==', '+254700000902').get()).size, 1);
     const entry = (await db.collection('audit').where('action', '==', 'privacy.delete').get()).docs.map((d) => d.data().target.label);
-    assert.deepEqual(entry.sort(), ['1 leads, 0 viewings', '2 leads, 1 viewings']);
+    assert.deepEqual(entry.sort(), ['1 leads, 0 viewings, 0 reviews', '2 leads, 1 viewings, 0 reviews']);
   });
 
   test('owners and managers only; needs a phone or an email', async () => {
@@ -760,5 +760,26 @@ describe('reviews (P6-s03)', () => {
     await updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, later);
     const token = (await db.collection('viewings').doc(viewingId).get()).get('reviewToken') as string;
     await rejectsWith(submitReview(db, { token, rating: 5 }, new Date('2026-12-01T00:00:00Z')), 'failed-precondition');
+  });
+});
+
+describe('reviews and data requests', () => {
+  test("a person's reviews go with their viewings in an export or a delete; the rating follows", async () => {
+    for (const d of (await db.collection('reviews').get()).docs) await d.ref.delete();
+    const phone = '+254700001701';
+    const { viewingId } = await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-27T13:30:00+03:00', client: { name: 'Wangari', phone }, consent: true }, now);
+    const later = new Date('2026-10-27T12:00:00Z');
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'confirmed' }, now);
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, later);
+    const token = (await db.collection('viewings').doc(viewingId).get()).get('reviewToken') as string;
+    const { reviewId } = await submitReview(db, { token, rating: 5, name: 'Wangari' }, later);
+    await moderateReview(db, manager, { reviewId, action: 'approve' }, later);
+
+    const exp = await dataRequest(db, manager, { kind: 'export', phone }, later);
+    assert.ok(exp.kind === 'export' && exp.data.reviews.length === 1 && exp.data.reviews[0].name === 'Wangari');
+    const del = await dataRequest(db, manager, { kind: 'delete', phone }, later);
+    assert.ok(del.kind === 'delete' && del.deleted.reviews === 1);
+    assert.equal((await db.collection('reviews').doc(reviewId).get()).exists, false);
+    assert.equal((await db.collection('agents').doc('agent-wanjiku').get()).get('ratingCount'), 0);
   });
 });

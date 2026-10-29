@@ -94,3 +94,15 @@ export async function moderateReview(db: Firestore, caller: Caller, input: unkno
   });
   return result;
 }
+
+/** The agent's rating from their approved reviews, written back. */
+export async function recomputeRating(db: Firestore, agentId: string): Promise<{ rating: number | null; ratingCount: number }> {
+  const approved = await db.collection('reviews').where('agentId', '==', agentId).where('status', '==', 'approved').select('rating').get();
+  const ratings = approved.docs.map((d) => d.get('rating') as number);
+  const r = {
+    rating: ratings.length ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : null,
+    ratingCount: ratings.length,
+  };
+  await db.collection('agents').doc(agentId).update(r);
+  return r;
+}

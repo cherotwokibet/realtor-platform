@@ -160,10 +160,12 @@ enum DataRequestKind { export, delete }
 
 /// What a data request found (export) or removed (delete).
 class DataRequestResult {
-  const DataRequestResult({required this.kind, required this.leads, required this.viewings, this.exportJson});
+  const DataRequestResult({required this.kind, required this.leads, required this.viewings, this.reviews = 0, this.exportJson});
 
   final DataRequestKind kind;
-  final int leads, viewings;
+
+  /// Reviews left after the person's viewings (P6-s03).
+  final int leads, viewings, reviews;
 
   /// The person's records as indented JSON, for an export; null for a delete.
   final String? exportJson;
