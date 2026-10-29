@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform;
+import 'package:flutter/services.dart' show AssetBundle;
 import 'package:http/http.dart' as http;
 
 /// Firebase Hosting serves the linked web app's config here, so neither the
@@ -43,5 +45,41 @@ FirebaseOptions? parseHostingConfig(String body) {
     messagingSenderId: sender,
     authDomain: s('authDomain'),
     storageBucket: s('storageBucket'),
+  );
+}
+
+/// On Android and iOS: the settings `tenant firebase-config` wrote beside
+/// tenant.json ([dir]/firebase.json, generated and never committed). Null
+/// when there is none, or none for [platform]: the app runs on demo data.
+Future<FirebaseOptions?> bundledFirebaseOptions(AssetBundle bundle, String dir, TargetPlatform platform) async {
+  final String body;
+  try {
+    body = await bundle.loadString('$dir/firebase.json');
+  } on Exception {
+    return null;
+  } on Error {
+    return null; // FlutterError: the asset is not in the bundle
+  }
+  return parseBundledConfig(body, platform);
+}
+
+FirebaseOptions? parseBundledConfig(String body, TargetPlatform platform) {
+  final Object? json;
+  try {
+    json = jsonDecode(body);
+  } on FormatException {
+    return null;
+  }
+  if (json is! Map<String, Object?>) return null;
+  final app = json[platform == TargetPlatform.iOS ? 'ios' : 'android'];
+  final projectId = json['projectId'], sender = json['messagingSenderId'];
+  if (app is! Map || projectId is! String || sender is! String || app['appId'] is! String || app['apiKey'] is! String) return null;
+  return FirebaseOptions(
+    apiKey: app['apiKey'] as String,
+    appId: app['appId'] as String,
+    projectId: projectId,
+    messagingSenderId: sender,
+    storageBucket: json['storageBucket'] as String?,
+    iosBundleId: app['bundleId'] as String?,
   );
 }

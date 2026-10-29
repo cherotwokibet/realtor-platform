@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:realtor_core/realtor_core.dart';
 
 import '../account/account_data.dart';
@@ -26,7 +27,8 @@ class FirebaseCustomerAccount implements CustomerAccount {
   }
 
   @override
-  Future<void> signInWithGoogle() => _auth.signInWithPopup(GoogleAuthProvider());
+  Future<void> signInWithGoogle() =>
+      kIsWeb ? _auth.signInWithPopup(GoogleAuthProvider()) : _auth.signInWithProvider(GoogleAuthProvider());
 
   @override
   Future<void> signOut() => _auth.signOut();

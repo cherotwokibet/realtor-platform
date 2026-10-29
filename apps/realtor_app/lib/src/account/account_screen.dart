@@ -5,6 +5,7 @@ import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../providers.dart';
 import '../search/purpose.dart';
 import 'account_data.dart';
 
@@ -108,9 +109,13 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       _error = null;
     });
     try {
+      // The link opens the web app's Account page (on a phone, the browser).
       final here = ref.read(openedAtProvider);
+      final back = here.isScheme('http') || here.isScheme('https')
+          ? here.replace(path: '/account', query: '')
+          : Uri.https(ref.read(tenantProvider).appDomain, '/account');
       await ref.read(pendingEmailProvider).write(email);
-      await ref.read(customerAccountProvider).sendSignInLink(email, here.replace(path: '/account', query: ''));
+      await ref.read(customerAccountProvider).sendSignInLink(email, back);
       if (mounted) setState(() => _status = 'Check $email for a sign-in link. Open it on this phone or computer.');
     } on Object {
       if (mounted) setState(() => _error = 'We could not send the link just now. Please try again.');
