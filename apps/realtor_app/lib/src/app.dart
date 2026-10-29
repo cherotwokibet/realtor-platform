@@ -8,6 +8,7 @@ import 'package:realtor_core/realtor_core.dart';
 import 'home_screen.dart';
 import 'listing/listing_screen.dart';
 import 'providers.dart';
+import 'saved/saved_screen.dart';
 import 'search/purpose.dart';
 import 'search/results_screen.dart';
 import 'sections.dart';
@@ -24,7 +25,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           for (final s in sections)
             GoRoute(
               path: s.path,
-              builder: (context, state) => s.path == '/' ? const HomeScreen() : PlaceholderScreen(title: s.label),
+              builder: (context, state) => switch (s.path) {
+                '/' => const HomeScreen(),
+                '/saved' => const SavedScreen(),
+                _ => PlaceholderScreen(title: s.label),
+              },
             ),
           // Search results: /rent, /buy/apartments, /rent/apartments/kilimani?beds=2 ...
           for (final p in Purpose.values)

@@ -28,6 +28,51 @@ class ListingSummary {
   final bool verified, featured;
   final List<String> amenities;
   final String? thumb, blurhash;
+
+  /// For keeping a copy on the device (saved homes).
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'slug': slug,
+        'title': title,
+        'purpose': purpose.value,
+        'type': type,
+        'beds': beds,
+        'baths': baths,
+        'priceKES': priceKES,
+        'area': area,
+        'lat': lat,
+        'lng': lng,
+        'verified': verified,
+        'amenities': amenities,
+        if (thumb != null) 'thumb': thumb,
+        if (blurhash != null) 'blurhash': blurhash,
+      };
+
+  /// Null when [j] isn't a saved row (an older or damaged copy).
+  static ListingSummary? fromJson(Object? j) {
+    if (j is! Map) return null;
+    try {
+      return ListingSummary(
+        id: j['id'] as String,
+        slug: j['slug'] as String,
+        title: j['title'] as String,
+        purpose: Purpose.values.firstWhere((p) => p.value == j['purpose']),
+        type: j['type'] as String,
+        beds: (j['beds'] as num).toInt(),
+        baths: (j['baths'] as num).toInt(),
+        priceKES: (j['priceKES'] as num).toInt(),
+        area: j['area'] as String,
+        lat: (j['lat'] as num).toDouble(),
+        lng: (j['lng'] as num).toDouble(),
+        verified: j['verified'] == true,
+        amenities: [for (final a in (j['amenities'] as List?) ?? const []) '$a'],
+        thumb: j['thumb'] as String?,
+        blurhash: j['blurhash'] as String?,
+      );
+    } on Object {
+      return null;
+    }
+  }
 }
 
 class FacetCount {
