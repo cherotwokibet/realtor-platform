@@ -71,6 +71,21 @@ PROJECT=<project-id> OWNER_EMAIL=<that email> npm --prefix functions run staff:o
 
 Press *Check again* (or sign out and in) to pick up the owner role. From then on the owner adds staff with `setStaffRole`.
 
+### Customer web app
+
+Terraform makes a Hosting site `<project-id>-app` linked to the customer web app, so the app reads its Firebase config from `/__/firebase/init.json` (none is committed). There it shows live listings from Firestore and sends enquiries, viewing requests and taps to the Functions; anywhere else it runs on demo data. In Cloud Shell, from `~/realtor-platform`:
+
+```sh
+node tools/tenant-cli/src/cli.ts prepare <id>
+(cd apps/realtor_app && flutter create . --platforms=web --project-name realtor_app)
+node tools/tenant-cli/src/cli.ts web <id>
+(cd apps/realtor_app && flutter build web --release --wasm)
+firebase target:apply hosting app <project-id>-app --project <project-id>   # once per project
+firebase deploy --only hosting:app --project <project-id>
+```
+
+Open `app_url`. Search reads every live listing of the chosen purpose and filters in the browser, which is fine for a few hundred homes; Typesense (D4) replaces it when set up.
+
 ### Share pages (D2)
 
 Terraform makes an Artifact Registry repo (`share-pages`, output `share_pages_repo`; it keeps the newest 5 images) and a Hosting site (`<project-id>-share`, output `share_url`) whose every path is rewritten to the `share-pages` Cloud Run service. The service exists only once `share_pages_image` is set, so it takes two applies. In Cloud Shell, from `~/realtor-platform`:

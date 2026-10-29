@@ -7,8 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:realtor_admin/src/firebase/callable_actions.dart';
 import 'package:realtor_admin/src/firebase/firestore_admin.dart';
-import 'package:realtor_admin/src/firebase/hosting_config.dart';
 import 'package:realtor_core/realtor_core.dart';
+import 'package:realtor_ui/realtor_ui.dart' show parseHostingConfig, hostingFirebaseOptions;
 
 const agent = StaffUser(uid: 'u-a', name: 'Agent A', role: StaffRole.agent, agentId: 'agent-a');
 const manager = StaffUser(uid: 'u-m', name: 'Manager', role: StaffRole.manager);

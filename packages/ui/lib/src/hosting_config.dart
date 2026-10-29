@@ -3,11 +3,12 @@ import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
 
-/// Firebase Hosting serves the linked web app's config here, so the admin
-/// needs none in the repo (infra: google_firebase_hosting_site.admin).
+/// Firebase Hosting serves the linked web app's config here, so neither the
+/// admin nor the customer web app needs one in the repo (infra: the Hosting
+/// sites in modules/firebase-env).
 const hostingConfigPath = '/__/firebase/init.json';
 
-/// The config from Hosting, or null when the admin isn't served by Firebase
+/// The config from Hosting, or null when the app isn't served by Firebase
 /// Hosting (`flutter run`, tests, any other server): then it runs on demo data.
 Future<FirebaseOptions?> hostingFirebaseOptions(Uri origin, {http.Client? client}) async {
   final c = client ?? http.Client();

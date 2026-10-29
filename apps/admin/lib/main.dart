@@ -12,7 +12,6 @@ import 'src/app.dart';
 import 'src/firebase/callable_actions.dart';
 import 'src/firebase/firebase_auth.dart';
 import 'src/firebase/firestore_admin.dart';
-import 'src/firebase/hosting_config.dart';
 import 'src/firebase/storage_media.dart';
 import 'src/firebase/web_file_picker.dart';
 import 'src/firebase/web_file_saver.dart';

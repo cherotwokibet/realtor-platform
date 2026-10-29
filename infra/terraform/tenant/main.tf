@@ -88,6 +88,10 @@ output "share_pages_url" {
   value = module.env.share_pages_url
 }
 
+output "app_url" {
+  value = module.env.app_url
+}
+
 output "admin_url" {
   value = module.env.admin_url
 }

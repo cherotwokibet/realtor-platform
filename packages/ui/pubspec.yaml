@@ -1,5 +1,5 @@
 name: realtor_ui
-description: Flutter theme and widgets shared by the customer app and admin. Reads tokens only; no hex values.
+description: Flutter theme and widgets shared by the customer app and admin, plus the Firebase Hosting config loader. Reads tokens only; no hex values.
 publish_to: none
 resolution: workspace
 environment:
@@ -13,6 +13,8 @@ dependencies:
     path: ../core
   realtor_tokens:
     path: ../tokens
+  firebase_core: ^5.1.0
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

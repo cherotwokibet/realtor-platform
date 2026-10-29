@@ -210,6 +210,16 @@ resource "google_project_iam_member" "functions_agents" {
 
 # Staff admin (P5): its own web app and Hosting site. Hosting serves the
 # linked app's config at /__/firebase/init.json, so no config is committed.
+# The customer web app's own Hosting site, linked so /__/firebase/init.json
+# serves this web app's config (firebase.json target "app"). The app's
+# public domain (app.<domain>) is attached by hand later (DNS).
+resource "google_firebase_hosting_site" "app" {
+  provider = google-beta
+  project  = google_project.this.project_id
+  site_id  = "${trimsuffix(substr(local.project_id, 0, 26), "-")}-app"
+  app_id   = google_firebase_web_app.app.app_id
+}
+
 resource "google_firebase_web_app" "admin" {
   provider     = google-beta
   project      = google_project.this.project_id
