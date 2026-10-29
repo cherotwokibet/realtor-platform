@@ -4,8 +4,8 @@ import 'package:realtor_core/realtor_core.dart';
 
 import 'page_shell.dart';
 
-/// The site pages managers can publish (functions/src/api/pages.ts).
-const sitePageSlugs = ['about', 'privacy', 'terms', 'faq', 'contact'];
+// The pages managers can publish are core's sitePageSlugs (and
+// PAGE_SLUGS in functions/src/api/pages.ts).
 
 typedef SitePage = ({String slug, String title, String body, DateTime? updatedAt});
 
