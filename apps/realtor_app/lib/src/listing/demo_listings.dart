@@ -36,6 +36,13 @@ class DemoLeadRepository implements LeadRepository {
   Future<void> enquire({required String listingId, required String phone, String? name, String? message}) async =>
       enquiries.add({'listingId': listingId, 'phone': phone, 'name': name, 'message': message});
 
+  /// Demo: times listed here are taken; every other time is free.
+  final taken = <String>{};
+
+  @override
+  Future<List<String>?> openTimes({required String listingId, required String day}) async =>
+      [for (final t in viewingTimes) if (!taken.contains('$day $t')) t];
+
   @override
   Future<void> logTap({required String listingId, required String channel}) async => taps.add('$listingId/$channel');
 

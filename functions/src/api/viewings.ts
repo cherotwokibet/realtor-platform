@@ -214,3 +214,43 @@ export async function rescheduleViewing(db: Firestore, caller: Caller, input: un
   });
   return { viewingId };
 }
+
+export const openSlotsInput = z.object({
+  listingId: docId,
+  /** Nairobi calendar day, e.g. 2026-10-30. */
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+/**
+ * P4-s04: the times still bookable on [day] for a live listing's agent:
+ * slot rules (notice, Sundays, hours), minus their active viewings and time
+ * off. Only times are returned, never who booked. bookViewing still checks
+ * in its transaction, so a race loses gracefully ("that time is taken").
+ */
+export async function openSlots(db: Firestore, input: unknown, now = new Date()): Promise<{ times: string[] }> {
+  const req = parseInput(openSlotsInput, input);
+  const listing = await db.collection('listings').doc(req.listingId).get();
+  if (!listing.exists || listing.get('status') !== 'live') throw new HttpsError('not-found', 'listing is not available');
+  const agentId = listing.get('agentId') as string;
+  const r = VIEWING_RULES;
+  const candidates: { time: string; slot: Date }[] = [];
+  for (let m = r.firstStart; m <= r.lastStart; m += r.slotMinutes) {
+    const time = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    const slot = new Date(`${req.day}T${time}:00+03:00`);
+    if (!slotProblem(slot, now)) candidates.push({ time, slot });
+  }
+  if (!candidates.length) return { times: [] };
+  const dayStart = candidates[0].slot, dayEnd = new Date(candidates.at(-1)!.slot.getTime() + r.slotMinutes * 60_000);
+  const [viewings, blocks] = await Promise.all([
+    db.getAll(...candidates.map((c) => db.collection('viewings').doc(`${agentId}_${c.slot.getTime()}`))),
+    db.collection('agentBlocks').where('agentId', '==', agentId).where('end', '>', dayStart).orderBy('end').limit(50).get(),
+  ]);
+  const busy = new Set(viewings.filter((v) => v.exists && ACTIVE.has(v.get('status'))).map((v) => v.id));
+  const off = blocks.docs.map((b) => ({ start: b.get('start').toDate() as Date, end: b.get('end').toDate() as Date })).filter((b) => b.start < dayEnd);
+  return {
+    times: candidates
+      .filter((c) => !busy.has(`${agentId}_${c.slot.getTime()}`))
+      .filter((c) => !off.some((b) => b.start.getTime() < c.slot.getTime() + r.slotMinutes * 60_000 && b.end > c.slot))
+      .map((c) => c.time),
+  };
+}

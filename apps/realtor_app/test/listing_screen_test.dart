@@ -118,6 +118,34 @@ void main() {
     expect(find.textContaining('Viewing requested.'), findsOneWidget);
   });
 
+  testWidgets('only free times are offered; a full day says so and cannot be sent', (tester) async {
+    final busy = DemoLeadRepository()..taken.addAll({'2026-10-27 10:00', '2026-10-27 08:00'});
+    for (final t in viewingTimes) {
+      busy.taken.add('2026-10-28 $t');
+    }
+    await open(tester, kilimani, repo: busy);
+    await tester.tap(find.text('Book a viewing'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('day')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tue 27 Oct').last);
+    await tester.pumpAndSettle();
+    expect(find.text('08:30'), findsOneWidget, reason: '10:00 is taken, so the first free time is picked');
+    await tester.tap(find.text('08:30'));
+    await tester.pumpAndSettle();
+    expect(find.text('10:00'), findsNothing);
+    expect(find.text('08:00'), findsNothing);
+    await tester.tap(find.text('10:30').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('day')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Wed 28 Oct').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('no-times')), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Request viewing')).onPressed, isNull);
+  });
+
   testWidgets('a taken slot keeps the sheet open and says why', (tester) async {
     await open(tester, kilimani, repo: FailingLeads(LeadException('already-exists', 'that time is taken')));
     await tester.tap(find.text('Book a viewing'));

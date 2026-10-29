@@ -10,7 +10,7 @@ import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
 import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateListing, submitListing } from './listings';
-import { bookViewing, rescheduleViewing, updateViewingStatus } from './viewings';
+import { bookViewing, openSlots, rescheduleViewing, updateViewingStatus } from './viewings';
 import { addAgentBlock, removeAgentBlock } from './availability';
 import { saveAgent } from './agents';
 import { monthlyReport } from './reports';
@@ -703,5 +703,25 @@ describe('area guides (P3-s05)', () => {
       if (rents.length < MIN_RENTALS) assert.equal(a.get('stats.medianRentKES'), null, a.id);
       else assert.ok(a.get('stats.medianRentKES') >= rents[0] && a.get('stats.medianRentKES') <= rents.at(-1)!, a.id);
     }
+  });
+});
+
+describe('open slots (P4-s04)', () => {
+  test("a day's free times leave out booked slots and time off; past notice and Sundays give none", async () => {
+    const all = await openSlots(db, { listingId: 'listing-001', day: '2026-10-31' }, now);
+    assert.equal(all.times.length, 20);
+    assert.deepEqual([all.times[0], all.times.at(-1)], ['08:00', '17:30']);
+
+    await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-31T10:00:00+03:00', client: { name: 'Slot Client', phone: '+254700001501' }, consent: true }, now);
+    await addAgentBlock(db, wanjiku, { start: '2026-10-31T14:00:00+03:00', end: '2026-10-31T15:15:00+03:00' }, now);
+    const free = (await openSlots(db, { listingId: 'listing-001', day: '2026-10-31' }, now)).times;
+    assert.ok(!free.includes('10:00'));
+    assert.ok(!['14:00', '14:30', '15:00'].some((t) => free.includes(t)));
+    assert.ok(free.includes('13:30') && free.includes('15:30'));
+
+    assert.deepEqual((await openSlots(db, { listingId: 'listing-001', day: '2026-10-25' }, now)).times, []); // Sunday
+    assert.deepEqual((await openSlots(db, { listingId: 'listing-001', day: '2026-10-20' }, now)).times, []); // past
+    await rejectsWith(openSlots(db, { listingId: 'no-such', day: '2026-10-31' }, now), 'not-found');
+    await rejectsWith(openSlots(db, { listingId: 'listing-001', day: '31/10/2026' }, now), 'invalid-argument');
   });
 });

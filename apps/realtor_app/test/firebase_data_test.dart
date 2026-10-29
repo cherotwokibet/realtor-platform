@@ -71,6 +71,16 @@ void main() {
     expect((await repo.bySlug('flat-1'))!.agent, isNull);
   });
 
+  test('open times come from openSlots; on any failure the app shows every time', () async {
+    final ok = CallableLeadRepository((name, data) async {
+      expect((name, data['listingId'], data['day']), ('openSlots', 'l1', '2026-10-30'));
+      return {'times': ['08:00', '09:30']};
+    });
+    expect(await ok.openTimes(listingId: 'l1', day: '2026-10-30'), ['08:00', '09:30']);
+    final down = CallableLeadRepository((name, data) async => throw FirebaseException(plugin: 'functions', code: 'unavailable'));
+    expect(await down.openTimes(listingId: 'l1', day: '2026-10-30'), isNull);
+  });
+
   test('leads go to the Functions with consent; refusals become LeadException', () async {
     final calls = <(String, Map<String, Object?>)>[];
     final leads = CallableLeadRepository((name, data) async {

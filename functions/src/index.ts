@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, setStaffRole, dataRequest.
+ * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, setStaffRole, dataRequest.
  * Scheduled, nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -75,6 +75,8 @@ const twin = (fn: PublicCallable) =>
 export const shareCreateLead = twin('createLead');
 export const shareLogContactTap = twin('logContactTap');
 export const shareBookViewing = twin('bookViewing');
+// Public, read-only: which times a listing's agent can still take on a day (P4-s04).
+export const openSlots = onCall((req) => viewings.openSlots(getFirestore(), req.data));
 export const updateViewingStatus = onCall((req) => viewings.updateViewingStatus(getFirestore(), callerFrom(req.auth), req.data));
 export const rescheduleViewing = onCall((req) => viewings.rescheduleViewing(getFirestore(), callerFrom(req.auth), req.data));
 export const addAgentBlock = onCall((req) => availability.addAgentBlock(getFirestore(), callerFrom(req.auth), req.data));

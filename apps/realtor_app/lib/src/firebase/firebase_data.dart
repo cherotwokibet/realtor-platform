@@ -134,6 +134,16 @@ class CallableLeadRepository implements LeadRepository {
       });
 
   @override
+  Future<List<String>?> openTimes({required String listingId, required String day}) async {
+    try {
+      final r = await _call('openSlots', {'listingId': listingId, 'day': day}) as Map<Object?, Object?>;
+      return [for (final t in r['times']! as List) '$t'];
+    } on Object {
+      return null; // the booking itself still checks
+    }
+  }
+
+  @override
   Future<void> logTap({required String listingId, required String channel}) =>
       _run('logContactTap', {'listingId': listingId, 'channel': channel});
 
