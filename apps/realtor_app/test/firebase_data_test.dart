@@ -94,7 +94,8 @@ void main() {
     expect((await repo.area('kilimani'))!.medianRentKES, 70000);
     expect(await repo.area('nowhere'), isNull);
     expect((await repo.agent('agent-a'))!.whatsapp, '+254700000002');
-    expect((await repo.live(area: 'kilimani')).map((l) => l.slug), ['flat-1']);
+    expect((await repo.live(area: 'kilimani')).map((l) => l.slug).toSet(), {'flat-1', 'house-4'});
+    expect(await repo.live(area: 'westlands'), hasLength(1));
     expect((await repo.live(agentId: 'agent-a')).map((l) => l.slug).toSet(), {'flat-1', 'flat-2', 'house-4'});
     await db.collection('agents').doc('agent-a').update({'active': false});
     expect(await repo.agent('agent-a'), isNull);
