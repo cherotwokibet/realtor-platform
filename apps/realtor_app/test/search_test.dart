@@ -9,6 +9,7 @@ import 'package:realtor_app/src/listing/listing_screen.dart';
 import 'package:realtor_app/src/places/place_screens.dart';
 import 'package:realtor_app/src/providers.dart';
 import 'package:realtor_app/src/search/demo_search.dart';
+import 'package:realtor_app/src/search/results_screen.dart';
 import 'package:realtor_core/realtor_core.dart';
 
 TenantConfig tenant(String id) =>
@@ -18,7 +19,8 @@ Future<GoRouterHarness> open(WidgetTester tester, String location, {String tenan
   tester.view.physicalSize = const Size(412, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(ProviderScope(overrides: [tenantProvider.overrideWithValue(tenant(tenantId))], child: const RealtorApp()));
+  await tester.pumpWidget(
+      ProviderScope(overrides: [tenantProvider.overrideWithValue(tenant(tenantId))], child: const RealtorApp()));
   final h = GoRouterHarness(tester);
   h.go(location);
   await tester.pumpAndSettle();
@@ -37,7 +39,8 @@ void main() {
   group('DemoListingSearch', () {
     final s = DemoListingSearch();
     test('filters like the Typesense query', () async {
-      final r = await s.search(const ListingFilters(purpose: Purpose.rent, areas: ['kilimani', 'kileleshwa'], minBeds: 2, maxPriceKES: 100000));
+      final r = await s.search(const ListingFilters(
+          purpose: Purpose.rent, areas: ['kilimani', 'kileleshwa'], minBeds: 2, maxPriceKES: 100000));
       expect(r.hits.map((h) => h.id), ['demo-1']);
     });
     test('facets keep the other options visible', () async {
@@ -45,7 +48,8 @@ void main() {
       expect(r.facets['type']!.map((f) => f.value), containsAll(['apartment', 'bedsitter', 'hostel']));
     });
     test('radius and nearest', () async {
-      final r = await s.search(const ListingFilters(purpose: Purpose.rent, near: GeoRadius(-1.221, 36.897, 2), sort: ListingSort.nearest));
+      final r = await s.search(
+          const ListingFilters(purpose: Purpose.rent, near: GeoRadius(-1.221, 36.897, 2), sort: ListingSort.nearest));
       expect(r.hits.every((h) => h.area == 'kasarani'), isTrue);
       expect(r.found, 2);
     });
@@ -94,5 +98,41 @@ void main() {
   testWidgets('a malformed results URL goes home', (tester) async {
     final h = await open(tester, '/rent/Not%20A%20Slug');
     expect(h.location, '/');
+  });
+
+  testWidgets('home shows the newest real homes, not a placeholder', (tester) async {
+    final h = await open(tester, '/');
+    expect(find.text('Sample listing'), findsNothing);
+    expect(find.text('Newest to rent'), findsOneWidget);
+    expect(find.byType(ListingCard), findsNWidgets(3));
+    await tester.tap(find.text('See all'));
+    await tester.pumpAndSettle();
+    expect(h.location, startsWith('/rent'));
+  });
+
+  testWidgets('home WhatsApp button: hidden until a number exists, then opens wa.me', (tester) async {
+    final json = jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>;
+    await tester.pumpWidget(ProviderScope(
+        overrides: [tenantProvider.overrideWithValue(TenantConfig.fromJson(json))], child: const RealtorApp()));
+    await tester.pumpAndSettle();
+    expect(find.text('Enquire on WhatsApp'), findsNothing);
+
+    (json['contact'] as Map<String, Object?>)['whatsapp'] = '+254700000000';
+    final opened = <Uri>[];
+    await tester.pumpWidget(ProviderScope(
+      key: UniqueKey(),
+      overrides: [
+        tenantProvider.overrideWithValue(TenantConfig.fromJson(json)),
+        urlOpenerProvider.overrideWithValue((u) async {
+          opened.add(u);
+          return true;
+        }),
+      ],
+      child: const RealtorApp(),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enquire on WhatsApp'));
+    expect(opened.single.host, 'wa.me');
+    expect(opened.single.path, '/254700000000');
   });
 }
