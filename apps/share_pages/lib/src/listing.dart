@@ -79,6 +79,9 @@ class ShareAgent {
   final int? responseMins;
 }
 
+/// An approved review (P6-s03): stars, what they wrote, a first name.
+typedef ShareReview = ({int rating, String? comment, String? name, DateTime? at});
+
 /// One URL in sitemap.xml.
 typedef SitemapEntry = ({String path, DateTime? lastModified});
 
@@ -97,6 +100,9 @@ abstract interface class ListingSource {
   /// An agent's live listings, newest first, at most [limit].
   Future<List<ShareListing>> liveByAgent(String agentId, {int limit = 24});
 
+  /// An agent's approved reviews, newest first, at most [limit].
+  Future<List<ShareReview>> reviews(String agentId, {int limit = 5});
+
   /// The newest live listings, for the home page.
   Future<List<ShareListing>> latestLive({int limit = 12});
 
@@ -108,8 +114,16 @@ abstract interface class ListingSource {
 }
 
 class InMemoryListingSource implements ListingSource {
-  InMemoryListingSource(this.listings, {List<ShareArea> areas = const [], this.agents = const []}) : _areas = areas;
+  InMemoryListingSource(this.listings, {List<ShareArea> areas = const [], this.agents = const [], this.agentReviews = const {}})
+      : _areas = areas;
   final List<ShareListing> listings;
+
+  /// Agent id -> approved reviews, newest first.
+  final Map<String, List<ShareReview>> agentReviews;
+
+  @override
+  Future<List<ShareReview>> reviews(String agentId, {int limit = 5}) async => [...?agentReviews[agentId]].take(limit).toList();
+
   final List<ShareArea> _areas;
   final List<ShareAgent> agents;
 

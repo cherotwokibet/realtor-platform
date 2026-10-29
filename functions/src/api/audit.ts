@@ -19,6 +19,7 @@ export interface AuditEvent {
     | 'agent.unblock'
     | 'agent.save'
     | 'area.save'
+    | 'review.moderate'
     | 'staff.role'
     | 'privacy.export'
     | 'privacy.delete';

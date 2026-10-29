@@ -1,6 +1,6 @@
 /**
- * App Check (D16) on the public callables: createLead, bookViewing and
- * logContactTap. Rollout is watch first, enforce later, one switch per
+ * App Check (D16) on the public callables: createLead, bookViewing,
+ * logContactTap and submitReview. Rollout is watch first, enforce later, one switch per
  * Function: ENFORCE_APP_CHECK in functions/.env.<project> lists the ones to
  * enforce (comma-separated). Until then every call is served and logged as
  * verified or missing, so the logs show how many clients would be refused.
@@ -14,7 +14,7 @@ import type { Request, Response } from 'express';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 
-export const PUBLIC_CALLABLES = ['createLead', 'bookViewing', 'logContactTap'] as const;
+export const PUBLIC_CALLABLES = ['createLead', 'bookViewing', 'logContactTap', 'submitReview'] as const;
 export type PublicCallable = (typeof PUBLIC_CALLABLES)[number];
 
 /** Which public callables enforce App Check, from ENFORCE_APP_CHECK. */

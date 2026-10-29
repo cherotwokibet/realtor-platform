@@ -9,6 +9,7 @@ import transitions from '../model/transitions.json';
 import { checkLimits, LIMITS } from './ratelimit';
 import { LEAD_RETENTION_DAYS } from './leads';
 import { assertAgentFree } from './availability';
+import { createReviewInvite } from './reviews';
 
 /**
  * Viewing slots (P2-s03). Kenya is UTC+3 all year (no daylight saving), so
@@ -153,7 +154,10 @@ export async function updateViewingStatus(db: Firestore, caller: Caller, input: 
     }
     const listing = await tx.get(db.collection('listings').doc(snap.get('listingId') as string));
     const title = listing.get('title') as string | undefined;
-    tx.update(ref, { status: req.status, updatedAt: now });
+    // A done viewing gets its one-time review link (P6-s03).
+    const reviewToken =
+      req.status === 'done' ? createReviewInvite(tx, db, { id: ref.id, agentId: snap.get('agentId'), listingId: snap.get('listingId') }, now) : null;
+    tx.update(ref, { status: req.status, updatedAt: now, ...(reviewToken ? { reviewToken } : {}) });
     audit(tx, db, caller, {
       action: 'viewing.status',
       target: { collection: 'viewings', id: ref.id, label: `Viewing${title ? ` of ${title}` : ''}, ${nairobi(slot)}` },

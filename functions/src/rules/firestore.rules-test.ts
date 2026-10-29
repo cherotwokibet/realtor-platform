@@ -39,6 +39,9 @@ beforeEach(async () => {
     await setDoc(doc(db, 'payments', 'pay-1'), { purpose: 'viewing-fee', amountKES: 500, status: 'paid' });
     await setDoc(doc(db, 'viewings', 'view-1'), { listingId: 'listing-001', agentId: 'agent-wanjiku', status: 'requested' });
     await setDoc(doc(db, 'agentBlocks', 'block-1'), { agentId: 'agent-wanjiku', note: 'Leave' });
+    await setDoc(doc(db, 'reviews', 'rev-ok'), { agentId: 'agent-wanjiku', rating: 5, status: 'approved' });
+    await setDoc(doc(db, 'reviews', 'rev-new'), { agentId: 'agent-wanjiku', rating: 2, status: 'pending' });
+    await setDoc(doc(db, 'reviewInvites', 'tok'), { agentId: 'agent-wanjiku' });
     await setDoc(doc(db, 'config', 'tenant'), { id: 'demo' });
     await setDoc(doc(db, 'savedSearches', 'ss-1'), { userId: 'alice', filters: { purpose: 'rent' }, channels: ['push'], lastNotifiedAt: null, createdAt: new Date() });
   });
@@ -101,6 +104,17 @@ describe('leads (personal data)', () => {
     await assertFails(setDoc(doc(visitor(), 'leads', 'spam'), { agentId: 'agent-wanjiku', stage: 'new' }));
     await assertFails(updateDoc(doc(agent('agent-wanjiku'), 'leads', 'lead-001'), { stage: 'won' }));
     await assertFails(deleteDoc(doc(manager(), 'leads', 'lead-001')));
+  });
+});
+
+describe('reviews', () => {
+  test('approved reviews are public; pending ones only for managers; links for nobody', async () => {
+    await assertSucceeds(getDoc(doc(visitor(), 'reviews', 'rev-ok')));
+    await assertFails(getDoc(doc(visitor(), 'reviews', 'rev-new')));
+    await assertFails(getDoc(doc(agent('agent-wanjiku'), 'reviews', 'rev-new')));
+    await assertSucceeds(getDoc(doc(manager(), 'reviews', 'rev-new')));
+    await assertFails(getDoc(doc(manager(), 'reviewInvites', 'tok')));
+    await assertFails(setDoc(doc(visitor(), 'reviews', 'rev-x'), { rating: 5, status: 'approved' }));
   });
 });
 

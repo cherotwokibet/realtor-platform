@@ -41,6 +41,14 @@ class FakeLeads implements LeadApi {
     if (fail != null) throw fail!;
     taps.add('$listingId/$channel');
   }
+
+  final reviews = <Map<String, Object?>>[];
+
+  @override
+  Future<void> submitReview({required String token, required int rating, String? comment, String? name}) async {
+    if (fail != null) throw fail!;
+    reviews.add({'token': token, 'rating': rating, 'comment': comment, 'name': name});
+  }
 }
 
 late FakeLeads fake;
@@ -144,6 +152,44 @@ void main() {
     fake.fail = LeadApiException('UNAVAILABLE', 'down');
     expect((await send('GET', '/go/whatsapp/2-bedroom-apartment-kilimani')).statusCode, 302, reason: 'counting never blocks WhatsApp');
     expect((await send('GET', '/go/whatsapp/no-such-home')).statusCode, 404);
+  });
+
+  group('reviews', () {
+    const link = '/review/abcdefghijklmnopqrstuvwx';
+
+    test('the link opens a private, unindexed form; a rating is required; then thanks', () async {
+      final page = await send('GET', link);
+      expect(page.statusCode, 200);
+      expect(page.headers['x-robots-tag'], 'noindex');
+      expect(page.headers['cache-control'], contains('no-store'));
+      expect(await page.readAsString(), contains('name="rating" value="5"'));
+
+      final missing = await send('POST', link, form: 'comment=Great');
+      expect(missing.statusCode, 400);
+      expect(await missing.readAsString(), contains('Pick from 1 to 5 stars.'));
+      expect(fake.reviews, isEmpty);
+
+      final ok = await send('POST', link, form: 'rating=4&comment=On+time&name=Akinyi');
+      expect(ok.statusCode, 303);
+      expect(ok.headers['location'], '$link?sent=1');
+      expect(fake.reviews.single, {'token': 'abcdefghijklmnopqrstuvwx', 'rating': 4, 'comment': 'On time', 'name': 'Akinyi'});
+      expect(await (await send('GET', '$link?sent=1')).readAsString(), contains('Thank you'));
+    });
+
+    test('used, expired and unknown links say so without a form; bad tokens are 404', () async {
+      fake.fail = LeadApiException('ALREADY_EXISTS', 'used');
+      final used = await send('POST', link, form: 'rating=5');
+      expect(used.statusCode, 409);
+      expect(await used.readAsString(), allOf(contains('already left'), isNot(contains('name="rating"'))));
+      fake.fail = LeadApiException('FAILED_PRECONDITION', 'expired');
+      expect((await send('POST', link, form: 'rating=5')).statusCode, 410);
+      expect((await send('GET', '/review/short')).statusCode, 404);
+      expect((await send('GET', link, withLeads: false)).statusCode, 404);
+    });
+  });
+
+  test('robots.txt keeps crawlers off /go/ and /review/', () async {
+    expect(await (await send('GET', '/robots.txt')).readAsString(), contains('Disallow: /review/'));
   });
 
   test('robots.txt keeps crawlers off /go/', () async {

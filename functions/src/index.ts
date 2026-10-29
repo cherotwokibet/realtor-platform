@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, setStaffRole, dataRequest.
+ * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, setStaffRole, dataRequest.
  * Scheduled, nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -34,6 +34,7 @@ import * as availability from './api/availability';
 import * as agents from './api/agents';
 import * as reports from './api/reports';
 import * as areas from './api/areas';
+import * as reviews from './api/reviews';
 import { refreshAreaStats } from './api/areas';
 import { dataRequest as runDataRequest } from './api/privacy';
 import { purgeExpired } from './api/retention';
@@ -57,6 +58,7 @@ const publicCalls: Record<PublicCallable, (data: unknown) => Promise<unknown>> =
   createLead: (data) => leads.createLead(getFirestore(), data),
   logContactTap: (data) => leads.logContactTap(getFirestore(), data),
   bookViewing: (data) => viewings.bookViewing(getFirestore(), data),
+  submitReview: (data) => reviews.submitReview(getFirestore(), data),
 };
 const enforce = enforced(process.env);
 const publicCallable = (fn: PublicCallable) =>
@@ -75,6 +77,8 @@ const twin = (fn: PublicCallable) =>
 export const shareCreateLead = twin('createLead');
 export const shareLogContactTap = twin('logContactTap');
 export const shareBookViewing = twin('bookViewing');
+export const submitReview = publicCallable('submitReview');
+export const shareSubmitReview = twin('submitReview');
 // Public, read-only: which times a listing's agent can still take on a day (P4-s04).
 export const openSlots = onCall((req) => viewings.openSlots(getFirestore(), req.data));
 export const updateViewingStatus = onCall((req) => viewings.updateViewingStatus(getFirestore(), callerFrom(req.auth), req.data));
@@ -90,6 +94,7 @@ export const importListings = onCall({ timeoutSeconds: 120 }, (req) => listings.
 export const saveAgent = onCall((req) => agents.saveAgent(getFirestore(), callerFrom(req.auth), req.data));
 export const monthlyReport = onCall((req) => reports.monthlyReport(getFirestore(), callerFrom(req.auth), req.data));
 export const saveArea = onCall((req) => areas.saveArea(getFirestore(), callerFrom(req.auth), req.data));
+export const moderateReview = onCall((req) => reviews.moderateReview(getFirestore(), callerFrom(req.auth), req.data));
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 export const dataRequest = onCall((req) => runDataRequest(getFirestore(), callerFrom(req.auth), req.data));
 

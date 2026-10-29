@@ -21,6 +21,11 @@ h2{font-family:var(--font-display);font-size:var(--text-title);color:var(--color
 .price{font-size:var(--text-title);color:var(--color-primary);font-weight:600;margin:0 0 8px}
 .facts{color:var(--color-text-muted);margin:0 0 16px}
 .insight{color:var(--color-success);font-weight:600;margin:-8px 0 16px}
+fieldset.stars{border:1px solid var(--color-border);border-radius:var(--radius-sm);margin:0 0 16px}
+fieldset.stars label{display:block;padding:4px 0}
+.reviews{list-style:none;padding:0}
+.reviews li{border-top:1px solid var(--color-border);padding:12px 0}
+.reviews .stars{color:var(--color-accent-text);letter-spacing:2px}
 .badge{display:inline-block;background:var(--color-accent);color:var(--color-on-accent);border-radius:var(--radius-sm);padding:2px 8px;font-size:var(--text-caption)}
 .photos{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));margin:16px 0}
 .photos img{width:100%;height:auto;border-radius:var(--radius-md);background:var(--color-surface-alt)}

@@ -85,6 +85,8 @@ export const agent = z.object({
   whatsapp: kenyanPhone,
   languages: z.array(z.enum(['en', 'sw'])).min(1),
   rating: z.number().min(0).max(5).nullable(),
+  /** How many approved reviews the rating is from (P6-s03). */
+  ratingCount: z.number().int().min(0).optional(),
   responseMins: z.number().int().min(0).nullable(),
   active: z.boolean(),
 });

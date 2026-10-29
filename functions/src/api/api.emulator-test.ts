@@ -15,6 +15,7 @@ import { addAgentBlock, removeAgentBlock } from './availability';
 import { saveAgent } from './agents';
 import { monthlyReport } from './reports';
 import { MIN_RENTALS, refreshAreaStats, saveArea } from './areas';
+import { moderateReview, submitReview } from './reviews';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
@@ -723,5 +724,41 @@ describe('open slots (P4-s04)', () => {
     assert.deepEqual((await openSlots(db, { listingId: 'listing-001', day: '2026-10-20' }, now)).times, []); // past
     await rejectsWith(openSlots(db, { listingId: 'no-such', day: '2026-10-31' }, now), 'not-found');
     await rejectsWith(openSlots(db, { listingId: 'listing-001', day: '31/10/2026' }, now), 'invalid-argument');
+  });
+});
+
+describe('reviews (P6-s03)', () => {
+  test('a done viewing gives one review link; the review waits for a manager; approving sets the rating', async () => {
+    // Start from no reviews (other suites may share this emulator).
+    for (const d of (await db.collection('reviews').get()).docs) await d.ref.delete();
+    const { viewingId } = await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-27T11:30:00+03:00', client: { name: 'Akinyi Otieno', phone: '+254700001601' }, consent: true }, now);
+    const later = new Date('2026-10-27T12:00:00Z');
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'confirmed' }, now);
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, later);
+    const token = (await db.collection('viewings').doc(viewingId).get()).get('reviewToken') as string;
+    assert.match(token, /^[A-Za-z0-9_-]{24}$/);
+
+    await rejectsWith(submitReview(db, { token: 'x'.repeat(24), rating: 5 }, later), 'not-found');
+    await rejectsWith(submitReview(db, { token, rating: 6 }, later), 'invalid-argument');
+    const { reviewId } = await submitReview(db, { token, rating: 4, comment: 'On time and honest.', name: 'Akinyi Otieno' }, later);
+    await rejectsWith(submitReview(db, { token, rating: 1 }, later), 'already-exists');
+    const review = (await db.collection('reviews').doc(reviewId).get()).data()!;
+    assert.deepEqual([review.status, review.name, review.agentId], ['pending', 'Akinyi', 'agent-wanjiku']);
+    assert.ok(!JSON.stringify(review).includes('700001601'));
+
+    await rejectsWith(moderateReview(db, wanjiku, { reviewId, action: 'approve' }, later), 'permission-denied');
+    assert.deepEqual(await moderateReview(db, manager, { reviewId, action: 'approve' }, later), { rating: 4, ratingCount: 1 });
+    const agent = (await db.collection('agents').doc('agent-wanjiku').get()).data()!;
+    assert.deepEqual([agent.rating, agent.ratingCount], [4, 1]);
+    assert.deepEqual(await moderateReview(db, manager, { reviewId, action: 'hide' }, later), { rating: null, ratingCount: 0 });
+  });
+
+  test('a review link runs out after 30 days', async () => {
+    const { viewingId } = await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-27T12:30:00+03:00', client: { name: 'Baraka', phone: '+254700001602' }, consent: true }, now);
+    const later = new Date('2026-10-27T12:00:00Z');
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'confirmed' }, now);
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, later);
+    const token = (await db.collection('viewings').doc(viewingId).get()).get('reviewToken') as string;
+    await rejectsWith(submitReview(db, { token, rating: 5 }, new Date('2026-12-01T00:00:00Z')), 'failed-precondition');
   });
 });

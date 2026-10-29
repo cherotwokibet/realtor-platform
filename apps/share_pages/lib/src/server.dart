@@ -14,6 +14,7 @@ import 'home_page.dart';
 import 'lead_api.dart';
 import 'listing.dart';
 import 'listing_page.dart';
+import 'review_page.dart';
 import 'seo.dart';
 
 final _slug = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
@@ -128,6 +129,36 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
       }
       return booked;
     })
+    ..get('/review/<token>', (shelf.Request req, String token) async {
+      if (leads == null || !reviewToken.hasMatch(token)) return _notFound(tenant);
+      final thanks = req.url.queryParameters['sent'] == '1';
+      return _private(await renderComponent(ReviewPage(tenant: tenant, token: token, thanks: thanks), request: req));
+    })
+    ..post('/review/<token>', (shelf.Request req, String token) async {
+      if (leads == null || !reviewToken.hasMatch(token)) return _notFound(tenant);
+      final body = await _formBody(req);
+      if (body == null) return shelf.Response(413, body: 'form too large');
+      final values = {for (final k in const ['rating', 'comment', 'name']) k: body[k] ?? ''};
+      Future<shelf.Response> again(ReviewFormState f, int status) async =>
+          _private(await renderComponent(ReviewPage(tenant: tenant, token: token, state: f), request: req), status: status);
+      final answers = parseReview(body);
+      if (answers == null) return again(ReviewFormState(values: values, error: 'Pick from 1 to 5 stars.'), 400);
+      try {
+        await leads.submitReview(token: token, rating: answers.rating, comment: answers.comment, name: answers.name);
+      } on LeadApiException catch (e) {
+        stderr.writeln('submitReview failed: ${e.status}');
+        return switch (e.status) {
+          'NOT_FOUND' => again(const ReviewFormState(closed: 'This review link is not valid.'), 404),
+          'ALREADY_EXISTS' => again(const ReviewFormState(closed: 'A review was already left with this link. Thank you.'), 409),
+          'FAILED_PRECONDITION' => again(const ReviewFormState(closed: 'This review link has expired.'), 410),
+          _ => again(ReviewFormState(values: values, error: 'Sorry, we could not send that just now. Please try again.'), 503),
+        };
+      } on Exception catch (e) {
+        stderr.writeln('submitReview failed: ${e.runtimeType}');
+        return again(ReviewFormState(values: values, error: 'Sorry, we could not send that just now. Please try again.'), 503);
+      }
+      return shelf.Response.seeOther('/review/$token?sent=1', headers: {'cache-control': 'no-store'});
+    })
     ..get('/go/whatsapp/<slug>', (shelf.Request req, String slug) async {
       if (!_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);
       final listing = await source.bySlug(slug);
@@ -145,9 +176,9 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
     })
     ..get('/agent/<id>', (shelf.Request req, String id) async {
       if (!_docId.hasMatch(id)) return _notFound(tenant);
-      final (agent, listings) = await (source.agent(id), source.liveByAgent(id)).wait;
+      final (agent, listings, reviews) = await (source.agent(id), source.liveByAgent(id), source.reviews(id)).wait;
       if (agent == null) return _notFound(tenant);
-      return _html(await renderComponent(AgentPage(tenant: tenant, agent: agent, listings: listings), request: req));
+      return _html(await renderComponent(AgentPage(tenant: tenant, agent: agent, listings: listings, reviews: reviews), request: req));
     })
     ..get('/area/<slug>', (shelf.Request req, String slug) async {
       if (!_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);
@@ -167,7 +198,7 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
     ..get('/.well-known/apple-app-site-association', (shelf.Request _) => _json(appleAppSiteAssociation(tenant)))
     ..get('/robots.txt', (shelf.Request _) => shelf.Response.ok(
           indexable
-              ? 'User-agent: *\nAllow: /\nDisallow: /go/\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n'
+              ? 'User-agent: *\nAllow: /\nDisallow: /go/\nDisallow: /review/\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n'
               : 'User-agent: *\nDisallow: /\n',
           headers: {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400'},
         ));
@@ -199,6 +230,10 @@ shelf.Response _secured(shelf.Response r) => r.change(headers: {
       for (final e in securityHeaders.entries)
         if (!r.headers.containsKey(e.key)) e.key: e.value,
     });
+
+/// Review pages: never cached, never indexed (the link is personal).
+shelf.Response _private(ResponseLike r, {int? status}) =>
+    _html(r, status: status, private: true).change(headers: {'x-robots-tag': 'noindex'});
 
 /// [private] pages show a visitor's own form input or thank-you note, so
 /// the CDN must not keep them.

@@ -24,6 +24,9 @@ abstract interface class LeadApi {
 
   /// `bookViewing`: [slot] is ISO 8601 with the Nairobi offset.
   Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message});
+
+  /// `submitReview` (P6-s03): the review link's [token] is the permission.
+  Future<void> submitReview({required String token, required int rating, String? comment, String? name});
 }
 
 class LeadApiException implements Exception {
@@ -82,6 +85,10 @@ class CallableLeadApi implements LeadApi {
         'message': ?message,
         'consent': true,
       });
+
+  @override
+  Future<void> submitReview({required String token, required int rating, String? comment, String? name}) =>
+      _call('submitReview', {'token': token, 'rating': rating, 'comment': ?comment, 'name': ?name});
 
   @override
   Future<void> logTap({required String listingId, required String channel}) =>
