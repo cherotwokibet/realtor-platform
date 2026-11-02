@@ -43,7 +43,7 @@ before(() => {
 });
 
 beforeEach(async () => {
-  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings', 'audit', 'staff', 'rateLimits']) {
+  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings', 'audit', 'staff', 'rateLimits', 'config']) {
     const all = await db.collection(c).get();
     await Promise.all(all.docs.map((d) => d.ref.delete()));
   }
@@ -170,6 +170,22 @@ describe('listings', () => {
     assert.equal(l.geo.geohash.length, 9);
     assert.notEqual(slug, '2-bedroom-apartment-kilimani', 'the seed already uses that slug');
     assert.match(slug, /^2-bedroom-apartment-kilimani-[a-z0-9]{6}$/);
+  });
+  test("a purpose the tenant switched off is refused at submit and at approval", async () => {
+    const short = { ...newListing, purpose: 'short-stay' };
+    const { listingId } = await submitListing(db, wanjiku, short, now);
+    await db.collection('config').doc('tenant').set({ features: { rent: true, sale: true, shortStay: false } });
+    await rejectsWith(submitListing(db, wanjiku, short, now), 'failed-precondition');
+    await rejectsWith(moderateListing(db, manager, { listingId, action: 'approve' }, now), 'failed-precondition');
+    assert.equal((await db.collection('listings').doc(listingId).get()).get('status'), 'pending');
+    await moderateListing(db, manager, { listingId, action: 'reject', reason: 'short stays are off' }, now);
+    await submitListing(db, wanjiku, newListing, now);
+  });
+  test('a live listing whose purpose is switched off cannot be confirmed again', async () => {
+    const { listingId } = await submitListing(db, wanjiku, { ...newListing, purpose: 'short-stay' }, now);
+    await moderateListing(db, manager, { listingId, action: 'approve' }, now);
+    await db.collection('config').doc('tenant').set({ features: { shortStay: false } });
+    await rejectsWith(confirmListing(db, wanjiku, { listingId }, now), 'failed-precondition');
   });
   test('rejects decimals, unknown areas and non-staff', async () => {
     await rejectsWith(submitListing(db, wanjiku, { ...newListing, priceKES: 70000.5 }), 'invalid-argument');
