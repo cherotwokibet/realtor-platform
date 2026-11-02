@@ -12,6 +12,7 @@ import 'places/place_screens.dart';
 import 'providers.dart';
 import 'saved/saved_screen.dart';
 import 'search/purpose.dart';
+import 'search/recent_searches.dart';
 import 'search/results_screen.dart';
 import 'sections.dart';
 
@@ -70,7 +71,7 @@ String? _resultsOrHome(BuildContext context, GoRouterState state) =>
     ListingFilters.fromUri(state.uri) == null ? '/' : null;
 
 Widget _results(BuildContext context, GoRouterState state) =>
-    ResultsScreen(filters: ListingFilters.fromUri(state.uri)!);
+    RecordSearch(filters: ListingFilters.fromUri(state.uri)!, child: ResultsScreen(filters: ListingFilters.fromUri(state.uri)!));
 
 class RealtorApp extends ConsumerWidget {
   const RealtorApp({super.key});

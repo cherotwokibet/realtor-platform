@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import 'providers.dart';
 import 'search/purpose.dart';
+import 'search/recent_searches.dart';
 import 'search/results_screen.dart';
 
 /// First screen: search, property types and the newest live homes, with brand
@@ -78,6 +79,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             runSpacing: b.spacing.sm,
             children: [for (final t in _types) ActionChip(label: Text(typeName(t)), onPressed: () => _search(type: t))],
           ),
+          const RecentSearches(),
           FeatureGate(
             feature: Feature.ads,
             child: Padding(
