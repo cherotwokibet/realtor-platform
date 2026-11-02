@@ -37,12 +37,17 @@ export interface Step {
   skipIfExists?: string;
   /** Not a command: check the saved Terraform plan, then ask before applying. */
   checkPlan?: boolean;
+  /**
+   * A Functions deploy: when some functions fail (Google's write quota is
+   * hit when ~35 update at once), redeploy just those in small batches.
+   */
+  retryFunctions?: boolean;
 }
 
 /** Cloud Shell's IPv6 route times out on uploads to Firebase; IPv4 first avoids it. */
 const NODE_IPV4 = { NODE_OPTIONS: '--dns-result-order=ipv4first' };
 const TF_DIR = 'infra/terraform/tenant';
-export const PLAN_FILE = 'deploy.plan';
+export const PLAN_FILE = 'deploy.tfplan'; // *.tfplan is gitignored
 
 export const imageRepo = (project: string, region: string) => `${region}-docker.pkg.dev/${project}/share-pages`;
 
@@ -50,6 +55,44 @@ export const imageRepo = (project: string, region: string) => `${region}-docker.
 export function parseBilling(s: string): string | null {
   const id = s.trim().replace(/^billingAccounts\//, '');
   return /^[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}$/.test(id) ? id : null;
+}
+
+/**
+ * Tracked files changed in `git status --porcelain` output that would make
+ * the images differ from the commit they are tagged with. `.firebaserc` is
+ * left out: `firebase target:apply` (the web part) writes Hosting targets
+ * there on every deploy, and the images never contain it.
+ */
+export function blockingChanges(porcelain: string): string[] {
+  return porcelain
+    .split('\n')
+    .filter((l) => l.trim() && !l.startsWith('??'))
+    .map((l) => l.slice(3))
+    .filter((path) => path !== '.firebaserc');
+}
+
+/** A step as a shell line, quoting arguments with spaces (for --dry-run and progress). */
+export function shellLine(s: Step): string {
+  const q = (a: string) => (/[\s'"$]/.test(a) ? `'${a.replace(/'/g, `'\\''`)}'` : a);
+  const cmd = `${Object.entries(s.env ?? {}).map(([k, v]) => `${k}=${v} `).join('')}${s.argv.map(q).join(' ')}`;
+  return s.cwd === '.' ? cmd : `(cd ${s.cwd} && ${cmd})`;
+}
+
+/**
+ * Function names a `firebase deploy` run reports as failed ("Failed to
+ * update function X", "Failed to create function X", "Failed to set invoker
+ * function X"), each once, in the order reported.
+ */
+export function failedFunctions(output: string): string[] {
+  const names = [...output.matchAll(/Failed to (?:update|create|set invoker)(?: function)? (?:projects\/[^/\s]+\/locations\/[^/\s]+\/functions\/)?([A-Za-z][\w-]*)/g)].map((m) => m[1]);
+  return [...new Set(names.filter((n) => n !== 'function'))];
+}
+
+/** `firebase deploy --only` arguments for [names], [size] functions at a time. */
+export function functionBatches(names: string[], size = 6): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < names.length; i += size) out.push(names.slice(i, i + size).map((n) => `functions:${n}`).join(','));
+  return out;
 }
 
 /** The parts to run, in order: an empty list means all of them. */
@@ -70,7 +113,7 @@ export function deploySteps(i: DeployInputs): Step[] {
   const on = (part: Part) => i.parts.includes(part);
 
   if (on('functions')) {
-    steps.push({ part: 'functions', title: 'Cloud Functions', argv: ['firebase', 'deploy', '--only', 'functions', ...p], cwd: '.', env: NODE_IPV4 });
+    steps.push({ part: 'functions', title: 'Cloud Functions', argv: ['firebase', 'deploy', '--only', 'functions', ...p], cwd: '.', env: NODE_IPV4, retryFunctions: true });
   }
   if (on('images')) {
     steps.push(
