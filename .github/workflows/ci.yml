@@ -60,6 +60,10 @@ jobs:
           if [ "$FULL" = true ]; then all=1; fi  # the full-ci label runs everything
           has() { [ "$all" = 1 ] || printf '%s\n' "$files" | grep -qE "$1"; }
           out() { if has "$2"; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
+          # Tenant CLI files no build runs (deploy, create, firebase-config,
+          # tests, docs) start no Android, web or admin build.
+          bfiles=$(printf '%s\n' "$files" | grep -vE '^tools/tenant-cli/(test/|src/(deploy|create|firebase-config)\.ts$|[^/]*\.md$)' || true)
+          outb() { if [ "$all" = 1 ] || printf '%s\n' "$bfiles" | grep -qE "$2"; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
           shared='^(packages/core|packages/tokens|tenants|brand|fonts|tools/tenant-cli)/|^pubspec\.'
           # tooling also runs the no-tenant-in-code scan over the product code.
           out tooling '^(tenants|brand|fonts|tools/tenant-cli)/|^(apps/[^/]+/(lib|bin)|packages/[^/]+/lib|functions/src)/'
@@ -71,8 +75,8 @@ jobs:
           if [ "$DRAFT" = true ] || [ "$GITHUB_EVENT_NAME" = push ]; then
             for o in app admin android tenants; do echo "$o=false" >> "$GITHUB_OUTPUT"; done
           else
-            out app "$builds|^(packages/ui|apps/realtor_app)/"; out admin "$builds|^(packages/ui|apps/admin)/"
-            out android "$flavors"; out tenants '^(tenants|brand)/'
+            outb app "$builds|^(packages/ui|apps/realtor_app)/"; outb admin "$builds|^(packages/ui|apps/admin)/"
+            outb android "$flavors"; out tenants '^(tenants|brand)/'
           fi
           out infra '^infra/|^tenants/|^(firestore|storage)\.rules$'
           out share '^(packages/core|packages/tokens|tenants|fonts|apps/share_pages)/|^\.dockerignore$'
