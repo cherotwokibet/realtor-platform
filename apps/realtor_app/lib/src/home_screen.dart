@@ -32,7 +32,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final area = typed == null || typed.isEmpty
         ? null
         : names.entries.where((e) => e.value.toLowerCase() == typed || e.key == typed.replaceAll(' ', '-')).map((e) => e.key).firstOrNull;
-    context.go(ListingFilters(
+    context.push(ListingFilters(
       purpose: _purpose,
       q: area == null ? q : null,
       types: [if (type != null) type],
@@ -50,7 +50,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       areas: ref.read(areaNamesProvider).value ?? const {},
       allowed: {for (final p in Purpose.values) if (features.isOn(p.feature)) p},
     );
-    context.go(parsed.filters.toUri().toString());
+    context.push(parsed.filters.toUri().toString());
   }
 
   @override

@@ -120,17 +120,27 @@ class _SectionShell extends StatelessWidget {
       context.go(sections[i].path);
     }
 
+    // Phone back on another tab (Saved, Account, …) goes to Search; only
+    // Search itself leaves the app. Screens pushed above a tab pop as usual.
+    Widget backToSearch(Widget page) => PopScope(
+          canPop: location == '/' || i < 0,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) go(0);
+          },
+          child: page,
+        );
+
     if (MediaQuery.sizeOf(context).width < wideFrom) {
-      return Scaffold(
+      return backToSearch(Scaffold(
         body: child,
         bottomNavigationBar: NavigationBar(
           selectedIndex: selected,
           onDestinationSelected: go,
           destinations: [for (final s in sections) NavigationDestination(icon: Icon(s.icon), label: s.label)],
         ),
-      );
+      ));
     }
-    return Scaffold(
+    return backToSearch(Scaffold(
       body: Row(
         children: [
           NavigationRail(
@@ -150,7 +160,7 @@ class _SectionShell extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 }
 

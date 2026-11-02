@@ -28,7 +28,7 @@ Future<void> pumpApp(WidgetTester tester, TenantConfig tenant) async {
 
 String currentPath(WidgetTester tester) {
   final container = ProviderScope.containerOf(tester.element(find.byType(RealtorApp)));
-  return container.read(routerProvider).routerDelegate.currentConfiguration.uri.path;
+  return container.read(routerProvider).state.uri.path;
 }
 
 Finder navLabel(String label) =>

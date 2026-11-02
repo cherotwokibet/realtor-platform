@@ -246,7 +246,7 @@ class _Alerts extends ConsumerWidget {
           trailing: IconButton(tooltip: 'Clear', icon: const Icon(Icons.close), onPressed: () => repo.clear(uid, a.id)),
           onTap: () {
             repo.markRead(uid, a.id);
-            context.go('/listing/${a.slug}');
+            context.push('/listing/${a.slug}');
           },
         ),
     ]);
@@ -268,7 +268,7 @@ class _Searches extends ConsumerWidget {
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(describeSearch(s.filters)),
-          onTap: () => context.go(s.filters.toUri().toString()),
+          onTap: () => context.push(s.filters.toUri().toString()),
           trailing: IconButton(
             tooltip: 'Stop these alerts',
             icon: const Icon(Icons.notifications_off_outlined),

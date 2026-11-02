@@ -107,7 +107,7 @@ void main() {
     expect(find.text('Rent · Apartment · Kilimani'), findsOneWidget);
     await tester.tap(find.text(l.title));
     await tester.pumpAndSettle();
-    expect(c.read(routerProvider).routerDelegate.currentConfiguration.uri.path, '/listing/${l.slug}');
+    expect(c.read(routerProvider).state.uri.path, '/listing/${l.slug}');
 
     c.read(routerProvider).go('/account');
     await tester.pumpAndSettle();

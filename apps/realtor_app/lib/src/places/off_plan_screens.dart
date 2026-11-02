@@ -6,6 +6,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import '../providers.dart';
 import '../search/purpose.dart';
+import '../nav.dart';
 
 /// `/off-plan` (P5-s06): published off-plan projects, cheapest first. Only
 /// routed when the tenant has the `offPlan` switch on.
@@ -32,7 +33,7 @@ class OffPlanScreen extends ConsumerWidget {
                       Card(
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
-                          onTap: () => context.go('/off-plan/${p.slug}'),
+                          onTap: () => context.push('/off-plan/${p.slug}'),
                           child: Padding(
                             padding: EdgeInsets.all(b.spacing.lg),
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -65,15 +66,15 @@ class ProjectScreen extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     final tenant = ref.watch(tenantProvider);
     Widget missing() => Scaffold(
-        appBar: AppBar(), body: Center(child: Text('This project is not here any more.', style: text.bodyLarge)));
+        appBar: AppBar(leading: const AppBack()), body: Center(child: Text('This project is not here any more.', style: text.bodyLarge)));
     return ref.watch(projectProvider(slug)).when(
-          loading: () => Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator())),
+          loading: () => Scaffold(appBar: AppBar(leading: const AppBack()), body: const Center(child: CircularProgressIndicator())),
           error: (_, __) => missing(),
           data: (p) {
             if (p == null) return missing();
             final wa = tenant.whatsappLink('Hi ${tenant.name}, I am interested in ${p.name}.');
             return Scaffold(
-              appBar: AppBar(title: Text(p.name, overflow: TextOverflow.ellipsis)),
+              appBar: AppBar(leading: const AppBack(), title: Text(p.name, overflow: TextOverflow.ellipsis)),
               body: ListView(padding: EdgeInsets.all(b.spacing.gutter), children: [
                 Text(p.name, style: text.headlineSmall),
                 SizedBox(height: b.spacing.xs),

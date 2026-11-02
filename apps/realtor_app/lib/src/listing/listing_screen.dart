@@ -9,6 +9,7 @@ import '../saved/favourites.dart';
 import '../search/purpose.dart';
 import '../search/results_screen.dart';
 import 'lead_sheets.dart';
+import '../nav.dart';
 
 /// `/listing/<slug>`: the same page share links open on the web (P3-s03),
 /// with call, WhatsApp, enquiry and viewing actions (P3-s06 in the app).
@@ -20,7 +21,7 @@ class ListingScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(listingDetailProvider(slug));
     return detail.when(
-      loading: () => Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator())),
+      loading: () => Scaffold(appBar: AppBar(leading: const AppBack()), body: const Center(child: CircularProgressIndicator())),
       error: (e, _) => _Message(text: 'This home could not be loaded. Check your connection and try again.'),
       data: (d) => d == null ? const _Message(text: 'This home is no longer available.') : _ListingView(detail: d),
     );
@@ -33,7 +34,7 @@ class _Message extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(),
+        appBar: AppBar(leading: const AppBack()),
         body: Center(
           child: Padding(
             padding: EdgeInsets.all(context.brand.spacing.xl),
@@ -74,7 +75,7 @@ class _ListingView extends ConsumerWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(l.title, overflow: TextOverflow.ellipsis), actions: [FavouriteButton(listing: l)]),
+      appBar: AppBar(leading: const AppBack(), title: Text(l.title, overflow: TextOverflow.ellipsis), actions: [FavouriteButton(listing: l)]),
       body: ListView(
         padding: EdgeInsets.only(bottom: b.spacing.xxl),
         children: [

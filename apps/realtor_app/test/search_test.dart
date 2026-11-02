@@ -32,7 +32,7 @@ class GoRouterHarness {
   final WidgetTester tester;
   ProviderContainer get _c => ProviderScope.containerOf(tester.element(find.byType(RealtorApp)));
   void go(String l) => _c.read(routerProvider).go(l);
-  String get location => _c.read(routerProvider).routerDelegate.currentConfiguration.uri.toString();
+  String get location => _c.read(routerProvider).state.uri.toString();
 }
 
 void main() {
