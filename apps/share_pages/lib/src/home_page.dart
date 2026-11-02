@@ -43,6 +43,7 @@ class HomePage extends StatelessComponent {
           a(href: 'https://${tenant.appDomain}/rent', classes: 'open', const [Component.text('Search homes')]),
           if (wa != null) a(href: wa.toString(), classes: 'wa', const [Component.text('Ask on WhatsApp')]),
         ]),
+        if (tenant.features.isOn(Feature.offPlan)) const p([a(href: '/projects', [Component.text('Off-plan projects')])]),
         if (listings.isNotEmpty) ...[
           const h2([Component.text('New this week')]),
           listingCards(listings),

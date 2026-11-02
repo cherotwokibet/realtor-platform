@@ -10,6 +10,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'agent_page.dart';
 import 'app_links.dart';
 import 'area_page.dart';
+import 'project_page.dart';
 import 'fonts.dart';
 import 'home_page.dart';
 import 'lead_api.dart';
@@ -24,7 +25,7 @@ final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 
 /// Routes: `/`, `/listing/<slug>` (+ POST `/listing/<slug>/enquire` and
 /// `/listing/<slug>/viewing`),
-/// `/go/whatsapp/<slug>`, `/area/<slug>`, `/agent/<id>`, `/sitemap.xml`,
+/// `/go/whatsapp/<slug>`, `/area/<slug>`, `/agent/<id>`, `/projects`, `/project/<slug>`, `/sitemap.xml`,
 /// `/robots.txt` and the App Links / Universal Links files in `/.well-known/`. Without [leads] there is no enquiry form and WhatsApp
 /// taps are not counted. With [fontsDir] the tenant's bundled fonts are served
 /// at `/fonts/<Family>-<Weight>.ttf`, which the pages' `@font-face` rules use.
@@ -223,6 +224,19 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
       if (area == null) return _notFound(tenant);
       return _html(await renderComponent(AreaPage(tenant: tenant, area: area, listings: listings), request: req));
     })
+    // Off-plan projects (P5-s06): 404s unless the tenant has offPlan on.
+    ..get('/projects', (shelf.Request req) async {
+      if (!tenant.features.isOn(Feature.offPlan)) return _notFound(tenant);
+      final projects = await source.publishedProjects();
+      return _html(await renderComponent(ProjectsPage(tenant: tenant, projects: projects), request: req));
+    })
+    ..get('/project/<slug>', (shelf.Request req, String slug) async {
+      if (!_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);
+      final project = await source.project(slug);
+      if (project == null) return _notFound(tenant);
+      final area = _slug.hasMatch(project.area) ? await source.area(project.area) : null;
+      return _html(await renderComponent(ProjectPage(tenant: tenant, project: project, areaName: area?.name), request: req));
+    })
     ..get('/sitemap.xml', (shelf.Request _) async {
       final entries = await source.sitemapEntries();
       return shelf.Response.ok(sitemapXml(tenant, entries), headers: {
@@ -323,7 +337,7 @@ Future<Map<String, String>?> _formBody(shelf.Request req) async {
   }
 }
 
-/// sitemaps.org XML for the home page, every area, agent and live listing.
+/// sitemaps.org XML for the home page, every area, agent, live listing and project.
 String sitemapXml(TenantConfig tenant, List<SitemapEntry> entries) {
   final esc = const HtmlEscape(HtmlEscapeMode.attribute);
   final base = 'https://${tenant.shareDomain}';

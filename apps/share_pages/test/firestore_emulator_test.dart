@@ -54,7 +54,7 @@ void main() {
     expect(html, contains('Bedsitter near Kasarani stadium'));
     expect(html, contains('<li>Kasarani stadium</li>'));
     final xml = await (await handler(shelf.Request('GET', Uri.parse('https://x/sitemap.xml')))).readAsString();
-    expect('<url>'.allMatches(xml).length, 1 + 16 + 3 + 12, reason: 'home + 16 areas + 3 agents + 12 live listings');
+    expect('<url>'.allMatches(xml).length, 1 + 16 + 3 + 12 + 1, reason: 'home + 16 areas + 3 agents + 12 live listings + 1 project');
   });
 
   test('agent and home pages come from the emulator', () async {
@@ -72,5 +72,20 @@ void main() {
     final home = await (await handler(shelf.Request('GET', Uri.parse('https://x/')))).readAsString();
     expect('href="/listing/'.allMatches(home).length, 12);
     expect('href="/area/'.allMatches(home).length, 16);
+  });
+
+  test('off-plan project pages come from the emulator (P5-s06)', () async {
+    final tenant = TenantConfig.fromJson(
+      jsonDecode(File('../../tenants/demo-homes.json').readAsStringSync()) as Map<String, Object?>,
+    );
+    final handler = shareHandler(tenant, source);
+    final list = await (await handler(shelf.Request('GET', Uri.parse('https://x/projects')))).readAsString();
+    expect(list, contains('href="/project/acacia-heights-ruaka"'));
+    final page = await handler(shelf.Request('GET', Uri.parse('https://x/project/acacia-heights-ruaka')));
+    expect(page.statusCode, 200);
+    final html = await page.readAsString();
+    expect(html, contains('June 2028'));
+    expect(html, contains('3 bed apartment'));
+    expect(html, contains('Deposit on booking: 10%'));
   });
 }
