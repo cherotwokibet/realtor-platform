@@ -68,12 +68,29 @@ jobs:
             rm -rf build/app/intermediates build/app/tmp
           done
           ls -l ../../out
+      - name: Store build check (App Bundle signed with a throwaway upload key)
+        working-directory: apps/realtor_app
+        run: |
+          # Proves the upload-key signing `tenant release` uses (P4-s07). The key
+          # and password are made here and thrown away, and so is this bundle.
+          pw=$(openssl rand -hex 16)
+          keytool -genkeypair -keystore "$RUNNER_TEMP/throwaway.jks" -storepass "$pw" -keypass "$pw" -alias upload \
+            -keyalg RSA -keysize 2048 -validity 1 -dname "CN=CI throwaway upload key" >/dev/null
+          f=$(ls assets/flavors | head -1)
+          UPLOAD_KEYSTORE="$RUNNER_TEMP/throwaway.jks" UPLOAD_KEYSTORE_PASSWORD="$pw" \
+            flutter build appbundle --release --flavor "$f" --build-number 1
+          rm -f "$RUNNER_TEMP/throwaway.jks"
+          aab=$(find build/app/outputs/bundle -name '*-release.aab' | head -1)
+          echo "bundle: $aab"
+          keytool -printcert -jarfile "$aab" | grep -q "CN=CI throwaway upload key" || { echo "bundle is not signed with the upload key"; exit 1; }
+          echo "| $(basename "$aab") (store bundle, all ABIs, not attached) | $(du -m "$aab" | cut -f1) MB |" > ../../out/bundle.txt
       - name: Sizes (P4-s06 budget is 25 MB)
         run: |
           {
             echo "| APK | Size |"
             echo "|---|---|"
             for a in out/*.apk; do echo "| $(basename "$a") | $(du -m "$a" | cut -f1) MB |"; done
+            cat out/bundle.txt 2>/dev/null || true
           } | tee -a "$GITHUB_STEP_SUMMARY" > out/sizes.md
       - name: Publish as a pre-release
         env:

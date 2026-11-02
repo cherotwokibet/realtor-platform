@@ -368,6 +368,39 @@
           ]
         }
       }
+    },
+    "store": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Store listing (P4-s07). Everything is optional: without it `tenant release` writes the listing from the name, tagline and features.",
+      "properties": {
+        "language": {
+          "type": "string",
+          "description": "Play language code of the listing, e.g. en-GB.",
+          "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+        },
+        "listing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 30
+            },
+            "shortDescription": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "fullDescription": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            }
+          }
+        }
+      }
     }
   },
   "if": {

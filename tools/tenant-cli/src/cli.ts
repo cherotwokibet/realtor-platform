@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { join, basename, relative } from 'node:path';
@@ -12,6 +13,7 @@ import { rebrandTenant } from './rebrand.ts';
 import { patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
 import { tenantFontFiles } from './fonts.ts';
 import { ENVS, type Env, blockingChanges, deploySteps, failedFunctions, functionBatches, imageRepo, parseBilling, parseParts, planProblems, planSummary, shellLine } from './deploy.ts';
+import { RELEASE_SECRETS, TRACKS, type Track, BUNDLE_DIR, pickBundle, listingProblems, publishToPlay, playToken, releaseSteps, signingEnv, storeListing, versionCode } from './release.ts';
 import { fromGoogleServices, fromServiceInfoPlist, type MobileFirebase, pickApps } from './firebase-config.ts';
 import {
   flavorName,
@@ -50,7 +52,12 @@ function usage(): never {
                      (refuses a plan that would change billing, delete anything or point Cloud Run
                      outside the project's repo; asks before applying) and the Hosting sites
 
-Coming later: build <id> <platform>, iOS flavors`);
+  release <id> [--track=internal|closed] [--status=completed|draft] [--notes="…"] [--dry-run]
+                     In Cloud Shell: the tenant's Android App Bundle, signed with its upload key from
+                     Secret Manager (prod project), with the store listing, to a Google Play testing
+                     track; production is promoted in the Play Console. See docs/store-release.md
+
+Coming later: iOS flavors and TestFlight`);
   process.exit(cmd ? 1 : 0);
 }
 
@@ -275,6 +282,80 @@ next, in apps/realtor_app:
     const file = join(repoRoot(), 'apps', 'realtor_app', dir, 'firebase.json');
     writeFileSync(file, JSON.stringify(out, null, 2));
     console.log(`wrote ${relative(repoRoot(), file)} (${env}: ${project}${ids.android ? ', android' : ''}${ids.ios ? ', ios' : ''})`);
+    break;
+  }
+  case 'release': {
+    const [id] = args.filter((a) => !a.startsWith('--'));
+    const opt = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+    const dryRun = args.includes('--dry-run');
+    const track = (opt('track') ?? 'internal') as Track;
+    const status = (opt('status') ?? 'completed') as 'completed' | 'draft';
+    if (!id || !(track in TRACKS) || !['completed', 'draft'].includes(status)) usage();
+    const t = loadValid(id);
+    const project: string | undefined = t.firebase.projects.prod;
+    if (!project) throw new Error(`tenant ${id} has no prod project`);
+    const root = repoRoot();
+    const listing = storeListing(t);
+    const bad = listingProblems(listing);
+    if (bad.length) {
+      console.error(`✗ store listing:\n${bad.map((b) => `  - ${b}`).join('\n')}\n  set store.listing in tenants/${id}.json`);
+      process.exit(1);
+    }
+    const tag = execSync('git rev-parse --short HEAD', { cwd: root, encoding: 'utf8' }).trim();
+    const build = versionCode(new Date());
+    const language = t.store?.language ?? 'en-GB';
+    const notes = opt('notes') ?? `Build ${tag}`;
+    const allFlavors = readdirSync(join(root, 'tenants')).filter((f) => f.endsWith('.json')).map((f) => flavorName(basename(f, '.json')));
+    const steps = releaseSteps(id, allFlavors, build);
+    console.log(`release ${id} (${t.apps.androidId}) → Play ${track} track (${status}), commit ${tag}, version code ${build}`);
+    console.log(`  listing (${language}): "${listing.title}" · "${listing.shortDescription}"`);
+    if (dryRun) {
+      for (const s of steps) console.log(`\n# ${s.title}${s.skipIfExists ? ` (skipped if ${s.skipIfExists} exists)` : ''}\n${shellLine({ ...s, part: 'web' })}`);
+      console.log(`\n# Secrets read from ${project}: ${Object.values(RELEASE_SECRETS).join(', ')} (never printed)`);
+      console.log(`# Then: upload the bundle from ${BUNDLE_DIR}, put it on ${TRACKS[track]}, update the listing, commit the edit`);
+      console.log(`\n# Full description:\n${listing.fullDescription}`);
+      break;
+    }
+    const dirty = blockingChanges(execSync('git status --porcelain', { cwd: root, encoding: 'utf8' }));
+    if (dirty.length) {
+      console.error(`✗ uncommitted changes in ${dirty.join(', ')}: the bundle is built from the commit, so commit or stash them first`);
+      process.exit(1);
+    }
+    const missing = ['gcloud', 'firebase', 'flutter', 'dart'].filter((bin) => spawnSync('which', [bin]).status !== 0);
+    if (missing.length) {
+      console.error(`✗ not on PATH: ${missing.join(', ')}`);
+      process.exit(1);
+    }
+    const secret = (name: string): Buffer => {
+      const r = spawnSync('gcloud', ['secrets', 'versions', 'access', 'latest', `--secret=${name}`, `--project=${project}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+      if (r.status !== 0) throw new Error(`could not read secret "${name}" in ${project} (see docs/store-release.md): ${String(r.stderr).split('\n')[0]}`);
+      return r.stdout;
+    };
+    // Secrets live only in this folder (0700/0600) for the build, then go.
+    const tmp = mkdtempSync(join(tmpdir(), 'tenant-release-'));
+    try {
+      const keystore = join(tmp, 'upload.jks');
+      writeFileSync(keystore, Buffer.from(secret(RELEASE_SECRETS.keystore).toString('utf8').trim(), 'base64'), { mode: 0o600 });
+      const env = signingEnv(keystore, secret(RELEASE_SECRETS.keystorePassword).toString('utf8').trim());
+      for (const s of steps) {
+        if (s.skipIfExists && existsSync(join(root, s.skipIfExists))) continue;
+        console.log(`\n▶ ${s.title}\n  ${s.argv.join(' ')}`);
+        const r = spawnSync(s.argv[0], s.argv.slice(1), { cwd: join(root, s.cwd), env: { ...process.env, ...env }, stdio: 'inherit' });
+        if (r.status !== 0) throw new Error(`"${s.title}" failed`);
+      }
+      const found = pickBundle(readdirSync(join(root, BUNDLE_DIR), { recursive: true }).map(String), id);
+      if (!found) throw new Error(`no ${flavorName(id)} release bundle under ${BUNDLE_DIR}`);
+      const bundle = readFileSync(join(root, BUNDLE_DIR, found));
+      console.log(`\n▶ Google Play: ${(bundle.length / 1e6).toFixed(1)} MB bundle to the ${track} track`);
+      const sa = JSON.parse(secret(RELEASE_SECRETS.serviceAccount).toString('utf8'));
+      const token = await playToken(sa, new Date());
+      const code = await publishToPlay(token, { packageName: t.apps.androidId, bundle, track, listing, language, notes, status });
+      console.log(`\n✓ ${t.apps.androidId} version ${code} is on the ${track} track${status === 'draft' ? ' as a draft: roll it out in the Play Console' : ''}`);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+      // `flavors` fills the pubspec's flavor block, which stays empty in git.
+      spawnSync('git', ['checkout', '--', 'apps/realtor_app/pubspec.yaml'], { cwd: root });
+    }
     break;
   }
   case 'deploy': {
