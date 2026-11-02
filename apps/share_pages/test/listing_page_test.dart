@@ -90,6 +90,16 @@ void main() {
     expect((jsonDecode(json) as Map)['name'], evil.title, reason: 'escaping keeps the data intact');
   });
 
+  test("the agent's description shows paragraph by paragraph, escaped (P7-s02)", () async {
+    const described = ShareListing(
+      id: 'd', slug: 'described', title: 'Quiet flat in Ruaka', purpose: Purpose.rent, type: 'apartment', beds: 1, baths: 1,
+      priceKES: 25000, area: 'ruaka', lat: 0, lng: 0, description: 'Near the market.\n\nWater all week <b>always</b>.',
+    );
+    final html = await (await get('/listing/described', listings: [described])).readAsString();
+    expect(html, contains('<p>Near the market.</p>'));
+    expect(html, contains('<p>Water all week &lt;b&gt;always&lt;/b&gt;.</p>'));
+  });
+
   test('unknown and malformed slugs are 404s', () async {
     expect((await get('/listing/no-such-home')).statusCode, 404);
     expect((await get('/listing/Bad%20Slug')).statusCode, 404);

@@ -21,9 +21,13 @@ class ShareListing {
     this.verified = false,
     this.updatedAt,
     this.agentId,
+    this.description = '',
   });
 
   final String id, slug, title, type, area;
+
+  /// The agent's text (P7-s02); may be empty.
+  final String description;
   final String? agentId;
   final Purpose purpose;
   final int beds, baths, priceKES;

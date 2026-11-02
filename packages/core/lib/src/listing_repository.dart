@@ -19,9 +19,13 @@ class ListingDetail {
     this.depositMonths,
     this.photos = const [],
     this.agent,
+    this.description = '',
   });
   final ListingSummary summary;
   final String? estate;
+
+  /// The agent's text (P7-s02); may be empty.
+  final String description;
   final int? depositMonths;
 
   /// Media-pipeline `card` variant URLs, in order.

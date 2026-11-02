@@ -32,6 +32,7 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
       _service = TextEditingController(),
       _estate = TextEditingController(),
       _amenities = TextEditingController(),
+      _description = TextEditingController(),
       _lat = TextEditingController(),
       _lng = TextEditingController();
 
@@ -43,7 +44,7 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
 
   @override
   void dispose() {
-    for (final c in [_title, _price, _deposit, _service, _estate, _amenities, _lat, _lng]) {
+    for (final c in [_title, _price, _deposit, _service, _estate, _amenities, _description, _lat, _lng]) {
       c.dispose();
     }
     super.dispose();
@@ -70,6 +71,7 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
       _service.text = d.serviceChargeKES?.toString() ?? '';
       _estate.text = d.estate ?? '';
       _amenities.text = d.amenities.join(', ');
+      _description.text = d.description;
       _setPosition(d.lat, d.lng);
       setState(() {
         _areas = areas;
@@ -96,9 +98,37 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
         serviceChargeKES: () => _int(_service),
         estate: () => _estate.text.trim().isEmpty ? null : _estate.text,
         amenities: [for (final a in _amenities.text.split(',')) if (a.trim().isNotEmpty) a.trim()],
+        description: _description.text,
         lat: double.tryParse(_lat.text.trim()) ?? 0,
         lng: double.tryParse(_lng.text.trim()) ?? 0,
       );
+
+  /// Copy assistant (P7-s02): a title and description from the facts in the
+  /// form, for the agent to edit. Asks before replacing text already there.
+  Future<void> _suggest() async {
+    final draft = _current;
+    final area = _areas.where((a) => a.slug == draft.area).firstOrNull?.name ?? '';
+    final copy = suggestListingCopy(draft, areaName: area);
+    final hasText = _title.text.trim().isNotEmpty || _description.text.trim().isNotEmpty;
+    if (hasText) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Replace the title and description?'),
+          content: Text('Suggested title: ${copy.title}'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Keep mine')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Replace')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    setState(() {
+      _title.text = copy.title;
+      _description.text = copy.description;
+    });
+  }
 
   Future<void> _save() async {
     final draft = _current;
@@ -153,7 +183,14 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
                   const SizedBox(height: 4),
                   text(_title, 'Title', 'title', hint: '2 bedroom apartment, Kilimani'),
-                  gap(),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _suggest,
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                      label: const Text('Suggest title & description'),
+                    ),
+                  ),
                   pair(
                     pick('For', d.purpose, {for (final p in Purpose.values) p.value: label(p.value)},
                         (v) => setState(() => _draft = d.copyWith(purpose: v)), error: problems['purpose']),
@@ -194,6 +231,20 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
                   ),
                   gap(),
                   text(_amenities, 'Amenities, separated by commas', 'amenities', hint: 'Borehole, Parking, Lift'),
+                  gap(),
+                  TextField(
+                    controller: _description,
+                    minLines: 3,
+                    maxLines: 8,
+                    maxLength: 3000,
+                    decoration: InputDecoration(
+                      labelText: 'Description',
+                      helperText: 'Fill in the facts above, then "Suggest" writes a first draft to edit.',
+                      errorText: problems['description'],
+                      border: const OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
                   if (who.isManager) ...[
                     gap(),
                     pick('Agent', d.agentId, {for (final a in _agents) a.id: a.name},

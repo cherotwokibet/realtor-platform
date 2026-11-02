@@ -91,6 +91,7 @@ class FirestoreListingRepository implements ListingRepository {
       summary: summaryFromDoc(doc.id, d, bucket: bucket, now: _clock()),
       estate: d['estate'] as String?,
       depositMonths: (d['depositMonths'] as num?)?.toInt(),
+      description: d['description'] as String? ?? '',
       photos: [
         for (final m in (d['media'] as List<Object?>?) ?? const [])
           if (m is Map && m['kind'] == 'photo')
