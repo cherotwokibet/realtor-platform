@@ -101,6 +101,10 @@ test('uncommitted changes that block images: tracked files only, never .firebase
   const porcelain = [' M .firebaserc', ' D apps/realtor_app/test/widget_test.dart', '?? infra/terraform/tenant/deploy.tfplan', 'M  functions/src/index.ts', ''].join('\n');
   assert.deepEqual(blockingChanges(porcelain), ['apps/realtor_app/test/widget_test.dart', 'functions/src/index.ts']);
   assert.deepEqual(blockingChanges(' M .firebaserc\n'), []);
+  // As cli.ts gets it: the output trimmed, so the first line lost its space.
+  assert.deepEqual(blockingChanges('M .firebaserc\n?? deploy.tfplan'), []);
+  assert.deepEqual(blockingChanges('M .firebaserc\n M functions/src/index.ts'), ['functions/src/index.ts']);
+  assert.deepEqual(blockingChanges('R  old.ts -> new.ts'), ['new.ts']);
   assert.deepEqual(blockingChanges(''), []);
 });
 
