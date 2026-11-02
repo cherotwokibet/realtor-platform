@@ -48,6 +48,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Off-plan projects (P5-s06): published ones are public; managers see drafts.
+    match /projects/{slug} {
+      allow read: if resource.data.published == true || isManager();
+      allow write: if false;
+    }
+
     // Site pages (P5-s07): published ones are public; managers see drafts.
     match /pages/{slug} {
       allow read: if resource.data.published == true || isManager();

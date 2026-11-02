@@ -162,6 +162,29 @@ export const area = z.object({
   stats: z.object({ medianRentKES: kes.nullable(), listings: z.number().int().min(0) }),
 });
 
+/** Off-plan projects (P5-s06): see api/projects.ts. */
+export const UNIT_TYPES = ['studio', 'apartment', 'maisonette', 'townhouse', 'villa', 'plot', 'commercial'] as const;
+export const projectUnit = z.object({
+  type: z.enum(UNIT_TYPES),
+  beds: z.number().int().min(0).max(10),
+  sizeSqm: z.number().int().min(10).max(5000).optional(),
+  fromKES: z.number().int().min(100_000).max(2_000_000_000),
+  available: z.number().int().min(0).max(5000),
+});
+export const paymentStage = z.object({ stage: z.string().trim().min(2).max(60), percent: z.number().int().min(1).max(100) });
+export const project = z.object({
+  name: z.string().min(3).max(80),
+  developer: z.string().min(2).max(80),
+  area: slug,
+  summary: z.string().max(5000),
+  completion: z.string().regex(/^20\d\d-(0[1-9]|1[0-2])$/),
+  units: z.array(projectUnit).min(1).max(20),
+  paymentPlan: z.array(paymentStage).min(1).max(12),
+  fromKES: z.number().int().min(0),
+  published: z.boolean(),
+  updatedAt: timestamp,
+});
+
 /** Collection name -> schema. config/tenant is validated by tenants/schema instead. */
 export const collections = {
   listings: listing,
@@ -171,6 +194,7 @@ export const collections = {
   payments: payment,
   savedSearches: savedSearch,
   areas: area,
+  projects: project,
 } as const;
 
 export type CollectionName = keyof typeof collections;

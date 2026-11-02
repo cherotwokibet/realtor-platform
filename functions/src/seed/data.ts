@@ -167,5 +167,32 @@ export function seedDocs(now = new Date()): SeedDoc[] {
       createdAt: at(-1),
     },
   });
+  // One fictional off-plan project (P5-s06), shown only for tenants with offPlan on.
+  docs.push({
+    collection: 'projects',
+    id: 'acacia-heights-ruaka',
+    data: {
+      name: 'Acacia Heights, Ruaka',
+      developer: 'Sample Developers Ltd',
+      area: 'ruaka',
+      summary: 'Two towers of 1, 2 and 3 bedroom apartments ten minutes from Two Rivers, with a gym, a borehole and backup power. A sample project for demos.',
+      completion: '2028-06',
+      units: [
+        { type: 'apartment', beds: 1, sizeSqm: 52, fromKES: 4_800_000, available: 24 },
+        { type: 'apartment', beds: 2, sizeSqm: 84, fromKES: 7_200_000, available: 40 },
+        { type: 'apartment', beds: 3, sizeSqm: 118, fromKES: 9_900_000, available: 12 },
+      ],
+      paymentPlan: [
+        { stage: 'Deposit on booking', percent: 10 },
+        { stage: 'On signing the sale agreement', percent: 20 },
+        { stage: 'In 12 monthly instalments', percent: 50 },
+        { stage: 'On handover', percent: 20 },
+      ],
+      fromKES: 4_800_000,
+      published: true,
+      updatedAt: now,
+    },
+  });
+
   return docs;
 }

@@ -45,6 +45,8 @@ beforeEach(async () => {
     await setDoc(doc(db, 'users', 'alice', 'alerts', 'a1'), { listingId: 'listing-001', readAt: null });
     await setDoc(doc(db, 'pages', 'about'), { title: 'About', body: 'x', published: true });
     await setDoc(doc(db, 'pages', 'faq'), { title: 'FAQ', body: 'draft', published: false });
+    await setDoc(doc(db, 'projects', 'live-project'), { name: 'Live', published: true });
+    await setDoc(doc(db, 'projects', 'draft-project'), { name: 'Draft', published: false });
     await setDoc(doc(db, 'config', 'tenant'), { id: 'demo' });
     await setDoc(doc(db, 'savedSearches', 'ss-1'), { userId: 'alice', filters: { purpose: 'rent' }, channels: ['push'], lastNotifiedAt: null, createdAt: new Date() });
   });
@@ -117,6 +119,16 @@ describe('site pages', () => {
     await assertFails(getDoc(doc(agent('agent-wanjiku'), 'pages', 'faq')));
     await assertSucceeds(getDoc(doc(manager(), 'pages', 'faq')));
     await assertFails(setDoc(doc(manager(), 'pages', 'about'), { title: 'x', body: 'y', published: true }));
+  });
+});
+
+describe('off-plan projects', () => {
+  test('published projects are public; drafts only for managers; nobody writes', async () => {
+    await assertSucceeds(getDoc(doc(visitor(), 'projects', 'live-project')));
+    await assertFails(getDoc(doc(visitor(), 'projects', 'draft-project')));
+    await assertFails(getDoc(doc(agent('agent-wanjiku'), 'projects', 'draft-project')));
+    await assertSucceeds(getDoc(doc(manager(), 'projects', 'draft-project')));
+    await assertFails(setDoc(doc(manager(), 'projects', 'live-project'), { name: 'x', published: true }));
   });
 });
 
