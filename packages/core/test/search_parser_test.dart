@@ -66,4 +66,22 @@ void main() {
     expect(f.q, 'kahawa sukari');
     expect(f.areas, isEmpty);
   });
+
+  test('bedroom phrases with "up to" or "at least" are bedrooms, never a KES 2 budget (phone test)', () {
+    for (final (text, beds) in [('up to 2 bedrooms', 2), ('at least 2 bedrooms', 2), ('min 3 bedrooms', 3), ('within 2 bedrooms ruaka', 2)]) {
+      final f = parse(text).filters;
+      expect(f.minBeds, beds, reason: text);
+      expect((f.minPriceKES, f.maxPriceKES), (null, null), reason: text);
+      expect(f.q, isNull, reason: text);
+    }
+    final f = parse('min 3 bedrooms under 80k').filters;
+    expect((f.minBeds, f.minPriceKES, f.maxPriceKES), (3, null, 80000));
+  });
+
+  test('tiny amounts are not prices; a cut-off "apart" is apartments; a bare "bedrooms" is dropped', () {
+    expect(parse('under 3').filters.maxPriceKES, isNull);
+    expect(parse('ksh 2').filters.maxPriceKES, isNull);
+    expect(parse('apart').filters.types, ['apartment']);
+    expect(parse('bedrooms').filters.q, isNull);
+  });
 }
