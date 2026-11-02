@@ -150,9 +150,9 @@ export function deploySteps(i: DeployInputs): Step[] {
     steps.push(
       { part: 'web', title: 'Tenant assets for the app and the admin', argv: [...node, 'prepare', i.id], cwd: '.' },
       { part: 'web', title: 'Admin web shell (first time only)', argv: ['sh', '-c', 'flutter create . --platforms=web --project-name realtor_admin && rm -f test/widget_test.dart'], cwd: 'apps/admin', skipIfExists: 'apps/admin/web/index.html' },
-      { part: 'web', title: 'Build the admin', argv: ['flutter', 'build', 'web', '--release'], cwd: 'apps/admin' },
       { part: 'web', title: 'App web shell (first time only)', argv: ['flutter', 'create', '.', '--platforms=web', '--project-name', 'realtor_app'], cwd: 'apps/realtor_app', skipIfExists: 'apps/realtor_app/web/index.html' },
-      { part: 'web', title: "App web shell: the tenant's title, colours and previews", argv: [...node, 'web', i.id], cwd: '.' },
+      { part: 'web', title: "Web shells: the tenant's title, colours, loading screen and previews", argv: [...node, 'web', i.id], cwd: '.' },
+      { part: 'web', title: 'Build the admin', argv: ['flutter', 'build', 'web', '--release'], cwd: 'apps/admin' },
       { part: 'web', title: 'Build the customer app', argv: ['flutter', 'build', 'web', '--release', '--wasm'], cwd: 'apps/realtor_app' },
     );
     for (const site of ['admin', 'app', 'share']) {
