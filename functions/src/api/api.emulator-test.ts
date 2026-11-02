@@ -14,6 +14,7 @@ import { bookViewing, openSlots, rescheduleViewing, updateViewingStatus } from '
 import { addAgentBlock, removeAgentBlock } from './availability';
 import { saveAgent } from './agents';
 import { monthlyReport } from './reports';
+import { saveProject } from './projects';
 import { logRecommendation, nairobiDay } from './recommendations';
 import { MIN_RENTALS, refreshAreaStats, saveArea } from './areas';
 import { moderateReview, submitReview } from './reviews';
@@ -845,6 +846,53 @@ describe('saved-search alerts (D18)', () => {
 
     const again = await sweepSavedSearches(db, new Date(at.getTime() + 3_600_000));
     assert.equal(again.listings, 0, 'the next sweep starts where this one stopped');
+  });
+});
+
+describe('off-plan projects (P5-s06)', () => {
+  const project = {
+    name: 'Mvuli Gardens',
+    developer: 'Test Developers',
+    area: 'kilimani',
+    summary: 'Two towers.',
+    completion: '2028-03',
+    units: [
+      { type: 'apartment', beds: 2, sizeSqm: 80, fromKES: 8_500_000, available: 10 },
+      { type: 'apartment', beds: 1, fromKES: 5_500_000, available: 4 },
+    ],
+    paymentPlan: [
+      { stage: 'Deposit', percent: 10 },
+      { stage: 'Instalments', percent: 70 },
+      { stage: 'Handover', percent: 20 },
+    ],
+    published: false,
+  };
+
+  test('managers save and publish a project; agents cannot; the plan must add up; not when switched off', async () => {
+    await rejectsWith(saveProject(db, wanjiku, project, now), 'permission-denied');
+    const { slug } = await saveProject(db, manager, project, now);
+    assert.equal(slug, 'mvuli-gardens');
+    await rejectsWith(saveProject(db, manager, project, now), 'already-exists');
+    await saveProject(db, manager, { ...project, slug, published: true }, now);
+    const p = (await db.collection('projects').doc(slug).get()).data()!;
+    assert.deepEqual([p.published, p.fromKES, p.area, 'slug' in p], [true, 5_500_000, 'kilimani', false]);
+
+    await rejectsWith(saveProject(db, manager, { ...project, name: 'Bad Plan', paymentPlan: [{ stage: 'Deposit', percent: 50 }] }, now), 'invalid-argument');
+    await rejectsWith(saveProject(db, manager, { ...project, name: 'Nowhere', area: 'atlantis' }, now), 'invalid-argument');
+    await rejectsWith(saveProject(db, manager, { ...project, slug: 'no-such-project' }, now), 'not-found');
+
+    const log = (await db.collection('audit').where('action', '==', 'project.save').get()).docs.map((d) => `${d.get('from')}->${d.get('to')}`);
+    assert.deepEqual(log.sort(), ['draft->published', 'none->draft']);
+
+    const tenant = db.collection('config').doc('tenant');
+    const before = await tenant.get();
+    await tenant.set({ features: { offPlan: false } }, { merge: true });
+    try {
+      await rejectsWith(saveProject(db, manager, { ...project, name: 'Switched Off' }, now), 'failed-precondition');
+    } finally {
+      if (before.exists) await tenant.set(before.data()!);
+      else await tenant.delete();
+    }
   });
 });
 
