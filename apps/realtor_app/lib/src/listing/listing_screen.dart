@@ -152,16 +152,34 @@ class _ListingView extends ConsumerWidget {
 
 /// Up to three live homes like this one (P7-s04), from the same area and
 /// the newest of the same purpose; nothing while loading or when none are close.
-class _Similar extends ConsumerWidget {
+class _Similar extends ConsumerStatefulWidget {
   const _Similar({required this.listing});
   final ListingSummary listing;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Similar> createState() => _SimilarState();
+}
+
+class _SimilarState extends ConsumerState<_Similar> {
+  /// The listing the section was last counted as shown for.
+  String? _counted;
+
+  /// Click-through counts (P7-s04) are best effort: a failed count never
+  /// gets in the way of the page.
+  void _log(String event) =>
+      ref.read(leadRepositoryProvider).logRecommendation(listingId: widget.listing.id, event: event).catchError((Object _) {});
+
+  @override
+  Widget build(BuildContext context) {
+    final listing = widget.listing;
     final inArea = ref.watch(liveListingsProvider((area: listing.area, agent: null))).value ?? const [];
     final newest = ref.watch(searchResultsProvider(ListingFilters(purpose: listing.purpose))).value?.hits ?? const [];
     final similar = similarListings(listing, [...inArea, ...newest], similarKey);
     if (similar.isEmpty) return const SizedBox.shrink();
+    if (_counted != listing.id) {
+      _counted = listing.id;
+      _log('shown');
+    }
     final b = context.brand;
     return Padding(
       padding: EdgeInsets.only(top: b.spacing.xl),
@@ -170,7 +188,7 @@ class _Similar extends ConsumerWidget {
         children: [
           Text('Similar homes', style: Theme.of(context).textTheme.titleLarge),
           SizedBox(height: b.spacing.sm),
-          for (final s in similar) ...[ListingCard(listing: s), SizedBox(height: b.spacing.md)],
+          for (final s in similar) ...[ListingCard(listing: s, onOpen: () => _log('opened')), SizedBox(height: b.spacing.md)],
         ],
       ),
     );

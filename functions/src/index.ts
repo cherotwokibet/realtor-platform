@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, savePage, setStaffRole, dataRequest.
+ * Callables: createLead, logContactTap, bookViewing, submitReview, logRecommendation (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, savePage, setStaffRole, dataRequest.
  * Scheduled, hourly: savedSearchAlerts (D18). Nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -36,6 +36,7 @@ import * as reports from './api/reports';
 import * as areas from './api/areas';
 import * as reviews from './api/reviews';
 import * as pages from './api/pages';
+import * as recommendations from './api/recommendations';
 import { refreshAreaStats } from './api/areas';
 import { sweepSavedSearches } from './api/alerts';
 import { dataRequest as runDataRequest } from './api/privacy';
@@ -61,6 +62,7 @@ const publicCalls: Record<PublicCallable, (data: unknown) => Promise<unknown>> =
   logContactTap: (data) => leads.logContactTap(getFirestore(), data),
   bookViewing: (data) => viewings.bookViewing(getFirestore(), data),
   submitReview: (data) => reviews.submitReview(getFirestore(), data),
+  logRecommendation: (data) => recommendations.logRecommendation(getFirestore(), data),
 };
 const enforce = enforced(process.env);
 const publicCallable = (fn: PublicCallable) =>
@@ -81,6 +83,9 @@ export const shareLogContactTap = twin('logContactTap');
 export const shareBookViewing = twin('bookViewing');
 export const submitReview = publicCallable('submitReview');
 export const shareSubmitReview = twin('submitReview');
+// Similar-homes click-through (P7-s04): counts only.
+export const logRecommendation = publicCallable('logRecommendation');
+export const shareLogRecommendation = twin('logRecommendation');
 // Public, read-only: which times a listing's agent can still take on a day (P4-s04).
 export const openSlots = onCall((req) => viewings.openSlots(getFirestore(), req.data));
 export const updateViewingStatus = onCall((req) => viewings.updateViewingStatus(getFirestore(), callerFrom(req.auth), req.data));

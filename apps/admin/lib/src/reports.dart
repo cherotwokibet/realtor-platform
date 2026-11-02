@@ -132,6 +132,12 @@ class _ReportBody extends StatelessWidget {
         Text('Viewings', style: t.labelLarge),
         const SizedBox(height: 4),
         counts(r.viewingsByStatus, viewingStatuses),
+        const SizedBox(height: 12),
+        Text('Similar homes under listings', style: t.labelLarge),
+        const SizedBox(height: 4),
+        Text(r.similarClickThroughPct == null
+            ? 'Not shown yet this month'
+            : 'Shown ${r.similarShown} times, opened ${r.similarOpened} (${r.similarClickThroughPct}%)'),
       ])),
       card(
         'Agents',

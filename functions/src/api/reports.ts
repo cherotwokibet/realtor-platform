@@ -2,6 +2,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { median } from './response';
+import { recommendationTotals, type RecommendationTotals } from './recommendations';
 import { type Caller, parseInput, requireManager } from './auth';
 
 /**
@@ -30,6 +31,8 @@ export interface MonthlyReport {
   viewings: { total: number; byStatus: Record<string, number> };
   agents: AgentRow[];
   topListings: { listingId: string; title: string; agentId: string; leads: number; calls: number; whatsapps: number }[];
+  /** "Similar homes" shown under listings and homes opened from it (P7-s04). */
+  recommendations: RecommendationTotals;
 }
 
 /** First and last instant of a Nairobi month (UTC+3 all year). */
@@ -46,11 +49,13 @@ export async function monthlyReport(db: Firestore, caller: Caller, input: unknow
   requireManager(caller);
   const { month } = parseInput(monthlyReportInput, input);
   const { start, end } = monthRange(month);
-  const [leads, viewings, agents, listings] = await Promise.all([
+  const [leads, viewings, agents, listings, recommendations] = await Promise.all([
     db.collection('leads').where('createdAt', '>=', start).where('createdAt', '<', end).select('agentId', 'channel', 'stage', 'responseMins').get(),
     db.collection('viewings').where('slot', '>=', start).where('slot', '<', end).select('agentId', 'status').get(),
     db.collection('agents').select('name').get(),
     db.collection('listings').orderBy('stats.leads', 'desc').limit(10).select('title', 'agentId', 'stats').get(),
+    // Day docs are named by date, so the month is a key range (the 31st is past any month's end).
+    recommendationTotals(db, `${month}-01`, `${month}-31`),
   ]);
   if (leads.size > 20_000) throw new HttpsError('resource-exhausted', 'too many leads for one report');
 
@@ -71,6 +76,7 @@ export async function monthlyReport(db: Firestore, caller: Caller, input: unknow
     viewings: { total: viewings.size, byStatus: {} },
     agents: [],
     topListings: [],
+    recommendations,
   };
   for (const l of leads.docs) {
     count(report.leads.byChannel, l.get('channel'));

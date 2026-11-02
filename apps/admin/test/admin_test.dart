@@ -956,6 +956,7 @@ void main() {
     final r = await container.read(adminActionsProvider).monthlyReport(manager, month);
     expect(find.text('${r.leads} leads, ${r.viewings} viewings'), findsOneWidget);
     expect(find.text('Agents'), findsOneWidget);
+    expect(find.text('Shown 120 times, opened 14 (12%)'), findsOneWidget);
     await tester.tap(find.text('Download CSV'));
     await tester.pump();
     expect(saver.saved.single.$1, 'report-$month.csv');

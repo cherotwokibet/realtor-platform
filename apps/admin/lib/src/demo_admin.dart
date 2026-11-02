@@ -401,6 +401,9 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         for (final l in top.take(10))
           if (l.leads > 0) (listingId: l.id, title: l.title, agentId: l.agentId, leads: l.leads, calls: l.calls, whatsapps: l.whatsapps),
       ],
+      // A sample month of similar-homes counts (the Function adds up real days).
+      similarShown: 120,
+      similarOpened: 14,
     );
   }
 

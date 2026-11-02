@@ -7,7 +7,7 @@ import { callableTwin, enforced, sharePagesInvoker, twinName } from './appcheck'
 test('ENFORCE_APP_CHECK names the callables to enforce; unset enforces none', () => {
   assert.deepEqual([...enforced({})], []);
   assert.deepEqual([...enforced({ ENFORCE_APP_CHECK: 'createLead, logContactTap,setStaffRole' })], ['createLead', 'logContactTap']);
-  assert.deepEqual([...enforced({ ENFORCE_APP_CHECK: 'all' })], ['createLead', 'bookViewing', 'logContactTap', 'submitReview']);
+  assert.deepEqual([...enforced({ ENFORCE_APP_CHECK: 'all' })], ['createLead', 'bookViewing', 'logContactTap', 'submitReview', 'logRecommendation']);
 });
 
 test('twin names and invoker', () => {
