@@ -1,7 +1,7 @@
 import type { Firestore } from 'firebase-admin/firestore';
 
 /**
- * Saved-search alerts (D17, P4-s03). Every hour: the listings that went
+ * Saved-search alerts (D18, P4-s03). Every hour: the listings that went
  * live since the last sweep (`liveAt`), matched against every saved search;
  * each match becomes an alert in the owner's inbox (users/{uid}/alerts),
  * which the app shows. Email and push read the same alerts once their

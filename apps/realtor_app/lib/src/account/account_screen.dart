@@ -42,7 +42,7 @@ String describeSearch(ListingFilters f) => [
 
 String label(Purpose p) => switch (p) { Purpose.rent => 'Rent', Purpose.sale => 'Buy', Purpose.shortStay => 'Short stay' };
 
-/// `/account` (D17): no account is needed to browse or save homes; one is
+/// `/account` (D18): no account is needed to browse or save homes; one is
 /// needed for alerts when new homes match a saved search.
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});

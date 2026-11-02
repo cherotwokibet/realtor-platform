@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
 
-/// A signed-in customer (D17): an account only for saved-search alerts.
+/// A signed-in customer (D18): an account only for saved-search alerts.
 typedef Customer = ({String uid, String? email});
 
 /// A saved search as the account page lists it.

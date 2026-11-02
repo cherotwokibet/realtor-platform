@@ -3,7 +3,7 @@
  * verification or commissions happens here, never in a client.
  *
  * Callables: createLead, logContactTap, bookViewing (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, savePage, setStaffRole, dataRequest.
- * Scheduled, hourly: savedSearchAlerts (D17). Nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
+ * Scheduled, hourly: savedSearchAlerts (D18). Nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
  *   P4  sendPush        -> FCM HTTP v1 (replaces the legacy server key)
@@ -101,7 +101,7 @@ export const savePage = onCall((req) => pages.savePage(getFirestore(), callerFro
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 export const dataRequest = onCall((req) => runDataRequest(getFirestore(), callerFrom(req.auth), req.data));
 
-// Saved-search alerts (D17): every hour, new live listings to matching inboxes.
+// Saved-search alerts (D18): every hour, new live listings to matching inboxes.
 export const savedSearchAlerts = onSchedule({ schedule: 'every 60 minutes', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
   const r = await sweepSavedSearches(getFirestore());
   console.log(`alerts: ${r.listings} new listings, ${r.alerts} alerts`);

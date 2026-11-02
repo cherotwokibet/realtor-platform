@@ -786,7 +786,7 @@ describe('reviews and data requests', () => {
   });
 });
 
-describe('saved-search alerts (D17)', () => {
+describe('saved-search alerts (D18)', () => {
   test('a listing going live lands once in the inbox of each matching saved search', async () => {
     await db.collection('savedSearches').doc('ss-kili').set({ userId: 'alice', filters: { purpose: 'rent', areas: ['kilimani'], maxPriceKES: 200000 }, channels: ['inbox'], lastNotifiedAt: null, createdAt: now });
     await db.collection('savedSearches').doc('ss-sale').set({ userId: 'bob', filters: { purpose: 'sale' }, channels: ['inbox'], lastNotifiedAt: null, createdAt: now });

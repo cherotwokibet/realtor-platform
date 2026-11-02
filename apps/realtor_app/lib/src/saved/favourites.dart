@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Saved homes (D17): kept on this device only, no account, nothing sent.
+/// Saved homes (D18): kept on this device only, no account, nothing sent.
 /// A copy of each row is kept so the Saved list opens offline; the listing
 /// page shows what is current.
 abstract interface class FavouritesStore {

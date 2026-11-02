@@ -247,14 +247,14 @@ resource "google_identity_platform_config" "auth" {
     "${local.project_id}.web.app",
     "${google_firebase_hosting_site.admin.site_id}.web.app",
     "${google_firebase_hosting_site.admin.site_id}.firebaseapp.com",
-    # Customers sign in on the web app for saved-search alerts (D17).
+    # Customers sign in on the web app for saved-search alerts (D18).
     "${google_firebase_hosting_site.app.site_id}.web.app",
     "${google_firebase_hosting_site.app.site_id}.firebaseapp.com",
   ]
   sign_in {
     allow_duplicate_emails = false
     # Staff sign in with a password (D14); customers with an emailed link
-    # (D17). password_required = false turns the link on; passwords still work.
+    # (D18). password_required = false turns the link on; passwords still work.
     email {
       enabled           = true
       password_required = false

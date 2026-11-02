@@ -147,7 +147,7 @@ export const savedSearch = z.object({
     minBeds: z.number().int().min(0).optional(),
     maxPriceKES: kes.optional(),
   }),
-  /** inbox: alerts in the app (D17); email and push once their senders are set up. */
+  /** inbox: alerts in the app (D18); email and push once their senders are set up. */
   channels: z.array(z.enum(['inbox', 'push', 'email', 'whatsapp'])).min(1),
   lastNotifiedAt: timestamp.nullable(),
   createdAt: timestamp,
