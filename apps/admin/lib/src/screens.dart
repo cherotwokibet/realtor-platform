@@ -5,6 +5,7 @@ import 'package:realtor_core/realtor_core.dart';
 
 import 'agent_profiles.dart';
 import 'area_guides.dart';
+import 'projects.dart';
 import 'format.dart';
 import 'links.dart';
 import 'listing_editor.dart';
@@ -486,6 +487,12 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
             onPressed: () => showDialog<void>(context: context, builder: (_) => const AreaGuidesDialog()),
             icon: const Icon(Icons.map_outlined),
             label: const Text('Areas…'),
+          ),
+        if (who.isManager && ref.watch(tenantProvider).features.isOn(Feature.offPlan))
+          OutlinedButton.icon(
+            onPressed: () => showDialog<void>(context: context, builder: (_) => const ProjectsDialog()),
+            icon: const Icon(Icons.apartment_outlined),
+            label: const Text('Off-plan projects…'),
           ),
         if (who.isManager)
           OutlinedButton.icon(

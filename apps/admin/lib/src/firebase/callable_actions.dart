@@ -73,6 +73,12 @@ class CallableAdminActions implements AdminActions {
   }
 
   @override
+  Future<String> saveProject(StaffUser who, OffPlanProject project) async {
+    final r = await _run('saveProject', project.toCallable()) as Map<Object?, Object?>;
+    return r['slug'] as String;
+  }
+
+  @override
   Future<String> saveAgent(StaffUser who, AgentProfile profile) async {
     final r = await _run('saveAgent', profile.toCallable()) as Map<Object?, Object?>;
     return r['agentId'] as String;

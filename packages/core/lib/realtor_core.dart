@@ -5,6 +5,7 @@ export 'src/admin_actions.dart';
 export 'src/admin_repository.dart';
 export 'src/agent_profile.dart';
 export 'src/area_guide.dart';
+export 'src/off_plan_project.dart';
 export 'src/listing_csv.dart';
 export 'src/listing_draft.dart';
 export 'src/listing_filters.dart';

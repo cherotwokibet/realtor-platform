@@ -544,6 +544,47 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   @override
   Future<List<AreaGuide>> areaGuides() async => _guides.values.toList()..sort((a, b) => a.name.compareTo(b.name));
 
+  late final _projects = <String, OffPlanProject>{
+    'sample-gardens': OffPlanProject(
+      slug: 'sample-gardens',
+      name: 'Sample Gardens',
+      developer: 'Demo Developers Ltd',
+      area: _guides.keys.first,
+      summary: 'A demo project.',
+      completion: '2028-06',
+      units: const [OffPlanUnit(type: 'apartment', beds: 2, sizeSqm: 84, fromKES: 7200000, available: 40)],
+      paymentPlan: const [(stage: 'Deposit on booking', percent: 10), (stage: 'On handover', percent: 90)],
+      published: true,
+      fromKES: 7200000,
+      updatedAt: _now,
+    ),
+  };
+
+  @override
+  Future<List<OffPlanProject>> projects(StaffUser who) async {
+    if (!who.isManager) throw StaffAccessException('projects are for owners and managers');
+    return _projects.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  @override
+  Future<String> saveProject(StaffUser who, OffPlanProject project) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final problems = project.problems();
+    if (problems.isNotEmpty) throw AdminActionException('invalid-argument', problems.entries.map((e) => '${e.key}: ${e.value}').join('; '));
+    final slug = project.slug ?? project.name.trim().toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-|-$'), '');
+    if (project.slug == null && _projects.containsKey(slug)) throw AdminActionException('already-exists', 'there is already a project "$slug"');
+    if (project.slug != null && !_projects.containsKey(slug)) throw AdminActionException('not-found', 'no project "$slug"');
+    if (!_guides.containsKey(project.area)) throw AdminActionException('invalid-argument', 'area: no area "${project.area}"');
+    final before = _projects[slug];
+    _projects[slug] = OffPlanProject.fromDoc(slug, {
+      ...project.toCallable(),
+      'fromKES': project.units.map((u) => u.fromKES).reduce((a, b) => a < b ? a : b),
+    }, updatedAt: _clock());
+    _log(who, 'project.save', project.name.trim(), before == null ? 'none' : (before.published ? 'published' : 'draft'),
+        project.published ? 'published' : 'draft');
+    return slug;
+  }
+
   @override
   Future<String> saveArea(StaffUser who, AreaGuide area) async {
     if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
