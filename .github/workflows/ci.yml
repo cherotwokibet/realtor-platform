@@ -12,7 +12,7 @@ concurrency:
 
 # Actions minutes are limited, so each job runs only when files it checks
 # change (pull requests: against the base; main: against the previous push).
-# Editing this file runs everything. The Android and web builds, the slowest
+# Editing this file runs everything; other workflow files run nothing here. The Android and web builds, the slowest
 # jobs (most of a full run), run on pull requests only: not in draft, not on
 # main pushes (the pull request already built the same code), and not for
 # changes in packages/core, tokens or fonts alone, which `dart analyze
@@ -55,7 +55,7 @@ jobs:
           all=0; files=""
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then all=1
           else files=$(git diff --name-only "$BASE" HEAD); fi
-          printf '%s\n' "$files" | grep -q '^\.github/workflows/' && all=1
+          printf '%s\n' "$files" | grep -q '^\.github/workflows/ci\.yml$' && all=1  # other workflows (e.g. phone-apk.yml) run nothing here
           echo "all=$all"; printf '%s\n' "$files"
           if [ "$FULL" = true ]; then all=1; fi  # the full-ci label runs everything
           has() { [ "$all" = 1 ] || printf '%s\n' "$files" | grep -qE "$1"; }
