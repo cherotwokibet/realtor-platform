@@ -114,7 +114,11 @@ class _SectionShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final i = sections.indexWhere((s) => s.path == location);
     final selected = i < 0 ? 0 : i;
-    void go(int i) => context.go(sections[i].path);
+    void go(int i) {
+      // A note about one screen should not follow you to another tab.
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      context.go(sections[i].path);
+    }
 
     if (MediaQuery.sizeOf(context).width < wideFrom) {
       return Scaffold(

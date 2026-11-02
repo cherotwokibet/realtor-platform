@@ -88,7 +88,7 @@
     "offPlan": true,
     "mpesa": true,
     "ads": false,
-    "aiSearch": false,
+    "aiSearch": true,
     "chat": true
   },
   "mpesa": {

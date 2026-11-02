@@ -85,7 +85,8 @@ void main() {
     await tester.enterText(find.byType(TextField), 'kasarani');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
-    expect(h.location, '/rent?q=kasarani');
+    // Demo Homes has aiSearch on, so a known area name becomes the area filter.
+    expect(h.location, '/rent/kasarani');
     expect(find.text('2 homes'), findsOneWidget);
   });
 

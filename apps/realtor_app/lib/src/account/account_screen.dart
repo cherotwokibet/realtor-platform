@@ -31,6 +31,16 @@ class PrefsPendingEmail implements PendingEmail {
 
 final pendingEmailProvider = Provider<PendingEmail>((ref) => PrefsPendingEmail());
 
+/// The search someone tapped "Get alerts" on before signing in: Account
+/// offers it again once they are in, so they need not go back to it.
+class PendingAlert extends Notifier<ListingFilters?> {
+  @override
+  ListingFilters? build() => null;
+  void set(ListingFilters? f) => state = f;
+}
+
+final pendingAlertProvider = NotifierProvider<PendingAlert, ListingFilters?>(PendingAlert.new);
+
 /// A search's name in a list: "Rent · apartment · Kilimani · up to KES 60,000".
 String describeSearch(ListingFilters f) => [
       label(f.purpose),
@@ -138,11 +148,22 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     final b = context.brand;
     final text = Theme.of(context).textTheme;
     final customer = ref.watch(customerProvider).value;
+    final pendingAlert = ref.watch(pendingAlertProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Account')),
       body: ListView(padding: EdgeInsets.all(b.spacing.gutter), children: [
         if (customer == null) ...[
           Text('Get alerts for new homes', style: text.titleLarge),
+          if (pendingAlert != null) ...[
+            SizedBox(height: b.spacing.sm),
+            Card(
+              color: b.primarySoft,
+              child: ListTile(
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: Text('Sign in to get alerts for: ${describeSearch(pendingAlert)}'),
+              ),
+            ),
+          ],
           SizedBox(height: b.spacing.sm),
           Text('You can browse and save homes without an account. Sign in to be told when new homes match a search you save.',
               style: text.bodyMedium),
@@ -164,6 +185,18 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         ] else ...[
           Text(customer.email ?? 'Signed in', style: text.titleMedium),
           TextButton(onPressed: () => ref.read(customerAccountProvider).signOut(), child: const Text('Sign out')),
+          if (pendingAlert != null) ...[
+            FilledButton.icon(
+              icon: const Icon(Icons.notifications_active_outlined),
+              label: Text('Get alerts for ${describeSearch(pendingAlert)}'),
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, pendingAlert);
+                ref.read(pendingAlertProvider.notifier).set(null);
+                messenger.showSnackBar(SnackBar(content: Text('Saved: ${describeSearch(pendingAlert)}. New matches will show here.')));
+              },
+            ),
+          ],
           SizedBox(height: b.spacing.md),
           _Alerts(uid: customer.uid),
           SizedBox(height: b.spacing.lg),
@@ -257,8 +290,9 @@ class AlertButton extends ConsumerWidget {
       onPressed: () async {
         final messenger = ScaffoldMessenger.of(context);
         if (customer == null) {
+          // Account shows this search and offers it again after sign-in.
+          ref.read(pendingAlertProvider.notifier).set(filters);
           context.go('/account');
-          messenger.showSnackBar(const SnackBar(content: Text('Sign in to get alerts. Then come back to this search.')));
           return;
         }
         await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, filters);
