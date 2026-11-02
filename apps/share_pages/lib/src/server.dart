@@ -41,9 +41,12 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
     final times = leads != null && day != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(day)
         ? await leads.openTimes(listingId: listing.id, day: day)
         : null;
-    final (agent, area) = await (
+    final (agent, area, inArea, newest) = await (
       listing.agentId == null || !_docId.hasMatch(listing.agentId!) ? Future<ShareAgent?>.value() : source.agent(listing.agentId!),
       listing.purpose == Purpose.rent && _slug.hasMatch(listing.area) ? source.area(listing.area) : Future<ShareArea?>.value(),
+      // Similar homes come from the same area and the newest live ones.
+      _slug.hasMatch(listing.area) ? source.liveInArea(listing.area) : Future.value(<ShareListing>[]),
+      source.latestLive(limit: 24),
     ).wait;
     final q = req.url.queryParameters;
     final enquiry = leads == null ? null : form ?? EnquiryFormState(sent: q['sent'] == '1');
@@ -58,6 +61,7 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
         viewingDays: viewingDays(clock()),
         areaMedianRentKES: area?.medianRentKES,
         freeTimes: times == null ? null : (day: day!, times: times),
+        similar: similarListings(listing, [...inArea, ...newest], _similarKey),
       ),
       request: req,
     );
@@ -313,3 +317,5 @@ shelf.Response _notFound(TenantConfig tenant) => shelf.Response.notFound(
           '<a href="https://${tenant.appDomain}/">See all homes</a></p></html>'),
       headers: {'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=60'},
     );
+
+SimilarKey _similarKey(ShareListing l) => (id: l.id, purpose: l.purpose, area: l.area, type: l.type, beds: l.beds, priceKES: l.priceKES);

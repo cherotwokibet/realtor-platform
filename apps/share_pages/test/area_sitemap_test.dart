@@ -58,6 +58,28 @@ void main() {
     expect(html, contains('href="/area/kilimani"'));
   });
 
+  test('a listing page offers similar live homes: same purpose, close in area, type and price', () async {
+    ShareListing home(String id, {String area = 'kilimani', String type = 'apartment', int price = 64000, Purpose purpose = Purpose.rent}) =>
+        ShareListing(id: id, slug: id, title: 'Home $id', purpose: purpose, type: type, beds: 2, baths: 1, priceKES: price, area: area, lat: 0, lng: 0);
+    final source = InMemoryListingSource([
+      flat,
+      home('near'),
+      home('westlands-flat', area: 'westlands'),
+      home('for-sale', purpose: Purpose.sale, price: 9000000),
+      home('mansion', price: 400000),
+      home('ruaka-hostel', area: 'ruaka', type: 'hostel', price: 8000),
+    ]);
+    final r = await shareHandler(tenant, source)(shelf.Request('GET', Uri.parse('https://x/listing/${flat.slug}')));
+    final html = await r.readAsString();
+    final similar = RegExp(r'<section class="similar">(.*?)</section>', dotAll: true).firstMatch(html)!.group(1)!;
+    expect(similar, contains('<h2>Similar homes</h2>'));
+    expect(RegExp(r'href="/listing/([^"]+)"').allMatches(similar).map((m) => m.group(1)), ['near', 'westlands-flat']);
+
+    // Nothing close: no section at all.
+    final alone = await shareHandler(tenant, InMemoryListingSource(const [flat]))(shelf.Request('GET', Uri.parse('https://x/listing/${flat.slug}')));
+    expect(await alone.readAsString(), isNot(contains('Similar homes')));
+  });
+
   test('unknown area is a 404', () async {
     expect((await get('/area/atlantis')).statusCode, 404);
   });
