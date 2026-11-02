@@ -61,7 +61,8 @@ jobs:
           has() { [ "$all" = 1 ] || printf '%s\n' "$files" | grep -qE "$1"; }
           out() { if has "$2"; then echo "$1=true"; else echo "$1=false"; fi >> "$GITHUB_OUTPUT"; }
           shared='^(packages/core|packages/tokens|tenants|brand|fonts|tools/tenant-cli)/|^pubspec\.'
-          out tooling '^(tenants|brand|fonts|tools/tenant-cli)/'
+          # tooling also runs the no-tenant-in-code scan over the product code.
+          out tooling '^(tenants|brand|fonts|tools/tenant-cli)/|^(apps/[^/]+/(lib|bin)|packages/[^/]+/lib|functions/src)/'
           out functions '^functions/|^(firestore|storage)\.rules$'
           out dart "$shared|^(packages|apps)/|^analysis_options\.yaml$|^functions/src/model/transitions\.json$"
           builds='^(tenants|brand|tools/tenant-cli)/|^pubspec\.'
