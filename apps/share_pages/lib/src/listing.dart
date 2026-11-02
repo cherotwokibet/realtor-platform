@@ -82,6 +82,37 @@ class ShareAgent {
 /// An approved review (P6-s03): stars, what they wrote, a first name.
 typedef ShareReview = ({int rating, String? comment, String? name, DateTime? at});
 
+/// One unit type in an off-plan project (projects/{slug}.units).
+typedef ProjectUnit = ({String type, int beds, int? sizeSqm, int fromKES, int available});
+
+/// One payment stage; a project's stages add up to 100%.
+typedef PaymentStage = ({String stage, int percent});
+
+/// A published off-plan project (P5-s06), written by managers through the
+/// saveProject callable.
+class ShareProject {
+  const ShareProject({
+    required this.slug,
+    required this.name,
+    required this.developer,
+    required this.area,
+    required this.summary,
+    required this.completion,
+    required this.units,
+    required this.paymentPlan,
+    required this.fromKES,
+    this.updatedAt,
+  });
+  final String slug, name, developer, area, summary;
+
+  /// Expected handover, `YYYY-MM`.
+  final String completion;
+  final List<ProjectUnit> units;
+  final List<PaymentStage> paymentPlan;
+  final int fromKES;
+  final DateTime? updatedAt;
+}
+
 /// One URL in sitemap.xml.
 typedef SitemapEntry = ({String path, DateTime? lastModified, Purpose? purpose});
 
@@ -115,14 +146,30 @@ abstract interface class ListingSource {
   /// Every area, by name.
   Future<List<ShareArea>> areas();
 
-  /// Every live listing, area and active agent.
+  /// A published off-plan project, else null.
+  Future<ShareProject?> project(String slug);
+
+  /// Published off-plan projects, cheapest first.
+  Future<List<ShareProject>> publishedProjects();
+
+  /// Every live listing, area, active agent and published project.
   Future<List<SitemapEntry>> sitemapEntries();
 }
 
 class InMemoryListingSource implements ListingSource {
-  InMemoryListingSource(this.listings, {List<ShareArea> areas = const [], this.agents = const [], this.agentReviews = const {}})
+  InMemoryListingSource(this.listings,
+      {List<ShareArea> areas = const [], this.agents = const [], this.agentReviews = const {}, this.projects = const []})
       : _areas = areas;
   final List<ShareListing> listings;
+
+  /// Published projects.
+  final List<ShareProject> projects;
+
+  @override
+  Future<ShareProject?> project(String slug) async => projects.where((p) => p.slug == slug).firstOrNull;
+
+  @override
+  Future<List<ShareProject>> publishedProjects() async => [...projects]..sort((a, b) => a.fromKES.compareTo(b.fromKES));
 
   /// Agent id -> approved reviews, newest first.
   final Map<String, List<ShareReview>> agentReviews;
@@ -186,11 +233,13 @@ class InMemoryListingSource implements ListingSource {
         for (final a in _areas) (path: '/area/${a.slug}', lastModified: null, purpose: null),
         for (final a in agents) (path: '/agent/${a.id}', lastModified: null, purpose: null),
         for (final l in listings) (path: '/listing/${l.slug}', lastModified: l.updatedAt, purpose: l.purpose),
+        for (final p in projects) (path: '/project/${p.slug}', lastModified: p.updatedAt, purpose: null),
       ];
 }
 
 /// Hides what the tenant has switched off: listings for a purpose whose
-/// feature is off are not found, not listed, and not in the sitemap.
+/// feature is off, and off-plan projects when `offPlan` is off, are not
+/// found, not listed, and not in the sitemap.
 class FeatureFilteredSource implements ListingSource {
   FeatureFilteredSource(this._inner, this._features);
   final ListingSource _inner;
@@ -203,6 +252,14 @@ class FeatureFilteredSource implements ListingSource {
     final l = await _inner.bySlug(slug);
     return l != null && _features.allowsPurpose(l.purpose) ? l : null;
   }
+
+  bool get _offPlan => _features.isOn(Feature.offPlan);
+
+  @override
+  Future<ShareProject?> project(String slug) async => _offPlan ? _inner.project(slug) : null;
+
+  @override
+  Future<List<ShareProject>> publishedProjects() async => _offPlan ? _inner.publishedProjects() : const [];
 
   @override
   Future<ShareArea?> area(String slug) => _inner.area(slug);
@@ -235,6 +292,6 @@ class FeatureFilteredSource implements ListingSource {
   @override
   Future<List<SitemapEntry>> sitemapEntries() async => [
         for (final e in await _inner.sitemapEntries())
-          if (e.purpose == null || _features.allowsPurpose(e.purpose!)) e
+          if ((e.purpose == null || _features.allowsPurpose(e.purpose!)) && (_offPlan || !e.path.startsWith('/project/'))) e
       ];
 }

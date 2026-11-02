@@ -158,6 +158,26 @@ class FirestoreListingSource implements ListingSource {
     return [for (final d in docs) listingFromDocument(d, _now())];
   }
 
+  static Map<String, Object?> _published() =>
+      {'fieldFilter': {'field': {'fieldPath': 'published'}, 'op': 'EQUAL', 'value': {'booleanValue': true}}};
+
+  @override
+  Future<ShareProject?> project(String slug) async {
+    final doc = await _get('projects/${Uri.encodeComponent(slug)}');
+    if (doc == null || _decodeFields(_map(doc['fields']))['published'] != true) return null;
+    return projectFromDocument(doc);
+  }
+
+  @override
+  Future<List<ShareProject>> publishedProjects() async {
+    final docs = await _query({
+      'from': [{'collectionId': 'projects'}],
+      'where': _published(),
+      'limit': 200,
+    });
+    return [for (final d in docs) projectFromDocument(d)]..sort((a, b) => a.fromKES.compareTo(b.fromKES));
+  }
+
   @override
   Future<List<ShareArea>> areas() async {
     final docs = await _query({
@@ -186,11 +206,19 @@ class FirestoreListingSource implements ListingSource {
       'where': {'fieldFilter': {'field': {'fieldPath': 'active'}, 'op': 'EQUAL', 'value': {'booleanValue': true}}},
       'limit': 1000,
     });
+    final projects = await _query({
+      'select': {'fields': [{'fieldPath': 'updatedAt'}]},
+      'from': [{'collectionId': 'projects'}],
+      'where': _published(),
+      'limit': 1000,
+    });
     String id(Map<String, Object?> doc) => (doc['name']! as String).split('/').last;
     return [
       for (final a in areas) (path: '/area/${id(a)}', lastModified: null, purpose: null),
       for (final a in agents) (path: '/agent/${id(a)}', lastModified: null, purpose: null),
       for (final l in listings) _listingEntry(_decodeFields(_map(l['fields']))),
+      for (final p in projects)
+        (path: '/project/${id(p)}', lastModified: _decodeFields(_map(p['fields'] ?? const {}))['updatedAt'] as DateTime?, purpose: null),
     ];
   }
 
@@ -223,6 +251,35 @@ ShareArea areaFromDocument(Map<String, Object?> doc) {
     lat: (centre['lat']! as num).toDouble(),
     lng: (centre['lng']! as num).toDouble(),
     medianRentKES: stats['medianRentKES'] as int?,
+  );
+}
+
+/// Firestore REST document (projects/{slug}) -> ShareProject. Whether it is
+/// published is checked by the caller.
+ShareProject projectFromDocument(Map<String, Object?> doc) {
+  final f = _decodeFields(_map(doc['fields']));
+  return ShareProject(
+    slug: (doc['name']! as String).split('/').last,
+    name: f['name']! as String,
+    developer: f['developer']! as String,
+    area: f['area']! as String,
+    summary: (f['summary'] as String?) ?? '',
+    completion: f['completion']! as String,
+    units: [
+      for (final u in (f['units'] as List<Object?>?) ?? const [])
+        (
+          type: _map(u)['type']! as String,
+          beds: _map(u)['beds']! as int,
+          sizeSqm: _map(u)['sizeSqm'] as int?,
+          fromKES: _map(u)['fromKES']! as int,
+          available: _map(u)['available']! as int,
+        ),
+    ],
+    paymentPlan: [
+      for (final s in (f['paymentPlan'] as List<Object?>?) ?? const []) (stage: _map(s)['stage']! as String, percent: _map(s)['percent']! as int),
+    ],
+    fromKES: f['fromKES']! as int,
+    updatedAt: f['updatedAt'] is DateTime ? f['updatedAt'] as DateTime : null,
   );
 }
 
