@@ -8,6 +8,7 @@ import 'package:realtor_core/realtor_core.dart';
 import 'account/account_screen.dart';
 import 'home_screen.dart';
 import 'listing/listing_screen.dart';
+import 'places/off_plan_screens.dart';
 import 'places/place_screens.dart';
 import 'providers.dart';
 import 'saved/saved_screen.dart';
@@ -32,6 +33,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 '/' => const HomeScreen(),
                 '/saved' => const SavedScreen(),
                 '/account' => const AccountScreen(),
+                '/off-plan' => const OffPlanScreen(),
                 _ => PlaceholderScreen(title: s.label),
               },
             ),
@@ -58,6 +60,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/area/:slug',
         builder: (context, state) => AreaScreen(slug: state.pathParameters['slug']!),
+      ),
+      // Only when offPlan is on: redirectForDisabled sends /off-plan/... home otherwise.
+      GoRoute(
+        path: '/off-plan/:slug',
+        builder: (context, state) => ProjectScreen(slug: state.pathParameters['slug']!),
       ),
       GoRoute(
         path: '/agent/:id',

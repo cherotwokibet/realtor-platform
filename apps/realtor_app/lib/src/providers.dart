@@ -27,6 +27,11 @@ final areaProvider = FutureProvider.family<AreaGuide?, String>((ref, slug) => re
 
 final agentProvider = FutureProvider.family<AgentProfile?, String>((ref, id) => ref.watch(listingRepositoryProvider).agent(id));
 
+/// Published off-plan projects, cheapest first (P5-s06).
+final projectsProvider = FutureProvider<List<OffPlanProject>>((ref) => ref.watch(listingRepositoryProvider).projects());
+
+final projectProvider = FutureProvider.family<OffPlanProject?, String>((ref, slug) => ref.watch(listingRepositoryProvider).project(slug));
+
 /// Live listings in an area (`area`) or by an agent (`agent`), newest first.
 final liveListingsProvider = FutureProvider.family<List<ListingSummary>, ({String? area, String? agent})>(
   (ref, q) => ref.watch(listingRepositoryProvider).live(area: q.area, agentId: q.agent),

@@ -23,6 +23,9 @@ class OffPlanUnit {
   Map<String, Object?> toCallable() =>
       {'type': type, 'beds': beds, if (sizeSqm != null) 'sizeSqm': sizeSqm, 'fromKES': fromKES, 'available': available};
 
+  /// `2 bed apartment`, `Studio`, `Plot`.
+  String get label => type == 'studio' || beds == 0 ? '${type[0].toUpperCase()}${type.substring(1)}' : '$beds bed $type';
+
   String? problem() {
     if (!offPlanUnitTypes.contains(type)) return 'Pick a unit type.';
     if (beds < 0 || beds > 10) return 'Bedrooms: 0 to 10.';
@@ -65,6 +68,13 @@ class OffPlanProject {
   final DateTime? updatedAt;
 
   int get planTotal => paymentPlan.fold(0, (sum, s) => sum + s.percent);
+
+  /// `2028-06` -> `June 2028`.
+  String get handoverLabel {
+    final m = _month.firstMatch(completion.trim());
+    if (m == null) return completion;
+    return '${_monthNames[int.parse(completion.trim().substring(5)) - 1]} ${completion.trim().substring(0, 4)}';
+  }
 
   factory OffPlanProject.fromDoc(String slug, Map<String, Object?> d, {DateTime? updatedAt}) => OffPlanProject(
         slug: slug,
@@ -115,3 +125,4 @@ class OffPlanProject {
 }
 
 final _month = RegExp(r'^20\d\d-(0[1-9]|1[0-2])$');
+const _monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

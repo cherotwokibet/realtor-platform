@@ -130,6 +130,25 @@ class FirestoreListingRepository implements ListingRepository {
       ..sort((a, b) => (b.$2 ?? DateTime(0)).compareTo(a.$2 ?? DateTime(0)));
     return [for (final r in rows.take(limit)) r.$1];
   }
+
+  // The rules let the public read published projects only, so every read
+  // asks for published ones.
+  @override
+  Future<List<OffPlanProject>> projects() async {
+    final snap = await _db.collection('projects').where('published', isEqualTo: true).limit(200).get();
+    return [for (final d in snap.docs) OffPlanProject.fromDoc(d.id, d.data())]..sort((a, b) => a.fromKES.compareTo(b.fromKES));
+  }
+
+  @override
+  Future<OffPlanProject?> project(String slug) async {
+    try {
+      final d = await _db.collection('projects').doc(slug).get();
+      final data = d.data();
+      return data == null || data['published'] != true ? null : OffPlanProject.fromDoc(d.id, data);
+    } on FirebaseException {
+      return null; // a draft: the rules hide it from the public
+    }
+  }
 }
 
 /// Calls one callable Function by name with [data]; completes with its answer.

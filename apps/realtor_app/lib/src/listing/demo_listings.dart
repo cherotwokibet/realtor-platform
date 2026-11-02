@@ -55,6 +55,30 @@ class DemoListingRepository implements ListingRepository {
         for (final (i, l) in demoListings.indexed)
           if ((area == null || l.area == area) && (agentId == null || _agents[i % _agents.length].id == agentId)) l,
       ].take(limit).toList();
+
+  late final _projects = [
+    OffPlanProject(
+      slug: 'sample-gardens',
+      name: 'Sample Gardens',
+      developer: 'Demo Developers Ltd',
+      area: demoListings.first.area,
+      summary: 'A demo off-plan project: apartments around a garden, with a gym and backup power.',
+      completion: '2028-06',
+      units: const [
+        OffPlanUnit(type: 'apartment', beds: 1, sizeSqm: 52, fromKES: 4800000, available: 24),
+        OffPlanUnit(type: 'apartment', beds: 2, sizeSqm: 84, fromKES: 7200000, available: 0),
+      ],
+      paymentPlan: const [(stage: 'Deposit on booking', percent: 10), (stage: 'In 12 monthly instalments', percent: 60), (stage: 'On handover', percent: 30)],
+      published: true,
+      fromKES: 4800000,
+    ),
+  ];
+
+  @override
+  Future<List<OffPlanProject>> projects() async => _projects;
+
+  @override
+  Future<OffPlanProject?> project(String slug) async => _projects.where((p) => p.slug == slug).firstOrNull;
 }
 
 /// Keeps leads in memory until the app calls the Functions. Nothing leaves
