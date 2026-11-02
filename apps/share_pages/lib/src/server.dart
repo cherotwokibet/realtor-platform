@@ -14,6 +14,8 @@ import 'home_page.dart';
 import 'lead_api.dart';
 import 'listing.dart';
 import 'listing_page.dart';
+import 'review_page.dart';
+import 'site_page.dart';
 import 'seo.dart';
 
 final _slug = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
@@ -25,20 +27,41 @@ final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 /// `/robots.txt` and the App Links / Universal Links files in `/.well-known/`. Without [leads] there is no enquiry form and WhatsApp
 /// taps are not counted. With [fontsDir] the tenant's bundled fonts are served
 /// at `/fonts/<Family>-<Weight>.ttf`, which the pages' `@font-face` rules use.
-shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? leads, DateTime Function()? now, String? fontsDir}) {
+/// With [brandDir] the header logo is served at [logoPath].
+/// Unless [indexable] (dev and stage), robots.txt turns every crawler away and
+/// each response says noindex, so test copies never show up in search.
+shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
+    {LeadApi? leads, DateTime Function()? now, String? fontsDir, String? brandDir, bool indexable = true}) {
   final clock = now ?? DateTime.now;
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
       {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {
-    final agent = listing.agentId == null || !_docId.hasMatch(listing.agentId!) ? null : await source.agent(listing.agentId!);
+    // "Show free times": ?day=YYYY-MM-DD asks openSlots for that day.
+    final day = req.url.queryParameters['day'];
+    final times = leads != null && day != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(day)
+        ? await leads.openTimes(listingId: listing.id, day: day)
+        : null;
+    final (agent, area) = await (
+      listing.agentId == null || !_docId.hasMatch(listing.agentId!) ? Future<ShareAgent?>.value() : source.agent(listing.agentId!),
+      listing.purpose == Purpose.rent && _slug.hasMatch(listing.area) ? source.area(listing.area) : Future<ShareArea?>.value(),
+    ).wait;
     final q = req.url.queryParameters;
     final enquiry = leads == null ? null : form ?? EnquiryFormState(sent: q['sent'] == '1');
     final viewing = leads == null ? null : viewingForm ?? EnquiryFormState(sent: q['booked'] == '1');
     final r = await renderComponent(
-      ListingPage(tenant: tenant, listing: listing, agent: agent, enquiry: enquiry, viewing: viewing, viewingDays: viewingDays(clock())),
+      ListingPage(
+        tenant: tenant,
+        listing: listing,
+        agent: agent,
+        enquiry: enquiry,
+        viewing: viewing,
+        viewingDays: viewingDays(clock()),
+        areaMedianRentKES: area?.medianRentKES,
+        freeTimes: times == null ? null : (day: day!, times: times),
+      ),
       request: req,
     );
     bool own(EnquiryFormState? f) => f != null && (f.sent || f.values.isNotEmpty);
-    return _html(r, status: status, private: own(enquiry) || own(viewing));
+    return _html(r, status: status, private: own(enquiry) || own(viewing) || times != null);
   }
 
   final router = Router()
@@ -113,6 +136,36 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
       }
       return booked;
     })
+    ..get('/review/<token>', (shelf.Request req, String token) async {
+      if (leads == null || !reviewToken.hasMatch(token)) return _notFound(tenant);
+      final thanks = req.url.queryParameters['sent'] == '1';
+      return _private(await renderComponent(ReviewPage(tenant: tenant, token: token, thanks: thanks), request: req));
+    })
+    ..post('/review/<token>', (shelf.Request req, String token) async {
+      if (leads == null || !reviewToken.hasMatch(token)) return _notFound(tenant);
+      final body = await _formBody(req);
+      if (body == null) return shelf.Response(413, body: 'form too large');
+      final values = {for (final k in const ['rating', 'comment', 'name']) k: body[k] ?? ''};
+      Future<shelf.Response> again(ReviewFormState f, int status) async =>
+          _private(await renderComponent(ReviewPage(tenant: tenant, token: token, state: f), request: req), status: status);
+      final answers = parseReview(body);
+      if (answers == null) return again(ReviewFormState(values: values, error: 'Pick from 1 to 5 stars.'), 400);
+      try {
+        await leads.submitReview(token: token, rating: answers.rating, comment: answers.comment, name: answers.name);
+      } on LeadApiException catch (e) {
+        stderr.writeln('submitReview failed: ${e.status}');
+        return switch (e.status) {
+          'NOT_FOUND' => again(const ReviewFormState(closed: 'This review link is not valid.'), 404),
+          'ALREADY_EXISTS' => again(const ReviewFormState(closed: 'A review was already left with this link. Thank you.'), 409),
+          'FAILED_PRECONDITION' => again(const ReviewFormState(closed: 'This review link has expired.'), 410),
+          _ => again(ReviewFormState(values: values, error: 'Sorry, we could not send that just now. Please try again.'), 503),
+        };
+      } on Exception catch (e) {
+        stderr.writeln('submitReview failed: ${e.runtimeType}');
+        return again(ReviewFormState(values: values, error: 'Sorry, we could not send that just now. Please try again.'), 503);
+      }
+      return shelf.Response.seeOther('/review/$token?sent=1', headers: {'cache-control': 'no-store'});
+    })
     ..get('/go/whatsapp/<slug>', (shelf.Request req, String slug) async {
       if (!_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);
       final listing = await source.bySlug(slug);
@@ -130,9 +183,9 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
     })
     ..get('/agent/<id>', (shelf.Request req, String id) async {
       if (!_docId.hasMatch(id)) return _notFound(tenant);
-      final (agent, listings) = await (source.agent(id), source.liveByAgent(id)).wait;
+      final (agent, listings, reviews) = await (source.agent(id), source.liveByAgent(id), source.reviews(id)).wait;
       if (agent == null) return _notFound(tenant);
-      return _html(await renderComponent(AgentPage(tenant: tenant, agent: agent, listings: listings), request: req));
+      return _html(await renderComponent(AgentPage(tenant: tenant, agent: agent, listings: listings, reviews: reviews), request: req));
     })
     ..get('/area/<slug>', (shelf.Request req, String slug) async {
       if (!_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);
@@ -151,11 +204,42 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource source, {LeadApi? 
     ..get('/.well-known/assetlinks.json', (shelf.Request _) => _json(assetLinks(tenant)))
     ..get('/.well-known/apple-app-site-association', (shelf.Request _) => _json(appleAppSiteAssociation(tenant)))
     ..get('/robots.txt', (shelf.Request _) => shelf.Response.ok(
-          'User-agent: *\nAllow: /\nDisallow: /go/\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n',
+          indexable
+              ? 'User-agent: *\nAllow: /\nDisallow: /go/\nDisallow: /review/\nSitemap: https://${tenant.shareDomain}/sitemap.xml\n'
+              : 'User-agent: *\nDisallow: /\n',
           headers: {'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400'},
         ));
   if (fontsDir != null) router.get('/fonts/<file>', (shelf.Request _, String file) => serveFont(tenant, fontsDir, file));
-  return (shelf.Request req) async => _secured(await router.call(req));
+  if (brandDir != null) router.get(logoPath, (shelf.Request _) => serveLogo(tenant, brandDir));
+  // Last: one-segment paths left over may be site pages (/about, /privacy...).
+  router.get('/<page>', (shelf.Request req, String page) async {
+    if (!sitePageSlugs.contains(page)) return _notFound(tenant);
+    final found = await source.page(page);
+    if (found == null) return _notFound(tenant);
+    return _html(await renderComponent(
+      SitePageView(tenant: tenant, page: (slug: page, title: found.title, body: found.body, updatedAt: found.updatedAt)),
+      request: req,
+    ));
+  });
+  // Footer links to published site pages, read at most every 5 minutes.
+  DateTime? footerAt;
+  Future<void> refreshFooter() async {
+    final now = clock();
+    if (footerAt != null && now.difference(footerAt!) < const Duration(minutes: 5)) return;
+    footerAt = now;
+    try {
+      final pages = await source.publishedPages();
+      footerPages = [for (final s in sitePageSlugs) ...pages.where((p) => p.slug == s)];
+    } on Exception {
+      // Keep the last list; pages still open without the footer.
+    }
+  }
+
+  return (shelf.Request req) async {
+    await refreshFooter();
+    final r = _secured(await router.call(req));
+    return indexable ? r : r.change(headers: {'x-robots-tag': 'noindex'});
+  };
 }
 
 /// Shown when the rate limits in Functions refuse a form (P6-s05).
@@ -178,6 +262,10 @@ shelf.Response _secured(shelf.Response r) => r.change(headers: {
       for (final e in securityHeaders.entries)
         if (!r.headers.containsKey(e.key)) e.key: e.value,
     });
+
+/// Review pages: never cached, never indexed (the link is personal).
+shelf.Response _private(ResponseLike r, {int? status}) =>
+    _html(r, status: status, private: true).change(headers: {'x-robots-tag': 'noindex'});
 
 /// [private] pages show a visitor's own form input or thank-you note, so
 /// the CDN must not keep them.

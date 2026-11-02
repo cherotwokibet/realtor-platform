@@ -210,6 +210,16 @@ resource "google_project_iam_member" "functions_agents" {
 
 # Staff admin (P5): its own web app and Hosting site. Hosting serves the
 # linked app's config at /__/firebase/init.json, so no config is committed.
+# The customer web app's own Hosting site, linked so /__/firebase/init.json
+# serves this web app's config (firebase.json target "app"). The app's
+# public domain (app.<domain>) is attached by hand later (DNS).
+resource "google_firebase_hosting_site" "app" {
+  provider = google-beta
+  project  = google_project.this.project_id
+  site_id  = "${trimsuffix(substr(local.project_id, 0, 26), "-")}-app"
+  app_id   = google_firebase_web_app.app.app_id
+}
+
 resource "google_firebase_web_app" "admin" {
   provider     = google-beta
   project      = google_project.this.project_id
@@ -237,12 +247,22 @@ resource "google_identity_platform_config" "auth" {
     "${local.project_id}.web.app",
     "${google_firebase_hosting_site.admin.site_id}.web.app",
     "${google_firebase_hosting_site.admin.site_id}.firebaseapp.com",
+    # Customers sign in on the web app for saved-search alerts (D18).
+    "${google_firebase_hosting_site.app.site_id}.web.app",
+    "${google_firebase_hosting_site.app.site_id}.firebaseapp.com",
   ]
   sign_in {
     allow_duplicate_emails = false
+    # Staff sign in with a password (D14); customers with an emailed link
+    # (D18). password_required = false turns the link on; passwords still work.
     email {
       enabled           = true
-      password_required = true
+      password_required = false
+    }
+    # Off, but stated: the API always returns this block, so leaving it out
+    # shows up as a change on every plan.
+    phone_number {
+      enabled = false
     }
   }
   depends_on = [google_project_service.apis, google_firebase_project.this]
@@ -334,6 +354,14 @@ resource "google_cloud_run_v2_service" "share_pages" {
         name  = "FIRESTORE_PROJECT"
         value = google_project.this.project_id
       }
+      # Dev and stage hold demo data; keep them out of search results.
+      dynamic "env" {
+        for_each = var.env == "prod" ? [] : ["1"]
+        content {
+          name  = "NOINDEX"
+          value = env.value
+        }
+      }
       resources {
         limits   = { cpu = "1", memory = "256Mi" }
         cpu_idle = true
@@ -356,4 +384,66 @@ resource "google_cloud_run_v2_service_iam_member" "share_pages_public" {
   name     = google_cloud_run_v2_service.share_pages[0].name
   role     = "roles/run.invoker"
   member   = "allUsers"
+}
+
+# Video transcoding (D15): a Cloud Run job with Debian's ffmpeg, started per
+# upload by the onListingVideo Function. Its account may only touch the media
+# bucket and Firestore. The image goes in the same Artifact Registry repo.
+resource "google_service_account" "transcoder" {
+  project      = google_project.this.project_id
+  account_id   = "transcode-video"
+  display_name = "Video transcoder (media bucket, Firestore)"
+  depends_on   = [google_project_service.apis]
+}
+
+resource "google_storage_bucket_iam_member" "transcoder_media" {
+  bucket = google_storage_bucket.media.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.transcoder.email}"
+}
+
+resource "google_project_iam_member" "transcoder_firestore" {
+  project = google_project.this.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.transcoder.email}"
+}
+
+resource "google_cloud_run_v2_job" "transcode" {
+  count               = var.transcode_image == null ? 0 : 1
+  project             = google_project.this.project_id
+  name                = "transcode-video"
+  location            = local.region
+  labels              = local.labels
+  deletion_protection = var.env == "prod"
+
+  template {
+    task_count = 1
+    template {
+      service_account = google_service_account.transcoder.email
+      timeout         = "1800s"
+      # The raw upload is gone after the first try, so a retry can't help.
+      max_retries = 0
+      containers {
+        image = var.transcode_image
+        env {
+          name  = "GCLOUD_PROJECT"
+          value = google_project.this.project_id
+        }
+        resources {
+          limits = { cpu = "2", memory = "2Gi" }
+        }
+      }
+    }
+  }
+  depends_on = [google_storage_bucket_iam_member.transcoder_media, google_project_iam_member.transcoder_firestore]
+}
+
+# The Functions' account may start executions with the OBJECT override.
+resource "google_cloud_run_v2_job_iam_member" "functions_start_transcode" {
+  count    = var.transcode_image == null ? 0 : 1
+  project  = google_project.this.project_id
+  location = local.region
+  name     = google_cloud_run_v2_job.transcode[0].name
+  role     = "roles/run.jobsExecutorWithOverrides"
+  member   = local.compute_sa
 }

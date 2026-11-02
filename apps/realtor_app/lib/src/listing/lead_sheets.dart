@@ -39,10 +39,30 @@ class _LeadSheetState extends ConsumerState<_LeadSheet> {
   late final _days = viewingDays(ref.read(clockProvider)());
   late String _day = _days.first.value;
   String _time = '10:00';
+
+  /// Free times on [_day]; null while loading or when unknown (all shown).
+  List<String>? _open;
   bool _consent = false;
   bool _sending = false;
   Map<String, String> _errors = const {};
   String? _notice;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.viewing) _loadTimes();
+  }
+
+  Future<void> _loadTimes() async {
+    final day = _day;
+    setState(() => _open = null);
+    final open = await ref.read(leadRepositoryProvider).openTimes(listingId: widget.listing.id, day: day);
+    if (!mounted || day != _day) return;
+    setState(() {
+      _open = open;
+      if (open != null && open.isNotEmpty && !open.contains(_time)) _time = open.first;
+    });
+  }
 
   @override
   void dispose() {
@@ -124,19 +144,24 @@ class _LeadSheetState extends ConsumerState<_LeadSheet> {
                   initialValue: _day,
                   decoration: const InputDecoration(labelText: 'Day'),
                   items: [for (final d in _days) DropdownMenuItem(value: d.value, child: Text(d.label))],
-                  onChanged: (v) => setState(() => _day = v!),
+                  onChanged: (v) {
+                    setState(() => _day = v!);
+                    _loadTimes();
+                  },
                 ),
               ),
               SizedBox(width: b.spacing.md),
               Expanded(
-                child: DropdownButtonFormField<String>(
-                  key: const Key('time'),
-                  isExpanded: true,
-                  initialValue: _time,
-                  decoration: const InputDecoration(labelText: 'Time'),
-                  items: [for (final t in viewingTimes) DropdownMenuItem(value: t, child: Text(t))],
-                  onChanged: (v) => setState(() => _time = v!),
-                ),
+                child: _open != null && _open!.isEmpty
+                    ? Text('No free times this day. Please pick another.', key: const Key('no-times'), style: text.bodyMedium)
+                    : DropdownButtonFormField<String>(
+                        key: ValueKey(('time', _day, _open?.length)),
+                        isExpanded: true,
+                        initialValue: _time,
+                        decoration: const InputDecoration(labelText: 'Time'),
+                        items: [for (final t in _open ?? viewingTimes) DropdownMenuItem(value: t, child: Text(t))],
+                        onChanged: (v) => setState(() => _time = v!),
+                      ),
               ),
             ]),
           ],
@@ -183,7 +208,7 @@ class _LeadSheetState extends ConsumerState<_LeadSheet> {
           ),
           SizedBox(height: b.spacing.md),
           FilledButton(
-            onPressed: _sending ? null : _submit,
+            onPressed: _sending || (widget.viewing && _open != null && _open!.isEmpty) ? null : _submit,
             child: Text(_sending ? 'Sending…' : (widget.viewing ? 'Request viewing' : 'Send')),
           ),
         ],

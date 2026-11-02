@@ -1,7 +1,7 @@
 // Android product flavors + flavor-only assets, one flavor per tenant, so
 // several realtors' apps build from one checkout and install side by side.
 // The app reads `appFlavor` at start-up and loads assets/flavors/<flavor>/.
-// iOS schemes and firebase_options follow once the Firebase projects exist.
+// Firebase settings per flavor: `tenant firebase-config <id> <env> --flavor`. iOS schemes follow.
 
 /** acme-realty -> acmeRealty (a valid Gradle/Xcode flavor name). */
 export function flavorName(id: string): string {

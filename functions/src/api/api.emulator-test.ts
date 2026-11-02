@@ -9,10 +9,18 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
-import { confirmListing, expireListings, moderateListing, submitListing } from './listings';
-import { bookViewing } from './viewings';
+import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateListing, submitListing } from './listings';
+import { bookViewing, openSlots, rescheduleViewing, updateViewingStatus } from './viewings';
+import { addAgentBlock, removeAgentBlock } from './availability';
+import { saveAgent } from './agents';
+import { monthlyReport } from './reports';
+import { MIN_RENTALS, refreshAreaStats, saveArea } from './areas';
+import { moderateReview, submitReview } from './reviews';
+import { sweepSavedSearches } from './alerts';
+import { savePage } from './pages';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
+import { updateAgentResponseTimes } from './response';
 import { dataRequest } from './privacy';
 import { bootstrapOwner, setStaffRole, type StaffAuth } from './staff';
 
@@ -371,7 +379,7 @@ describe('retention (D12)', () => {
   });
 
   test('does nothing while everything is within retention', async () => {
-    assert.deepEqual(await purgeExpired(db, now), { leads: 0, viewings: 0 });
+    assert.deepEqual(await purgeExpired(db, now), { leads: 0, viewings: 0, blocks: 0 });
   });
 });
 
@@ -445,13 +453,13 @@ describe('data requests (DPA 2019, P6-s04)', () => {
     await aminaAsked();
     const before = (await db.collection('leads').count().get()).data().count;
     const r = await dataRequest(db, manager, { kind: 'delete', phone: amina.phone }, now);
-    assert.deepEqual(r, { kind: 'delete', deleted: { leads: 2, viewings: 1 } });
+    assert.deepEqual(r, { kind: 'delete', deleted: { leads: 2, viewings: 1, reviews: 0 } });
     const r2 = await dataRequest(db, manager, { kind: 'delete', email: 'amina@example.com' }, now);
-    assert.deepEqual(r2, { kind: 'delete', deleted: { leads: 1, viewings: 0 } });
+    assert.deepEqual(r2, { kind: 'delete', deleted: { leads: 1, viewings: 0, reviews: 0 } });
     assert.equal((await db.collection('leads').count().get()).data().count, before - 3);
     assert.equal((await db.collection('leads').where('contact.phone', '==', '+254700000902').get()).size, 1);
     const entry = (await db.collection('audit').where('action', '==', 'privacy.delete').get()).docs.map((d) => d.data().target.label);
-    assert.deepEqual(entry.sort(), ['1 leads, 0 viewings', '2 leads, 1 viewings']);
+    assert.deepEqual(entry.sort(), ['1 leads, 0 viewings, 0 reviews', '2 leads, 1 viewings, 0 reviews']);
   });
 
   test('owners and managers only; needs a phone or an email', async () => {
@@ -459,5 +467,356 @@ describe('data requests (DPA 2019, P6-s04)', () => {
     await rejectsWith(dataRequest(db, visitor, { kind: 'delete', phone: amina.phone }, now), 'permission-denied');
     await rejectsWith(dataRequest(db, manager, { kind: 'delete' }, now), 'invalid-argument');
     await rejectsWith(dataRequest(db, manager, { kind: 'export', phone: '0712345678' }, now), 'invalid-argument');
+  });
+});
+
+describe('response times (P5-s03)', () => {
+  const min = 60_000;
+  const ask = (i: number) =>
+    createLead(db, { listingId: 'listing-001', channel: 'form', contact: { phone: `+2547000011${String(i).padStart(2, '0')}` }, consent: true }, now);
+
+  test("a lead's first move from new records the reply time; later moves keep it", async () => {
+    const { leadId } = await ask(0);
+    await updateLeadStage(db, wanjiku, { leadId, stage: 'contacted' }, new Date(now.getTime() + 42 * min));
+    await updateLeadStage(db, wanjiku, { leadId, stage: 'viewing' }, new Date(now.getTime() + 300 * min));
+    const l = (await db.collection('leads').doc(leadId).get()).data()!;
+    assert.equal(l.responseMins, 42);
+    assert.equal(l.firstResponseAt.toDate().getTime(), now.getTime() + 42 * min);
+  });
+
+  test("each agent's typical reply is the median of recent replies, once there are 3", async () => {
+    const replies = [5, 30, 600];
+    for (const [i, m] of replies.entries()) {
+      const { leadId } = await ask(i + 1);
+      await updateLeadStage(db, wanjiku, { leadId, stage: i === 2 ? 'lost' : 'contacted' }, new Date(now.getTime() + m * min));
+    }
+    const day = new Date(now.getTime() + 86_400_000);
+    let out = await updateAgentResponseTimes(db, day);
+    assert.equal(out['agent-wanjiku'], 30);
+    assert.equal((await db.collection('agents').doc('agent-wanjiku').get()).get('responseMins'), 30);
+    assert.equal(out['agent-otieno'], null, 'no replies yet: nothing said');
+
+    // Ninety days on, those replies are too old to count.
+    out = await updateAgentResponseTimes(db, new Date(now.getTime() + 91 * 86_400_000));
+    assert.equal(out['agent-wanjiku'], null);
+  });
+});
+
+describe('featuring and CSV import (P5-s02)', () => {
+  const day = 86_400_000;
+
+  test('a manager features a live listing for some days; it lapses overnight; 0 stops it', async () => {
+    const { listingId } = await submitListing(db, wanjiku, newListing, now);
+    await rejectsWith(featureListing(db, manager, { listingId, days: 7 }, now), 'failed-precondition'); // still pending
+    await moderateListing(db, manager, { listingId, action: 'approve' }, now);
+    await rejectsWith(featureListing(db, wanjiku, { listingId, days: 7 }, now), 'permission-denied');
+    await rejectsWith(featureListing(db, manager, { listingId, days: 91 }, now), 'invalid-argument');
+
+    const r = await featureListing(db, manager, { listingId, days: 7 }, now);
+    const ref = db.collection('listings').doc(listingId);
+    assert.equal((await ref.get()).get('featuredUntil').toDate().toISOString(), r.featuredUntil);
+    const entry = (await db.collection('audit').where('action', '==', 'listing.feature').get()).docs[0].data();
+    assert.deepEqual([entry.from, entry.to], ['none', new Date(now.getTime() + 7 * day).toISOString().slice(0, 10)]);
+
+    await clearLapsedFeatures(db, new Date(now.getTime() + 6 * day)); // seeded features may lapse; this one is in date
+    assert.notEqual((await ref.get()).get('featuredUntil'), null);
+    assert.ok((await clearLapsedFeatures(db, new Date(now.getTime() + 8 * day))) >= 1);
+    assert.equal((await ref.get()).get('featuredUntil'), null);
+
+    await featureListing(db, manager, { listingId, days: 3 }, now);
+    assert.deepEqual(await featureListing(db, manager, { listingId, days: 0 }, now), { featuredUntil: null });
+  });
+
+  test('import makes pending listings row by row; bad rows are reported, the rest go in', async () => {
+    const before = (await db.collection('listings').count().get()).data().count;
+    const r = await importListings(db, manager, {
+      rows: [
+        { ...newListing, agentId: 'agent-otieno', title: 'Bedsitter, Kilimani', type: 'bedsitter', beds: 0, priceKES: 15000 },
+        { ...newListing, agentId: 'agent-ghost' },
+        { ...newListing, agentId: 'agent-wanjiku', priceKES: 70000.5 },
+        { ...newListing, agentId: 'agent-wanjiku', listingId: 'listing-001' },
+        { ...newListing, agentId: 'agent-wanjiku', title: '3 bedroom house, Kilimani', type: 'bungalow', beds: 3 },
+      ],
+    }, now);
+    assert.deepEqual(r.created.map((c) => c.row), [1, 5]);
+    assert.deepEqual(r.failed.map((f) => f.row), [2, 3, 4]);
+    assert.match(r.failed[0].error, /no agent "agent-ghost"/);
+    assert.match(r.failed[1].error, /priceKES/);
+    assert.equal((await db.collection('listings').count().get()).data().count, before + 2);
+    const made = (await db.collection('listings').doc(r.created[0].listingId).get()).data()!;
+    assert.deepEqual([made.status, made.agentId, made.type], ['pending', 'agent-otieno', 'bedsitter']);
+
+    await rejectsWith(importListings(db, wanjiku, { rows: [newListing] }, now), 'permission-denied');
+    await rejectsWith(importListings(db, manager, { rows: [] }, now), 'invalid-argument');
+  });
+});
+
+describe('viewing status (P5-s05)', () => {
+  const slot = '2026-10-26T10:30:00+03:00';
+  const after = new Date('2026-10-26T09:00:00Z'); // 12:00 Nairobi, after the 10:30 viewing
+
+  test('the agent confirms, then marks done after the time; the audit names the listing and time, not the client', async () => {
+    const { viewingId } = await bookViewing(db, { listingId: 'listing-001', slot, client: { name: 'Amina', phone: '+254700001201' }, consent: true }, now);
+    await rejectsWith(updateViewingStatus(db, otieno, { viewingId, status: 'confirmed' }, now), 'permission-denied');
+    await rejectsWith(updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, now), 'failed-precondition'); // not confirmed yet
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'confirmed' }, now);
+    await rejectsWith(updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, now), 'failed-precondition'); // before 10:30
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'no-show' }, after);
+    assert.equal((await db.collection('viewings').doc(viewingId).get()).get('status'), 'no-show');
+    await rejectsWith(updateViewingStatus(db, manager, { viewingId, status: 'cancelled' }, after), 'failed-precondition'); // final
+
+    const log = (await db.collection('audit').where('action', '==', 'viewing.status').get()).docs.map((d) => d.data());
+    assert.deepEqual(log.map((e) => `${e.from}->${e.to}`).sort(), ['confirmed->no-show', 'requested->confirmed']);
+    assert.match(log[0].target.label, /^Viewing of .+, 26 Oct,? 10:30$/);
+    assert.ok(!JSON.stringify(log).includes('Amina') && !JSON.stringify(log).includes('700001201'));
+  });
+
+  test('a cancelled slot can be booked again', async () => {
+    const client = { name: 'Juma', phone: '+254700001202' };
+    const { viewingId } = await bookViewing(db, { listingId: 'listing-001', slot, client, consent: true }, now);
+    await updateViewingStatus(db, manager, { viewingId, status: 'cancelled' }, now);
+    const again = await bookViewing(db, { listingId: 'listing-001', slot, client: { name: 'Wairimu', phone: '+254700001203' }, consent: true }, now);
+    assert.equal(again.viewingId, viewingId);
+    assert.equal((await db.collection('viewings').doc(viewingId).get()).get('status'), 'requested');
+  });
+
+  test('the agent moves a viewing to an agreed time: a confirmed one there, the old one cancelled; clashes refused', async () => {
+    const client = { name: 'Achieng', phone: '+254700001204' };
+    const first = await bookViewing(db, { listingId: 'listing-001', slot, client, consent: true }, now);
+    const other = await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-27T11:00:00+03:00', client: { name: 'Otieno', phone: '+254700001205' }, consent: true }, now);
+    const to = '2026-10-27T15:00:00+03:00';
+
+    await rejectsWith(rescheduleViewing(db, otieno, { viewingId: first.viewingId, slot: to }, now), 'permission-denied');
+    await rejectsWith(rescheduleViewing(db, wanjiku, { viewingId: first.viewingId, slot: '2026-10-25T15:00:00+03:00' }, now), 'invalid-argument'); // Sunday
+    await rejectsWith(rescheduleViewing(db, wanjiku, { viewingId: first.viewingId, slot: '2026-10-27T11:00:00+03:00' }, now), 'already-exists');
+
+    const { viewingId } = await rescheduleViewing(db, wanjiku, { viewingId: first.viewingId, slot: to }, now);
+    const moved = (await db.collection('viewings').doc(viewingId).get()).data()!;
+    const old = (await db.collection('viewings').doc(first.viewingId).get()).data()!;
+    assert.deepEqual([moved.status, moved.client.name, moved.rescheduledFrom, moved.slot.toDate().toISOString()], ['confirmed', 'Achieng', first.viewingId, '2026-10-27T12:00:00.000Z']);
+    assert.deepEqual([old.status, old.rescheduledTo], ['cancelled', viewingId]);
+    await rejectsWith(rescheduleViewing(db, wanjiku, { viewingId: first.viewingId, slot: '2026-10-28T09:00:00+03:00' }, now), 'failed-precondition'); // cancelled
+
+    const log = (await db.collection('audit').where('action', '==', 'viewing.reschedule').get()).docs.map((d) => d.data());
+    assert.equal(log.length, 1);
+    assert.match(`${log[0].from} -> ${log[0].to}`, /26 Oct,? 10:30 -> 27 Oct,? 15:00/);
+    assert.ok(!JSON.stringify(log).includes('Achieng'));
+    await updateViewingStatus(db, manager, { viewingId: other.viewingId, status: 'cancelled' }, now);
+  });
+});
+
+
+describe('agent time off (P5-s05)', () => {
+  test('an agent blocks out time: no viewing can be booked or moved into it; removing it frees the time', async () => {
+    const block = await addAgentBlock(db, wanjiku, { start: '2026-10-28T08:00:00+03:00', end: '2026-10-28T13:00:00+03:00', note: 'Site visit in Thika' }, now);
+    const client = { name: 'Kamau', phone: '+254700001301' };
+    await rejectsWith(bookViewing(db, { listingId: 'listing-001', slot: '2026-10-28T12:30:00+03:00', client, consent: true }, now), 'already-exists');
+    await rejectsWith(bookViewing(db, { listingId: 'listing-001', slot: '2026-10-28T07:30:00+03:00', client, consent: true }, now), 'invalid-argument'); // before 8:00 anyway
+    const ok = await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-28T13:00:00+03:00', client, consent: true }, now); // ends at 13:00
+    await rejectsWith(rescheduleViewing(db, wanjiku, { viewingId: ok.viewingId, slot: '2026-10-28T09:00:00+03:00' }, now), 'already-exists');
+
+    await rejectsWith(removeAgentBlock(db, otieno, block, now), 'permission-denied');
+    await removeAgentBlock(db, wanjiku, block, now);
+    await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-28T12:30:00+03:00', client: { name: 'Njeri', phone: '+254700001302' }, consent: true }, now);
+
+    const log = (await db.collection('audit').where('action', 'in', ['agent.block', 'agent.unblock']).get()).docs.map((d) => d.data());
+    assert.equal(log.length, 2);
+    assert.ok(!JSON.stringify(log).includes('Thika'), 'the note stays off the audit log');
+  });
+
+  test('managers block for any agent; agents only for themselves; bad ranges refused', async () => {
+    const r = await addAgentBlock(db, manager, { agentId: 'agent-otieno', start: '2026-10-30T00:00:00+03:00', end: '2026-10-31T00:00:00+03:00' }, now);
+    assert.equal((await db.collection('agentBlocks').doc(r.blockId).get()).get('agentId'), 'agent-otieno');
+    const mine = await addAgentBlock(db, wanjiku, { agentId: 'agent-otieno', start: '2026-10-30T00:00:00+03:00', end: '2026-10-30T12:00:00+03:00' }, now);
+    assert.equal((await db.collection('agentBlocks').doc(mine.blockId).get()).get('agentId'), 'agent-wanjiku', 'an agent cannot block for someone else');
+    await rejectsWith(addAgentBlock(db, wanjiku, { start: '2026-10-30T12:00:00+03:00', end: '2026-10-30T08:00:00+03:00' }, now), 'invalid-argument');
+    await rejectsWith(addAgentBlock(db, wanjiku, { start: '2026-10-20T08:00:00+03:00', end: '2026-10-21T08:00:00+03:00' }, now), 'invalid-argument'); // past
+    await rejectsWith(addAgentBlock(db, wanjiku, { start: '2026-10-25T08:00:00+03:00', end: '2026-12-25T08:00:00+03:00' }, now), 'invalid-argument'); // > 31 days
+    await rejectsWith(addAgentBlock(db, manager, { start: '2026-10-30T08:00:00+03:00', end: '2026-10-30T09:00:00+03:00' }, now), 'invalid-argument'); // no agent
+  });
+});
+
+describe('agent profiles (P5-s04)', () => {
+  const profile = { name: 'Mercy Wambui', earbNo: 'EARB/2026/0412', phone: '+254711000111', whatsapp: '+254711000111', languages: ['en', 'sw'], active: true };
+
+  test('managers add an agent (id from the name, a number on a clash) and edit them; agents cannot', async () => {
+    await rejectsWith(saveAgent(db, wanjiku, profile, now), 'permission-denied');
+    const a = await saveAgent(db, manager, profile, now);
+    assert.equal(a.agentId, 'agent-mercy-wambui');
+    const b = await saveAgent(db, manager, { ...profile, phone: '+254711000222', whatsapp: '+254711000222' }, now);
+    assert.equal(b.agentId, 'agent-mercy-wambui-2');
+    const made = (await db.collection('agents').doc(a.agentId).get()).data()!;
+    assert.deepEqual([made.earbNo, made.rating, made.responseMins, made.active], ['EARB/2026/0412', null, null, true]);
+
+    await saveAgent(db, manager, { ...profile, agentId: a.agentId, languages: ['sw'], active: false }, now);
+    const edited = (await db.collection('agents').doc(a.agentId).get()).data()!;
+    assert.deepEqual([edited.languages, edited.active, edited.rating], [['sw'], false, null]);
+    await rejectsWith(saveAgent(db, manager, { ...profile, agentId: 'agent-ghost' }, now), 'not-found');
+    await rejectsWith(saveAgent(db, manager, { ...profile, phone: '0711000111' }, now), 'invalid-argument');
+
+    const log = (await db.collection('audit').where('action', '==', 'agent.save').get()).docs.map((d) => `${d.get('from')}->${d.get('to')}`);
+    assert.deepEqual(log.sort(), ['active->inactive', 'none->active', 'none->active']);
+  });
+});
+
+describe('monthly report (P5-s08)', () => {
+  test('counts the month by channel, stage and status, per agent; managers only; no client details', async () => {
+    const r1 = await createLead(db, { listingId: 'listing-001', channel: 'form', contact: { name: 'Report Client', phone: '+254700001401' }, consent: true }, now);
+    await updateLeadStage(db, wanjiku, { leadId: r1.leadId, stage: 'contacted' }, new Date(now.getTime() + 20 * 60_000));
+    await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-29T10:00:00+03:00', client: { name: 'Report Client', phone: '+254700001401' }, consent: true }, now);
+
+    await rejectsWith(monthlyReport(db, wanjiku, { month: '2026-10' }), 'permission-denied');
+    await rejectsWith(monthlyReport(db, manager, { month: '2026-13' }), 'invalid-argument');
+    const r = await monthlyReport(db, manager, { month: '2026-10' });
+    assert.ok(r.leads.total >= 2);
+    assert.ok(r.leads.byChannel.form >= 1 && r.leads.byChannel.viewing >= 1);
+    assert.ok(r.leads.byStage.contacted >= 1);
+    assert.ok((r.viewings.byStatus.requested ?? 0) >= 1);
+    const w = r.agents.find((a) => a.agentId === 'agent-wanjiku')!;
+    assert.ok(w.leads >= 2 && w.name.length > 0);
+    assert.equal(typeof w.replyMins, 'number');
+    assert.ok(!JSON.stringify(r).includes('Report Client') && !JSON.stringify(r).includes('700001401'));
+    assert.equal((await monthlyReport(db, manager, { month: '2025-01' })).leads.total, 0);
+  });
+});
+
+describe('area guides (P3-s05)', () => {
+  const guide = { name: 'Muthaiga North', county: 'Nairobi', lat: -1.23, lng: 36.84, guide: 'Quiet, leafy, near Runda.', amenities: ['Village Market'] };
+
+  test('managers add and edit an area; agents cannot; stats stay with the nightly job', async () => {
+    await rejectsWith(saveArea(db, wanjiku, guide, now), 'permission-denied');
+    const { slug } = await saveArea(db, manager, guide, now);
+    assert.equal(slug, 'muthaiga-north');
+    await rejectsWith(saveArea(db, manager, guide, now), 'already-exists');
+    await saveArea(db, manager, { ...guide, slug, guide: 'Updated guide.', amenities: [] }, now);
+    const a = (await db.collection('areas').doc(slug).get()).data()!;
+    assert.deepEqual([a.guide, a.amenities, a.stats], ['Updated guide.', [], { medianRentKES: null, listings: 0 }]);
+    await rejectsWith(saveArea(db, manager, { ...guide, slug: 'nowhere' }, now), 'not-found');
+    await rejectsWith(saveArea(db, manager, { ...guide, lat: 51.5, lng: -0.1 }, now), 'invalid-argument');
+  });
+
+  test('nightly stats: live listings per area, median rent once there are enough rentals', async () => {
+    await refreshAreaStats(db);
+    const areas = await db.collection('areas').get();
+    const live = await db.collection('listings').where('status', '==', 'live').get();
+    for (const a of areas.docs) {
+      const here = live.docs.filter((l) => l.get('area') === a.id);
+      const rents = here.filter((l) => l.get('purpose') === 'rent').map((l) => l.get('priceKES') as number).sort((x, y) => x - y);
+      assert.equal(a.get('stats.listings'), here.length, a.id);
+      if (rents.length < MIN_RENTALS) assert.equal(a.get('stats.medianRentKES'), null, a.id);
+      else assert.ok(a.get('stats.medianRentKES') >= rents[0] && a.get('stats.medianRentKES') <= rents.at(-1)!, a.id);
+    }
+  });
+});
+
+describe('open slots (P4-s04)', () => {
+  test("a day's free times leave out booked slots and time off; past notice and Sundays give none", async () => {
+    const all = await openSlots(db, { listingId: 'listing-001', day: '2026-10-31' }, now);
+    assert.equal(all.times.length, 20);
+    assert.deepEqual([all.times[0], all.times.at(-1)], ['08:00', '17:30']);
+
+    await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-31T10:00:00+03:00', client: { name: 'Slot Client', phone: '+254700001501' }, consent: true }, now);
+    await addAgentBlock(db, wanjiku, { start: '2026-10-31T14:00:00+03:00', end: '2026-10-31T15:15:00+03:00' }, now);
+    const free = (await openSlots(db, { listingId: 'listing-001', day: '2026-10-31' }, now)).times;
+    assert.ok(!free.includes('10:00'));
+    assert.ok(!['14:00', '14:30', '15:00'].some((t) => free.includes(t)));
+    assert.ok(free.includes('13:30') && free.includes('15:30'));
+
+    assert.deepEqual((await openSlots(db, { listingId: 'listing-001', day: '2026-10-25' }, now)).times, []); // Sunday
+    assert.deepEqual((await openSlots(db, { listingId: 'listing-001', day: '2026-10-20' }, now)).times, []); // past
+    await rejectsWith(openSlots(db, { listingId: 'no-such', day: '2026-10-31' }, now), 'not-found');
+    await rejectsWith(openSlots(db, { listingId: 'listing-001', day: '31/10/2026' }, now), 'invalid-argument');
+  });
+});
+
+describe('reviews (P6-s03)', () => {
+  test('a done viewing gives one review link; the review waits for a manager; approving sets the rating', async () => {
+    // Start from no reviews (other suites may share this emulator).
+    for (const d of (await db.collection('reviews').get()).docs) await d.ref.delete();
+    const { viewingId } = await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-27T11:30:00+03:00', client: { name: 'Akinyi Otieno', phone: '+254700001601' }, consent: true }, now);
+    const later = new Date('2026-10-27T12:00:00Z');
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'confirmed' }, now);
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, later);
+    const token = (await db.collection('viewings').doc(viewingId).get()).get('reviewToken') as string;
+    assert.match(token, /^[A-Za-z0-9_-]{24}$/);
+
+    await rejectsWith(submitReview(db, { token: 'x'.repeat(24), rating: 5 }, later), 'not-found');
+    await rejectsWith(submitReview(db, { token, rating: 6 }, later), 'invalid-argument');
+    const { reviewId } = await submitReview(db, { token, rating: 4, comment: 'On time and honest.', name: 'Akinyi Otieno' }, later);
+    await rejectsWith(submitReview(db, { token, rating: 1 }, later), 'already-exists');
+    const review = (await db.collection('reviews').doc(reviewId).get()).data()!;
+    assert.deepEqual([review.status, review.name, review.agentId], ['pending', 'Akinyi', 'agent-wanjiku']);
+    assert.ok(!JSON.stringify(review).includes('700001601'));
+
+    await rejectsWith(moderateReview(db, wanjiku, { reviewId, action: 'approve' }, later), 'permission-denied');
+    assert.deepEqual(await moderateReview(db, manager, { reviewId, action: 'approve' }, later), { rating: 4, ratingCount: 1 });
+    const agent = (await db.collection('agents').doc('agent-wanjiku').get()).data()!;
+    assert.deepEqual([agent.rating, agent.ratingCount], [4, 1]);
+    assert.deepEqual(await moderateReview(db, manager, { reviewId, action: 'hide' }, later), { rating: null, ratingCount: 0 });
+  });
+
+  test('a review link runs out after 30 days', async () => {
+    const { viewingId } = await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-27T12:30:00+03:00', client: { name: 'Baraka', phone: '+254700001602' }, consent: true }, now);
+    const later = new Date('2026-10-27T12:00:00Z');
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'confirmed' }, now);
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, later);
+    const token = (await db.collection('viewings').doc(viewingId).get()).get('reviewToken') as string;
+    await rejectsWith(submitReview(db, { token, rating: 5 }, new Date('2026-12-01T00:00:00Z')), 'failed-precondition');
+  });
+});
+
+describe('reviews and data requests', () => {
+  test("a person's reviews go with their viewings in an export or a delete; the rating follows", async () => {
+    for (const d of (await db.collection('reviews').get()).docs) await d.ref.delete();
+    const phone = '+254700001701';
+    const { viewingId } = await bookViewing(db, { listingId: 'listing-001', slot: '2026-10-27T13:30:00+03:00', client: { name: 'Wangari', phone }, consent: true }, now);
+    const later = new Date('2026-10-27T12:00:00Z');
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'confirmed' }, now);
+    await updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, later);
+    const token = (await db.collection('viewings').doc(viewingId).get()).get('reviewToken') as string;
+    const { reviewId } = await submitReview(db, { token, rating: 5, name: 'Wangari' }, later);
+    await moderateReview(db, manager, { reviewId, action: 'approve' }, later);
+
+    const exp = await dataRequest(db, manager, { kind: 'export', phone }, later);
+    assert.ok(exp.kind === 'export' && exp.data.reviews.length === 1 && exp.data.reviews[0].name === 'Wangari');
+    const del = await dataRequest(db, manager, { kind: 'delete', phone }, later);
+    assert.ok(del.kind === 'delete' && del.deleted.reviews === 1);
+    assert.equal((await db.collection('reviews').doc(reviewId).get()).exists, false);
+    assert.equal((await db.collection('agents').doc('agent-wanjiku').get()).get('ratingCount'), 0);
+  });
+});
+
+describe('saved-search alerts (D18)', () => {
+  test('a listing going live lands once in the inbox of each matching saved search', async () => {
+    await db.collection('savedSearches').doc('ss-kili').set({ userId: 'alice', filters: { purpose: 'rent', areas: ['kilimani'], maxPriceKES: 200000 }, channels: ['inbox'], lastNotifiedAt: null, createdAt: now });
+    await db.collection('savedSearches').doc('ss-sale').set({ userId: 'bob', filters: { purpose: 'sale' }, channels: ['inbox'], lastNotifiedAt: null, createdAt: now });
+    await db.collection('config').doc('alerts').set({ lastSweepAt: new Date(now.getTime() - 60_000) });
+    const { listingId } = await submitListing(db, wanjiku, { ...newListing, priceKES: 60000 }, now);
+    const at = new Date(now.getTime() + 60_000);
+    await moderateListing(db, manager, { listingId, action: 'approve' }, at);
+
+    const r = await sweepSavedSearches(db, new Date(at.getTime() + 1000));
+    assert.ok(r.listings >= 1);
+    const alice = (await db.collection('users').doc('alice').collection('alerts').get()).docs.map((d) => d.data());
+    assert.ok(alice.some((a) => a.listingId === listingId && a.priceKES === 60000 && a.readAt === null));
+    const bob = (await db.collection('users').doc('bob').collection('alerts').get()).docs;
+    assert.ok(!bob.some((d) => d.get('listingId') === listingId), 'a sale search gets no rental');
+    assert.notEqual((await db.collection('savedSearches').doc('ss-kili').get()).get('lastNotifiedAt'), null);
+
+    const again = await sweepSavedSearches(db, new Date(at.getTime() + 3_600_000));
+    assert.equal(again.listings, 0, 'the next sweep starts where this one stopped');
+  });
+});
+
+describe('site pages (P5-s07)', () => {
+  test('managers save and publish a page; agents cannot; only known pages', async () => {
+    await rejectsWith(savePage(db, wanjiku, { slug: 'about', title: 'About us', body: 'Hi', published: true }, now), 'permission-denied');
+    await savePage(db, manager, { slug: 'privacy', title: 'Privacy notice', body: '# Who we are\nRealtime.', published: false }, now);
+    await savePage(db, manager, { slug: 'privacy', title: 'Privacy notice', body: '# Who we are\nRealtime.', published: true }, now);
+    const p = (await db.collection('pages').doc('privacy').get()).data()!;
+    assert.deepEqual([p.title, p.published], ['Privacy notice', true]);
+    await rejectsWith(savePage(db, manager, { slug: 'secret', title: 'x', body: '', published: true }, now), 'invalid-argument');
+    const log = (await db.collection('audit').where('action', '==', 'page.save').get()).docs.map((d) => `${d.get('from')}->${d.get('to')}`);
+    assert.deepEqual(log.sort(), ['draft->published', 'none->draft']);
   });
 });

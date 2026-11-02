@@ -64,8 +64,13 @@ class ListingSeo {
   static String _purposeWords(Purpose p) => switch (p) { Purpose.rent => 'to rent', Purpose.sale => 'for sale', Purpose.shortStay => 'for short stays' };
 }
 
-/// Public URL of a Storage object in the tenant's prod media bucket.
+/// The project whose media bucket the pages link to. Set once at start from
+/// FIRESTORE_PROJECT, so dev and stage show their own photos; null means the
+/// tenant's prod project.
+String? mediaProject;
+
+/// Public URL of a Storage object in the media bucket (see [mediaProject]).
 String tenantMediaUrl(TenantConfig tenant, String path) {
-  final bucket = '${tenant.firebaseProjects[FirebaseEnv.prod]}-media';
+  final bucket = '${mediaProject ?? tenant.firebaseProjects[FirebaseEnv.prod]}-media';
   return 'https://firebasestorage.googleapis.com/v0/b/$bucket/o/${Uri.encodeComponent(path)}?alt=media';
 }

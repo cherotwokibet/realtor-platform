@@ -1,13 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_admin/src/app.dart';
 import 'package:realtor_admin/src/demo_admin.dart';
+import 'package:realtor_admin/src/format.dart';
+import 'package:realtor_admin/src/links.dart';
+import 'package:realtor_admin/src/listing_media.dart';
 import 'package:realtor_admin/src/providers.dart';
+import 'package:realtor_admin/src/reports.dart';
 import 'package:realtor_admin/src/session.dart';
 import 'package:realtor_core/realtor_core.dart';
 
@@ -59,6 +65,75 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<void> updateViewing(StaffUser who, {required String viewingId, required String status}) async {
+    calls++;
+    await gate.future;
+    return inner.updateViewing(who, viewingId: viewingId, status: status);
+  }
+
+  @override
+  Future<String> rescheduleViewing(StaffUser who, {required String viewingId, required String slot}) async {
+    calls++;
+    await gate.future;
+    return inner.rescheduleViewing(who, viewingId: viewingId, slot: slot);
+  }
+
+  @override
+  Future<String> addTimeOff(StaffUser who, {String? agentId, required String start, required String end, String? note}) async {
+    calls++;
+    await gate.future;
+    return inner.addTimeOff(who, agentId: agentId, start: start, end: end, note: note);
+  }
+
+  @override
+  Future<MonthlyReport> monthlyReport(StaffUser who, String month) => inner.monthlyReport(who, month);
+
+  @override
+  Future<String> saveArea(StaffUser who, AreaGuide area) => inner.saveArea(who, area);
+
+  @override
+  Future<void> savePage(StaffUser who, SitePageRow page) => inner.savePage(who, page);
+
+  @override
+  Future<({double? rating, int count})> moderateReview(StaffUser who, {required String reviewId, required String action}) =>
+      inner.moderateReview(who, reviewId: reviewId, action: action);
+
+  @override
+  Future<String> saveAgent(StaffUser who, AgentProfile profile) async {
+    calls++;
+    await gate.future;
+    return inner.saveAgent(who, profile);
+  }
+
+  @override
+  Future<void> removeTimeOff(StaffUser who, {required String blockId}) async {
+    calls++;
+    await gate.future;
+    return inner.removeTimeOff(who, blockId: blockId);
+  }
+
+  @override
+  Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
+    calls++;
+    await gate.future;
+    return inner.featureListing(who, listingId: listingId, days: days);
+  }
+
+  @override
+  Future<String> submitListing(StaffUser who, ListingDraft draft) async {
+    calls++;
+    await gate.future;
+    return inner.submitListing(who, draft);
+  }
+
+  @override
+  Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows) async {
+    calls++;
+    await gate.future;
+    return inner.importListings(who, rows);
+  }
+
+  @override
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) async {
     calls++;
     await gate.future;
@@ -76,7 +151,15 @@ class SlowActions implements AdminActions {
 
 late SlowActions slow;
 
-Future<void> open(WidgetTester tester, {StaffUser? as, double width = 1280, bool slowActions = false}) async {
+class _FakePicker implements FilePicker {
+  _FakePicker(this.files);
+  final List<PickedFile> files;
+  @override
+  Future<List<PickedFile>> pick({required String accept}) async => files;
+}
+
+Future<void> open(WidgetTester tester,
+    {StaffUser? as, double width = 1280, bool slowActions = false, List<Override> overrides = const []}) async {
   tester.view.physicalSize = Size(width, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -86,6 +169,7 @@ Future<void> open(WidgetTester tester, {StaffUser? as, double width = 1280, bool
     tenantProvider.overrideWithValue(tenant()),
     demoAdminProvider.overrideWithValue(demo),
     if (slowActions) adminActionsProvider.overrideWithValue(slow),
+    ...overrides,
   ]);
   addTearDown(container.dispose);
   await tester.pumpWidget(UncontrolledProviderScope(container: container, child: const AdminApp()));
@@ -134,7 +218,9 @@ void main() {
           throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'failed-precondition')));
       expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-otieno'), ['confirm']);
       expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-wanjiku'), isEmpty);
-      expect(listingActionsFor(manager, status: 'live', agentId: 'x'), [...moderationsFor('live'), 'confirm']);
+      expect(listingActionsFor(manager, status: 'live', agentId: 'x'), [...moderationsFor('live'), 'confirm', 'feature']);
+      expect(listingActionsFor(manager, status: 'live', agentId: 'x', featured: true).last, 'unfeature');
+      expect(listingActionsFor(manager, status: 'pending', agentId: 'x'), isNot(contains('feature')));
     });
 
     test('photo flags are for managers: the agent gets the listing without the flag', () async {
@@ -460,7 +546,7 @@ void main() {
     await tester.pump();
     await tester.tap(export);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Found 1 enquiries and 0 viewing requests'), findsOneWidget);
+    expect(find.textContaining('Found 1 enquiries, 0 viewing requests and 0 reviews'), findsOneWidget);
     expect(find.textContaining('"phone": "+254700000201"'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(OutlinedButton, 'Delete…'));
@@ -468,7 +554,7 @@ void main() {
     expect(find.text('Delete everything held about +254700000201?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
-    expect(find.text('Deleted 1 enquiries and 0 viewing requests.'), findsOneWidget);
+    expect(find.text('Deleted 1 enquiries, 0 viewing requests and 0 reviews.'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Export'));
     await tester.pumpAndSettle();
@@ -503,6 +589,424 @@ void main() {
     await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
     expect(find.byTooltip(why), findsNothing);
+  });
+
+  test('reply times read as minutes, hours or days', () {
+    expect([minutesLabel(0), minutesLabel(59), minutesLabel(90), minutesLabel(1440), minutesLabel(4000)],
+        ['0 min', '59 min', '2 h', '1 day', '3 days']);
+  });
+
+  testWidgets("the team shows each agent's typical reply; new leads show how long they have waited", (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Team'));
+    await tester.pumpAndSettle();
+    expect(find.text('Typical reply'), findsOneWidget);
+    expect(find.text('25 min'), findsOneWidget); // Wanjiku
+    expect(find.text('2 h'), findsOneWidget); // Otieno, 140 min
+    await tester.tap(find.text('Leads'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'New'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('waiting '), findsWidgets);
+  });
+
+  testWidgets('a manager features a live listing and stops it; the star follows', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Live'));
+    await tester.pumpAndSettle();
+    final rows = (await container.read(adminRepositoryProvider).listings(manager, status: 'live', limit: 50)).rows;
+    final plain = rows.firstWhere((r) => !r.featuredAt(DateTime.now()));
+    expect(find.byIcon(Icons.star), findsOneWidget, reason: 'the demo has one featured listing');
+    await tapVisible(tester, find.byTooltip('Change ${plain.title}'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Feature for $featureDays days'));
+    await tester.pumpAndSettle();
+    expect(find.text('${plain.title}: featured for $featureDays days'), findsOneWidget);
+    expect(find.byIcon(Icons.star), findsNWidgets(2));
+    await tapVisible(tester, find.byTooltip('Change ${plain.title}'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Stop featuring'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.star), findsOneWidget);
+  });
+
+  testWidgets('a manager imports a CSV: checked first, bad lines named, good ones land in Pending', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Import CSV…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'CSV'),
+      'title,purpose,type,beds,baths,priceKES,lat,lng,area,agentId\n'
+      'Imported studio Kilimani,rent,studio,0,1,"25,000",-1.29,36.78,kilimani,agent-wanjiku\n'
+      'Broken row,rent,castle,1,1,20000,-1.29,36.78,kilimani,agent-wanjiku\n'
+      'Ghost agent flat,rent,apartment,1,1,30000,-1.29,36.78,kilimani,agent-ghost\n',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Check'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 listings ready to import.'), findsOneWidget);
+    expect(find.textContaining('Line 3: type "castle"'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Import 2'));
+    await tester.pumpAndSettle();
+    expect(find.text('Imported 1 listings. They wait in Pending for approval.'), findsOneWidget);
+    expect(find.textContaining('Line 4: agentId: no agent "agent-ghost"'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+    await tester.pumpAndSettle();
+    final pending = (await container.read(adminRepositoryProvider).listings(manager, status: 'pending', limit: 50)).rows;
+    expect(pending.map((r) => r.title), contains('Imported studio Kilimani'));
+  });
+
+  testWidgets('an agent adds a listing: problems shown first, then it lands in Pending as theirs', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New listing'));
+    await tester.pumpAndSettle();
+    expect(find.text('Agent'), findsNothing, reason: 'an agent lists as themself');
+    await tester.tap(find.text('Save and send for review'));
+    await tester.pumpAndSettle();
+    expect(find.text('Use 5 to 120 characters.'), findsOneWidget);
+    expect(find.text('Pick an area.'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Title'), '2 bedroom flat near Yaya');
+    await tester.enterText(find.widgetWithText(TextField, 'Rent a month (KES)'), '68,000');
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'Area'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kilimani').last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Latitude')).controller!.text, '-1.292100');
+    await tester.tap(find.text('Save and send for review'));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved. The listing waits in Pending for approval.'), findsOneWidget);
+
+    final mine = (await container.read(adminRepositoryProvider).listings(wanjiku, status: 'pending', limit: 50)).rows;
+    final row = mine.firstWhere((r) => r.title == '2 bedroom flat near Yaya');
+    expect((row.priceKES, row.area, row.agentId), (68000, 'kilimani', wanjiku.agentId));
+    final draft = await container.read(adminRepositoryProvider).listingDraft(wanjiku, row.id);
+    expect((draft!.lat, draft.lng), (-1.2921, 36.7856));
+  });
+
+  testWidgets('a manager edits a listing from its title; the edit goes back to Pending', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    final first = (await container.read(adminRepositoryProvider).listings(manager, limit: 1)).rows.single;
+    await tester.tap(find.text(first.title).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Edit listing'), findsOneWidget);
+    expect(find.widgetWithText(DropdownButtonFormField<String>, 'Agent'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'Title'), '${first.title}, renovated');
+    await tester.tap(find.text('Save and send for review'));
+    await tester.pumpAndSettle();
+    final row = (await container.read(adminRepositoryProvider).listings(manager, limit: 1)).rows.single;
+    expect((row.id, row.title, row.status), (first.id, '${first.title}, renovated', 'pending'));
+  });
+
+  testWidgets('photos: a new listing says to save first; an existing one uploads, refusing what the rules would', (tester) async {
+    final picked = <PickedFile>[
+      (name: 'lounge.jpg', bytes: Uint8List(2048), type: 'image/jpeg'),
+      (name: 'notes.pdf', bytes: Uint8List(10), type: 'application/pdf'),
+      (name: 'tour.mp4', bytes: Uint8List(4096), type: 'video/mp4'),
+    ];
+    await open(tester, as: wanjiku, overrides: [filePickerProvider.overrideWithValue(_FakePicker(picked))]);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New listing'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save the listing first, then open it again to add photos.'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    final mine = (await container.read(adminRepositoryProvider).listings(wanjiku, limit: 1)).rows.single;
+    await tester.tap(find.text(mine.title).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Photos and video: 0 photos'), findsOneWidget);
+    await tapVisible(tester, find.text('Add photos or a video'));
+    expect(find.textContaining('notes.pdf: not a photo or video'), findsOneWidget);
+    expect(find.text('Photos and video: 1 photo, 1 video'), findsOneWidget);
+    expect(find.textContaining('Uploaded 2.'), findsOneWidget);
+  });
+
+  test('upload paths follow storage.rules: agents under their agent id, managers under their uid', () {
+    final at = DateTime.utc(2026, 10, 28);
+    expect(uploadPath(wanjiku, 'l1', 'My Lounge (1).jpg', at),
+        'uploads/agents/agent-wanjiku/listings/l1/${at.millisecondsSinceEpoch}-My-Lounge-1-.jpg');
+    expect(uploadPath(manager, 'l1', 'a.jpg', at), 'uploads/staff/${manager.uid}/listings/l1/${at.millisecondsSinceEpoch}-a.jpg');
+    expect(uploadProblem((name: 'big.jpg', bytes: Uint8List(maxPhotoBytes), type: 'image/jpeg')), contains('under 20 MB'));
+  });
+
+  testWidgets('agents get no import button', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Import CSV…'), findsNothing);
+  });
+
+  testWidgets('viewings: a past confirmed one comes first to close; marking it a no-show moves it to history',
+      (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    expect(location(), '/viewings');
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+    final openRows = (await container.read(adminRepositoryProvider).viewings(manager, from: from, limit: 50)).rows;
+    final past = openRows.first;
+    expect(past.slot.isBefore(now), isTrue, reason: 'earliest first: yesterday\'s confirmed viewing leads');
+    expect(openRows.every((v) => v.status == 'requested' || v.status == 'confirmed'), isTrue);
+
+    await tapVisible(tester, find.byTooltip('Update the viewing ${shortDateTime(past.slot)}'));
+    expect(find.text('Mark done'), findsOneWidget);
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Mark no-show'));
+    await tester.pumpAndSettle();
+    expect(find.text('Viewing ${shortDateTime(past.slot)}: No show'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'No show'));
+    await tester.pumpAndSettle();
+    final noShows = (await container.read(adminRepositoryProvider).viewings(manager, status: 'no-show', from: from)).rows;
+    expect(noShows.map((v) => v.id), contains(past.id));
+  });
+
+  testWidgets('a future viewing can only be confirmed or cancelled; agents see only their own', (tester) async {
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    final mine = (await container.read(adminRepositoryProvider).viewings(wanjiku, from: from, limit: 50)).rows;
+    expect(mine, isNotEmpty);
+    expect(mine.every((v) => v.agentId == 'agent-wanjiku'), isTrue);
+    final future = mine.firstWhere((v) => v.slot.isAfter(now) && v.status == 'requested');
+    await tapVisible(tester, find.byTooltip('Update the viewing ${shortDateTime(future.slot)}'));
+    expect(find.text('Mark done'), findsNothing);
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Confirm'));
+    await tester.pumpAndSettle();
+    expect(find.text('Viewing ${shortDateTime(future.slot)}: Confirmed'), findsOneWidget);
+  });
+
+  testWidgets('an agent reschedules a viewing: confirmed at the new time, the old one cancelled', (tester) async {
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    final repo = container.read(adminRepositoryProvider);
+    final future = (await repo.viewings(wanjiku, from: from, limit: 50)).rows.firstWhere((v) => v.slot.isAfter(now));
+    await tapVisible(tester, find.byTooltip('Update the viewing ${shortDateTime(future.slot)}'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Reschedule…'));
+    await tester.pumpAndSettle();
+    final day = viewingDays(now)[3];
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'Day'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(day.label).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'Time'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15:00').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Move viewing'));
+    await tester.pumpAndSettle();
+
+    final at = DateTime.parse(viewingSlot(day.value, '15:00')).toLocal();
+    expect(find.text('Viewing moved to ${shortDateTime(at)}, confirmed'), findsOneWidget);
+    final open_ = (await repo.viewings(wanjiku, from: from, limit: 50)).rows;
+    expect(open_.where((v) => v.id == future.id), isEmpty, reason: 'the old one is cancelled');
+    final moved = open_.singleWhere((v) => v.slot == at);
+    expect((moved.status, moved.clientName), ('confirmed', future.clientName));
+  });
+
+  testWidgets('an agent blocks out time off; rescheduling into it is refused; removing it frees the time', (tester) async {
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Time off…'));
+    await tester.pumpAndSettle();
+    expect(find.text('None coming up.'), findsOneWidget);
+    expect(find.widgetWithText(DropdownButtonFormField<String>, 'Agent'), findsNothing);
+    final day = viewingDays(now, count: 26)[4];
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'From'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(day.label).last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Note for the team (optional)'), 'Leave');
+    await tester.tap(find.text('Add time off').last);
+    await tester.pumpAndSettle();
+    final blocks = await container.read(adminRepositoryProvider).timeOff(wanjiku, now);
+    expect(blocks.single.start, DateTime.parse(viewingSlot(day.value, '08:00')).toLocal());
+    expect(blocks.single.end, DateTime.parse(viewingSlot(day.value, '18:00')).toLocal());
+    expect(find.text('Leave'), findsOneWidget);
+
+    final actions = container.read(adminActionsProvider);
+    final v = (await container.read(adminRepositoryProvider).viewings(wanjiku, from: from, limit: 50)).rows.firstWhere((v) => v.slot.isAfter(now));
+    await expectLater(actions.rescheduleViewing(wanjiku, viewingId: v.id, slot: viewingSlot(day.value, '10:00')),
+        throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'already-exists')));
+
+    await tester.tap(find.byTooltip('Remove this time off'));
+    await tester.pumpAndSettle();
+    expect(find.text('None coming up.'), findsOneWidget);
+    expect(await actions.rescheduleViewing(wanjiku, viewingId: v.id, slot: viewingSlot(day.value, '10:00')), isNotEmpty);
+  });
+
+  testWidgets('a manager adds an agent profile, then gives them a photo', (tester) async {
+    final picked = <PickedFile>[(name: 'mercy.jpg', bytes: Uint8List(4096), type: 'image/jpeg')];
+    await open(tester, as: manager, overrides: [filePickerProvider.overrideWithValue(_FakePicker(picked))]);
+    await tester.tap(find.text('Team'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Agent profiles…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add agent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter the EARB registration number.'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Mercy Wambui');
+    await tester.enterText(find.widgetWithText(TextField, 'EARB registration number'), 'EARB/2026/0412');
+    await tester.enterText(find.widgetWithText(TextField, 'Phone'), '0711 000 111');
+    await tester.tap(find.text('Kiswahili'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mercy Wambui'), findsOneWidget);
+
+    final made = (await container.read(adminRepositoryProvider).agentProfiles(manager)).singleWhere((a) => a.name == 'Mercy Wambui');
+    expect((made.id, made.phone, made.whatsapp), ('agent-mercy-wambui', '+254711000111', '+254711000111'));
+    expect(made.languages, ['en', 'sw']);
+    expect((await container.read(adminRepositoryProvider).agents(manager)).map((a) => a.id), contains('agent-mercy-wambui'));
+
+    await tester.tap(find.byTooltip('Edit Mercy Wambui'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Upload photo'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Uploaded.'), findsOneWidget);
+    expect((container.read(listingMediaProvider) as DemoListingMedia).agentPhotos, ['agent-mercy-wambui']);
+  });
+
+  testWidgets('agents do not see agent profiles', (tester) async {
+    await open(tester, as: wanjiku);
+    expect(find.text('Team'), findsNothing);
+    expect(() => container.read(adminRepositoryProvider).agentProfiles(wanjiku), throwsA(isA<StaffAccessException>()));
+  });
+
+  testWidgets('a manager reads the monthly report and downloads it as CSV; agents have no reports', (tester) async {
+    final saver = MemoryFileSaver();
+    await open(tester, as: manager, overrides: [fileSaverProvider.overrideWithValue(saver)]);
+    await tester.tap(find.text('Reports'));
+    await tester.pumpAndSettle();
+    expect(location(), '/reports');
+    final month = reportMonths(DateTime.now()).first;
+    final r = await container.read(adminActionsProvider).monthlyReport(manager, month);
+    expect(find.text('${r.leads} leads, ${r.viewings} viewings'), findsOneWidget);
+    expect(find.text('Agents'), findsOneWidget);
+    await tester.tap(find.text('Download CSV'));
+    await tester.pump();
+    expect(saver.saved.single.$1, 'report-$month.csv');
+    expect(saver.saved.single.$2, startsWith('Report,$month'));
+    expect(saver.saved.single.$2.contains('+2547'), isFalse, reason: 'no client numbers');
+  });
+
+  testWidgets('agents cannot open reports', (tester) async {
+    await open(tester, as: wanjiku);
+    expect(find.text('Reports'), findsNothing);
+    await expectLater(container.read(adminActionsProvider).monthlyReport(wanjiku, '2026-10'),
+        throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'permission-denied')));
+  });
+
+  testWidgets('a manager adds an area guide; it is offered in the listing form', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Areas…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add area'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Muthaiga North');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('A position in Kenya, e.g. -1.2921, 36.7856.'), findsNWidgets(2));
+    await tester.enterText(find.widgetWithText(TextField, 'Centre latitude'), '-1.23');
+    await tester.enterText(find.widgetWithText(TextField, 'Centre longitude'), '36.84');
+    await tester.enterText(find.widgetWithText(TextField, 'Guide: what living there is like'), 'Quiet and leafy.');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Muthaiga North'), findsOneWidget);
+    final options = await container.read(adminRepositoryProvider).areas();
+    expect(options.map((a) => a.slug), contains('muthaiga-north'));
+  });
+
+  testWidgets('agents get no area editor', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Areas…'), findsNothing);
+  });
+
+  testWidgets('a done viewing offers its review link on WhatsApp to the client', (tester) async {
+    final links = MemoryLinkOpener();
+    await open(tester, as: manager, overrides: [linkOpenerProvider.overrideWithValue(links)]);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    final now = DateTime.now();
+    final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+    final past = (await container.read(adminRepositoryProvider).viewings(manager, from: from, limit: 50))
+        .rows
+        .firstWhere((v) => v.status == 'confirmed' && v.slot.isBefore(now));
+    await tapVisible(tester, find.byTooltip('Update the viewing ${shortDateTime(past.slot)}'));
+    expect(find.text('Ask for a review…'), findsNothing, reason: 'not done yet');
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Mark done'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Done'));
+    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byTooltip('Update the viewing ${shortDateTime(past.slot)}'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Ask for a review…'));
+    await tester.pumpAndSettle();
+    final uri = links.opened.single;
+    expect(uri.host, 'wa.me');
+    expect(uri.path, '/${past.clientPhone!.replaceAll('+', '')}');
+    expect(uri.queryParameters['text'], contains('https://realtimeestates.co.ke/review/demo-review-'));
+  });
+
+  test('review links point at the share site next to this admin', () {
+    expect(shareHost('realtimeestates.co.ke', Uri.parse('https://rte-realtor-dev-admin.web.app/viewings')), 'rte-realtor-dev-share.web.app');
+    expect(shareHost('realtimeestates.co.ke', Uri.parse('https://admin.realtimeestates.co.ke/')), 'realtimeestates.co.ke');
+    expect(shareHost('realtimeestates.co.ke', Uri.parse('http://localhost:8080/')), 'realtimeestates.co.ke');
+  });
+
+  testWidgets('a manager approves a waiting review and sees the new rating', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Team'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reviews…'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Showed us three flats'), findsOneWidget);
+    await tester.tap(find.text('Approve').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Wanjiku Mwangi is now rated 4.5 from 2 reviews.'), findsOneWidget);
+    expect(find.textContaining('Showed us three flats'), findsNothing);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Approved'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Showed us three flats'), findsOneWidget);
+  });
+
+  testWidgets('a manager writes and publishes the privacy notice', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Privacy'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Site pages…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Published · /about'), findsOneWidget);
+    await tester.tap(find.text('Privacy notice'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Text'), '# Who we are\nRealtime Estates Ltd.');
+    await tester.tap(find.text('Published'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Published · /privacy'), findsOneWidget);
+    final privacy = (await container.read(adminRepositoryProvider).sitePages(manager)).firstWhere((p) => p.slug == 'privacy');
+    expect((privacy.title, privacy.published, privacy.body.startsWith('# Who we are')), ('Privacy notice', true, true));
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

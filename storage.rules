@@ -11,12 +11,22 @@ service firebase.storage {
       return request.resource.size < 20 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)');
     }
+    function isVideo() {
+      return request.resource.size < 200 * 1024 * 1024
+        && request.resource.contentType.matches('video/(mp4|quicktime|3gpp)');
+    }
+    function isListingMedia() { return isPhoto() || isVideo(); }
 
     match /uploads/agents/{agentId}/listings/{listingId}/{file} {
-      allow create: if role() == 'agent' && request.auth.token.get('agentId', '') == agentId && isPhoto();
+      allow create: if role() == 'agent' && request.auth.token.get('agentId', '') == agentId && isListingMedia();
     }
 
     match /uploads/staff/{uid}/listings/{listingId}/{file} {
+      allow create: if isManager() && request.auth.uid == uid && isListingMedia();
+    }
+
+    // Agent portraits (P5-s04): managers only, photos only.
+    match /uploads/staff/{uid}/agents/{agentId}/{file} {
       allow create: if isManager() && request.auth.uid == uid && isPhoto();
     }
 

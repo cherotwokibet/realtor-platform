@@ -48,6 +48,37 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Site pages (P5-s07): published ones are public; managers see drafts.
+    match /pages/{slug} {
+      allow read: if resource.data.published == true || isManager();
+      allow write: if false;
+    }
+
+    // Saved-search alerts (D18): the owner reads them, marks them read
+    // (readAt only) and clears them; the hourly sweep writes them.
+    match /users/{uid}/alerts/{id} {
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt'])
+        && request.resource.data.readAt is timestamp;
+    }
+
+    // Reviews (P6-s03): approved ones are public; managers see all.
+    // Review links are read only by the Functions.
+    match /reviews/{id} {
+      allow read: if resource.data.status == 'approved' || isManager();
+      allow write: if false;
+    }
+    match /reviewInvites/{token} {
+      allow read, write: if false;
+    }
+
+    // Agents' time off (P5-s05): addAgentBlock / removeAgentBlock write it.
+    match /agentBlocks/{id} {
+      allow read: if isManager() || isOwnAgent(resource.data.agentId);
+      allow write: if false;
+    }
+
     match /payments/{id} {
       allow read: if isManager();
       allow write: if false;
@@ -89,7 +120,7 @@ service cloud.firestore {
           && d.userId == request.auth.uid
           && validFilters(d.filters)
           && d.channels is list && d.channels.size() > 0 && d.channels.size() <= 3
-          && d.channels.hasOnly(['push', 'email', 'whatsapp']);
+          && d.channels.hasOnly(['inbox', 'push', 'email', 'whatsapp']);
       }
       allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
       allow create: if signedIn() && valid(request.resource.data)

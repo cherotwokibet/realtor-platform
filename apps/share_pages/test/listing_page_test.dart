@@ -55,6 +55,9 @@ void main() {
     final html = await (await get('/listing/2-bedroom-apartment-kilimani')).readAsString();
     expect(attr(html, 'og:title'), contains('KES 65,000 a month'));
     expect(attr(html, 'og:image'), 'https://firebasestorage.googleapis.com/v0/b/rte-realtor-prod-media/o/media%2Flistings%2Flisting-001%2Fabc%2Ffull.webp?alt=media');
+    mediaProject = 'rte-realtor-dev';
+    addTearDown(() => mediaProject = null);
+    expect(tenantMediaUrl(tenant('realtime-estates'), 'media/x.webp'), 'https://firebasestorage.googleapis.com/v0/b/rte-realtor-dev-media/o/media%2Fx.webp?alt=media');
     expect(attr(html, 'og:url'), 'https://realtimeestates.co.ke/listing/2-bedroom-apartment-kilimani');
   });
 

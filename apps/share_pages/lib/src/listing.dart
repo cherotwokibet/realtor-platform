@@ -79,6 +79,9 @@ class ShareAgent {
   final int? responseMins;
 }
 
+/// An approved review (P6-s03): stars, what they wrote, a first name.
+typedef ShareReview = ({int rating, String? comment, String? name, DateTime? at});
+
 /// One URL in sitemap.xml.
 typedef SitemapEntry = ({String path, DateTime? lastModified});
 
@@ -97,6 +100,15 @@ abstract interface class ListingSource {
   /// An agent's live listings, newest first, at most [limit].
   Future<List<ShareListing>> liveByAgent(String agentId, {int limit = 24});
 
+  /// A published site page (about, privacy, ...), else null.
+  Future<({String title, String body, DateTime? updatedAt})?> page(String slug);
+
+  /// Published site pages, for the footer.
+  Future<List<({String slug, String title})>> publishedPages();
+
+  /// An agent's approved reviews, newest first, at most [limit].
+  Future<List<ShareReview>> reviews(String agentId, {int limit = 5});
+
   /// The newest live listings, for the home page.
   Future<List<ShareListing>> latestLive({int limit = 12});
 
@@ -108,8 +120,26 @@ abstract interface class ListingSource {
 }
 
 class InMemoryListingSource implements ListingSource {
-  InMemoryListingSource(this.listings, {List<ShareArea> areas = const [], this.agents = const []}) : _areas = areas;
+  InMemoryListingSource(this.listings, {List<ShareArea> areas = const [], this.agents = const [], this.agentReviews = const {}})
+      : _areas = areas;
   final List<ShareListing> listings;
+
+  /// Agent id -> approved reviews, newest first.
+  final Map<String, List<ShareReview>> agentReviews;
+
+  /// Published site pages by slug.
+  Map<String, ({String title, String body})> sitePages = {};
+
+  @override
+  Future<({String title, String body, DateTime? updatedAt})?> page(String slug) async =>
+      sitePages[slug] == null ? null : (title: sitePages[slug]!.title, body: sitePages[slug]!.body, updatedAt: null);
+
+  @override
+  Future<List<({String slug, String title})>> publishedPages() async => [for (final e in sitePages.entries) (slug: e.key, title: e.value.title)];
+
+  @override
+  Future<List<ShareReview>> reviews(String agentId, {int limit = 5}) async => [...?agentReviews[agentId]].take(limit).toList();
+
   final List<ShareArea> _areas;
   final List<ShareAgent> agents;
 

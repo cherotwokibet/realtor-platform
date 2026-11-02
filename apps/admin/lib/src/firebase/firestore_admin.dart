@@ -12,6 +12,7 @@ class FirestoreAdminRepository implements AdminRepository {
 
   final FirebaseFirestore _db;
   Map<String, String>? _agentNames;
+  Map<String, int?> _agentReplies = const {};
 
   @override
   Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25}) async {
@@ -63,6 +64,7 @@ class FirestoreAdminRepository implements AdminRepository {
             calls: (_map(d, 'stats')['calls'] as num?)?.toInt() ?? 0,
             whatsapps: (_map(d, 'stats')['whatsapps'] as num?)?.toInt() ?? 0,
             expiresAt: d.data()['expiresAt'] == null ? null : _date(d.data()['expiresAt']),
+            featuredUntil: d.data()['featuredUntil'] == null ? null : _date(d.data()['featuredUntil']),
             photoMatch: flagged.contains(d.id),
           ),
       ];
@@ -80,6 +82,38 @@ class FirestoreAdminRepository implements AdminRepository {
       }
     }
     return out;
+  }
+
+  @override
+  Future<RowPage<ViewingRow>> viewings(StaffUser who,
+      {String? status, required DateTime from, String? after, int limit = 25}) async {
+    Query<Map<String, Object?>> q = _db.collection('viewings');
+    if (who.agentScope != null) q = q.where('agentId', isEqualTo: who.agentScope);
+    q = status == null
+        ? q
+            .where('status', whereIn: const ['requested', 'confirmed'])
+            .where('slot', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+            .orderBy('slot')
+        : q.where('status', isEqualTo: status).orderBy('slot', descending: true);
+    return _page('viewings', q, after, limit, (docs) async {
+      final names = await _agents();
+      final titles = await _listingTitles({for (final d in docs) _str(d, 'listingId')});
+      return [
+        for (final d in docs)
+          ViewingRow(
+            id: d.id,
+            listingId: _str(d, 'listingId'),
+            listingTitle: titles[_str(d, 'listingId')] ?? _str(d, 'listingId'),
+            agentId: _str(d, 'agentId'),
+            agentName: names[_str(d, 'agentId')] ?? _str(d, 'agentId'),
+            slot: _date(d.data()['slot']),
+            status: _str(d, 'status'),
+            clientName: _map(d, 'client')['name'] as String?,
+            clientPhone: _map(d, 'client')['phone'] as String?,
+            reviewToken: d.data()['reviewToken'] as String?,
+          ),
+      ];
+    });
   }
 
   @override
@@ -125,6 +159,7 @@ class FirestoreAdminRepository implements AdminRepository {
             name: d.data()['name'] as String?,
             agentId: d.data()['agentId'] as String?,
             agentName: names[d.data()['agentId']],
+            agentReplyMins: _agentReplies[d.data()['agentId']],
           ),
     ];
   }
@@ -133,6 +168,103 @@ class FirestoreAdminRepository implements AdminRepository {
   Future<List<AgentOption>> agents(StaffUser who) async => [
         for (final e in (await _agents()).entries) AgentOption(e.key, e.value)
       ]..sort((a, b) => a.name.compareTo(b.name));
+
+  @override
+  Future<ListingDraft?> listingDraft(StaffUser who, String listingId) async {
+    try {
+      final d = await _db.collection('listings').doc(listingId).get();
+      final data = d.data();
+      if (data == null || (who.agentScope != null && data['agentId'] != who.agentScope)) return null;
+      final geo = data['geo'];
+      return ListingDraft.fromDoc(d.id, {
+        ...data,
+        if (geo is GeoPoint) 'geo': {'lat': geo.latitude, 'lng': geo.longitude},
+      });
+    } on FirebaseException catch (e) {
+      // The rules refuse another agent's draft: the same as missing.
+      if (e.code == 'permission-denied') return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<SitePageRow>> sitePages(StaffUser who) async {
+    if (!who.isManager) throw StaffAccessException('site pages are for owners and managers');
+    final snap = await _db.collection('pages').get();
+    final byId = {for (final d in snap.docs) d.id: d.data()};
+    return [
+      for (final s in sitePageSlugs)
+        SitePageRow(
+          slug: s,
+          title: byId[s]?['title'] as String? ?? '',
+          body: byId[s]?['body'] as String? ?? '',
+          published: byId[s]?['published'] == true,
+          updatedAt: byId[s]?['updatedAt'] == null ? null : _date(byId[s]!['updatedAt']),
+        ),
+    ];
+  }
+
+  @override
+  Future<List<ReviewRow>> reviews(StaffUser who, {String status = 'pending'}) async {
+    if (!who.isManager) throw StaffAccessException('reviews are for owners and managers');
+    final snap = await _db.collection('reviews').where('status', isEqualTo: status).limit(200).get();
+    final names = await _agents();
+    return [
+      for (final d in snap.docs)
+        ReviewRow(
+          id: d.id,
+          agentId: _str(d, 'agentId'),
+          agentName: names[_str(d, 'agentId')] ?? _str(d, 'agentId'),
+          rating: (d.data()['rating'] as num?)?.toInt() ?? 0,
+          status: _str(d, 'status'),
+          createdAt: _date(d.data()['createdAt']),
+          comment: d.data()['comment'] as String?,
+          name: d.data()['name'] as String?,
+        ),
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  @override
+  Future<List<AreaGuide>> areaGuides() async {
+    final snap = await _db.collection('areas').get();
+    return [for (final d in snap.docs) AreaGuide.fromDoc(d.id, d.data())]..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  @override
+  Future<List<AgentProfile>> agentProfiles(StaffUser who) async {
+    if (!who.isManager) throw StaffAccessException('agent profiles are for owners and managers');
+    final snap = await _db.collection('agents').get();
+    return [for (final d in snap.docs) AgentProfile.fromDoc(d.id, d.data())]..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  @override
+  Future<List<AgentBlock>> timeOff(StaffUser who, DateTime now) async {
+    Query<Map<String, Object?>> q = _db.collection('agentBlocks');
+    if (who.agentScope != null) q = q.where('agentId', isEqualTo: who.agentScope);
+    final snap = await q.where('end', isGreaterThan: Timestamp.fromDate(now)).orderBy('end').limit(200).get();
+    final names = await _agents();
+    return [
+      for (final d in snap.docs)
+        AgentBlock(
+          id: d.id,
+          agentId: _str(d, 'agentId'),
+          agentName: names[_str(d, 'agentId')] ?? _str(d, 'agentId'),
+          start: _date(d.data()['start']),
+          end: _date(d.data()['end']),
+          note: d.data()['note'] as String?,
+        ),
+    ]..sort((a, b) => a.start.compareTo(b.start));
+  }
+
+  @override
+  Future<List<AreaOption>> areas() async {
+    final snap = await _db.collection('areas').get();
+    return [
+      for (final d in snap.docs)
+        if (d.data()['centre'] case {'lat': final num lat, 'lng': final num lng})
+          (slug: d.id, name: d.data()['name'] as String? ?? d.id, lat: lat.toDouble(), lng: lng.toDouble()),
+    ]..sort((a, b) => a.name.compareTo(b.name));
+  }
 
   /// One page of [q] after the document [after], plus the next cursor.
   Future<RowPage<T>> _page<T>(
@@ -153,9 +285,14 @@ class FirestoreAdminRepository implements AdminRepository {
   }
 
   /// Agent names, read once (a small collection staff may read).
-  Future<Map<String, String>> _agents() async => _agentNames ??= {
-        for (final d in (await _db.collection('agents').get()).docs) d.id: (d.data()['name'] as String?) ?? d.id,
-      };
+  Future<Map<String, String>> _agents() async {
+    if (_agentNames == null) {
+      final docs = (await _db.collection('agents').get()).docs;
+      _agentReplies = {for (final d in docs) d.id: (d.data()['responseMins'] as num?)?.toInt()};
+      _agentNames = {for (final d in docs) d.id: (d.data()['name'] as String?) ?? d.id};
+    }
+    return _agentNames!;
+  }
 
   /// Titles of the listings a page of leads points at. One read each: an
   /// agent may not read every listing (a colleague's draft), and a refused

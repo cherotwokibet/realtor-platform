@@ -95,7 +95,12 @@ export async function updateLeadStage(db: Firestore, caller: Caller, input: unkn
     const listingId = snap.get('listingId') as string | null;
     const listing = listingId ? await tx.get(db.collection('listings').doc(listingId)) : null;
     const title = listing?.get('title') as string | undefined;
-    tx.update(ref, { stage: req.stage });
+    // The first move out of "new" is the agent's response (P5-s03); later moves keep it.
+    const firstResponse =
+      from === 'new' && !snap.get('firstResponseAt')
+        ? { firstResponseAt: now, responseMins: Math.max(0, Math.round((now.getTime() - snap.get('createdAt').toDate().getTime()) / 60_000)) }
+        : {};
+    tx.update(ref, { stage: req.stage, ...firstResponse });
     audit(tx, db, caller, { action: 'lead.stage', target: { collection: 'leads', id: ref.id, label: title ? `Lead on ${title}` : undefined }, from, to: req.stage }, now);
   });
   return { stage: req.stage };
