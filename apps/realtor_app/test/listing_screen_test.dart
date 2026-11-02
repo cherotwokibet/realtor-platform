@@ -168,6 +168,7 @@ void main() {
     expect(find.text('Student hostel bed, Kasarani'), findsWidgets);
     final router = ProviderScope.containerOf(tester.element(find.byType(RealtorApp))).read(routerProvider);
     expect(router.routerDelegate.currentConfiguration.uri.path, '/listing/student-hostel-bed-kasarani');
+    expect(leads.recommendations, ['demo-2/shown', 'demo-2/opened'], reason: 'counted once shown, once opened; the hostel bed has none');
 
     await open(tester, kilimani);
     expect(find.text('Similar homes'), findsNothing, reason: 'no other rental near KES 65,000 shares its area or type');

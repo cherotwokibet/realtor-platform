@@ -135,7 +135,7 @@ class FirestoreListingRepository implements ListingRepository {
 /// Calls one callable Function by name with [data]; completes with its answer.
 typedef CallFunction = Future<Object?> Function(String name, Map<String, Object?> data);
 
-/// The lead Functions (D7): createLead, logContactTap, bookViewing.
+/// The lead Functions (D7): createLead, logContactTap, bookViewing, logRecommendation.
 class CallableLeadRepository implements LeadRepository {
   CallableLeadRepository(this._call);
 
@@ -175,6 +175,10 @@ class CallableLeadRepository implements LeadRepository {
   @override
   Future<void> logTap({required String listingId, required String channel}) =>
       _run('logContactTap', {'listingId': listingId, 'channel': channel});
+
+  @override
+  Future<void> logRecommendation({required String listingId, required String event}) =>
+      _run('logRecommendation', {'listingId': listingId, 'event': event, 'surface': 'app'});
 
   @override
   Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone}) =>

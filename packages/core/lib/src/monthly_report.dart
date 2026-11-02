@@ -15,6 +15,8 @@ class MonthlyReport {
     required this.viewingsByStatus,
     required this.agents,
     required this.topListings,
+    this.similarShown = 0,
+    this.similarOpened = 0,
   });
 
   /// `YYYY-MM`, Nairobi time.
@@ -26,10 +28,17 @@ class MonthlyReport {
   /// Most leads so far (all time), at most 10.
   final List<ReportListingRow> topListings;
 
+  /// "Similar homes" shown under listings, and homes opened from it (P7-s04).
+  final int similarShown, similarOpened;
+
+  /// Opened per hundred shown, rounded; null before any were shown.
+  int? get similarClickThroughPct => similarShown == 0 ? null : (similarOpened * 100 / similarShown).round();
+
   factory MonthlyReport.fromJson(Map<Object?, Object?> j) {
     Map<String, int> counts(Object? m) => {for (final e in ((m as Map?) ?? const {}).entries) '${e.key}': (e.value as num).toInt()};
     int n(Map<Object?, Object?> m, String k) => (m[k] as num?)?.toInt() ?? 0;
     final leads = j['leads']! as Map, viewings = j['viewings']! as Map;
+    final similar = (j['recommendations'] as Map?) ?? const {};
     return MonthlyReport(
       month: j['month']! as String,
       leads: n(leads, 'total'),
@@ -62,6 +71,8 @@ class MonthlyReport {
               whatsapps: n(l, 'whatsapps'),
             ),
       ],
+      similarShown: n(similar, 'shown'),
+      similarOpened: n(similar, 'opened'),
     );
   }
 
@@ -79,6 +90,8 @@ class MonthlyReport {
       ['Report', month],
       ['Leads', leads],
       ['Viewings', viewings],
+      ['Similar homes shown', similarShown],
+      ['Similar homes opened', similarOpened],
       [],
       ['Lead stage', 'Leads'],
       for (final s in [...funnel, ...leadsByStage.keys.where((k) => !funnel.contains(k))]) [s, leadsByStage[s] ?? 0],

@@ -90,8 +90,11 @@ class ResultsScreen extends ConsumerWidget {
 
 /// A home in a list (results, saved), with its save heart.
 class ListingCard extends StatelessWidget {
-  const ListingCard({super.key, required this.listing});
+  const ListingCard({super.key, required this.listing, this.onOpen});
   final ListingSummary listing;
+
+  /// Called as the card opens its listing (e.g. to count a recommendation).
+  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +105,10 @@ class ListingCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => context.go('/listing/${l.slug}'),
+        onTap: () {
+          onOpen?.call();
+          context.go('/listing/${l.slug}');
+        },
         child: Padding(
           padding: EdgeInsets.all(b.spacing.lg),
           child: Column(

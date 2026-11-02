@@ -66,6 +66,10 @@ abstract interface class LeadRepository {
   /// `logContactTap`: counts a call or WhatsApp tap, no personal data (D13).
   Future<void> logTap({required String listingId, required String channel});
 
+  /// `logRecommendation`: counts "Similar homes" under [listingId] being
+  /// `shown`, or one of them `opened` (P7-s04). Counts only.
+  Future<void> logRecommendation({required String listingId, required String event});
+
   /// `openSlots`: the times still free on [day] (`2026-10-30`), as in
   /// `viewingTimes`; null when they can't be had (show every time then).
   Future<List<String>?> openTimes({required String listingId, required String day});

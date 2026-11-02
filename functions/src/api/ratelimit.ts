@@ -26,6 +26,8 @@ export const LIMITS = {
   viewingPerPhone: 3,
   viewingPerListing: 20,
   tapPerListing: 300,
+  /** Similar-homes counts (P7-s04): generous, only stops a script inflating them. */
+  recommendationPerListing: 600,
 } as const;
 
 const refFor = (db: Firestore, key: string) => db.collection('rateLimits').doc(createHash('sha256').update(key).digest('hex'));

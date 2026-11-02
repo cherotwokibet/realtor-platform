@@ -78,6 +78,12 @@ class DemoLeadRepository implements LeadRepository {
   @override
   Future<void> logTap({required String listingId, required String channel}) async => taps.add('$listingId/$channel');
 
+  /// `listingId/shown` or `listingId/opened`, as logged.
+  final recommendations = <String>[];
+
+  @override
+  Future<void> logRecommendation({required String listingId, required String event}) async => recommendations.add('$listingId/$event');
+
   @override
   Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone}) async =>
       viewings.add({'listingId': listingId, 'slot': slot, 'name': name, 'phone': phone});

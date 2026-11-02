@@ -14,6 +14,7 @@ import { bookViewing, openSlots, rescheduleViewing, updateViewingStatus } from '
 import { addAgentBlock, removeAgentBlock } from './availability';
 import { saveAgent } from './agents';
 import { monthlyReport } from './reports';
+import { logRecommendation, nairobiDay } from './recommendations';
 import { MIN_RENTALS, refreshAreaStats, saveArea } from './areas';
 import { moderateReview, submitReview } from './reviews';
 import { sweepSavedSearches } from './alerts';
@@ -693,6 +694,29 @@ describe('monthly report (P5-s08)', () => {
     assert.equal(typeof w.replyMins, 'number');
     assert.ok(!JSON.stringify(r).includes('Report Client') && !JSON.stringify(r).includes('700001401'));
     assert.equal((await monthlyReport(db, manager, { month: '2025-01' })).leads.total, 0);
+  });
+});
+
+describe('similar-homes click-through (P7-s04)', () => {
+  test('counts shown and opened per Nairobi day and surface; the monthly report adds them up; nothing about the visitor', async () => {
+    const day = new Date('2026-11-03T22:30:00Z'); // 01:30 on 4 Nov in Nairobi
+    assert.equal(nairobiDay(day), '2026-11-04');
+    for (const e of [
+      { event: 'shown', surface: 'app' },
+      { event: 'shown', surface: 'app' },
+      { event: 'shown', surface: 'web' },
+      { event: 'opened', surface: 'app' },
+    ]) {
+      await logRecommendation(db, { listingId: 'listing-001', ...e }, day);
+    }
+    const doc = (await db.collection('stats').doc('recommendations-2026-11-04').get()).data()!;
+    assert.deepEqual(doc, { day: '2026-11-04', app: { shown: 2, opened: 1 }, web: { shown: 1 } });
+    await rejectsWith(logRecommendation(db, { listingId: 'listing-001', event: 'liked', surface: 'app' }, day), 'invalid-argument');
+
+    await logRecommendation(db, { listingId: 'listing-001', event: 'opened', surface: 'web' }, new Date('2026-12-01T00:00:00Z'));
+    const nov = await monthlyReport(db, manager, { month: '2026-11' });
+    assert.deepEqual(nov.recommendations, { shown: 3, opened: 1 });
+    assert.deepEqual((await monthlyReport(db, manager, { month: '2026-12' })).recommendations, { shown: 0, opened: 1 });
   });
 });
 
