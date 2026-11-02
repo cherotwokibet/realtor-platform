@@ -117,7 +117,7 @@ class RecentSearches extends ConsumerWidget {
                 ActionChip(
                   avatar: const Icon(Icons.history, size: 18),
                   label: Text(recentLabel(f)),
-                  onPressed: () => context.go(f.toUri().toString()),
+                  onPressed: () => context.push(f.toUri().toString()),
                 ),
             ],
           ),

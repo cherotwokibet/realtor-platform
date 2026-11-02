@@ -8,6 +8,7 @@ import '../providers.dart';
 import '../account/account_screen.dart';
 import '../saved/favourites.dart';
 import 'purpose.dart';
+import '../nav.dart';
 
 /// Results for a filter URL. Every change of filter is a new URL, so the
 /// browser back button, shared links and app deep links all work.
@@ -15,7 +16,9 @@ class ResultsScreen extends ConsumerWidget {
   const ResultsScreen({super.key, required this.filters});
   final ListingFilters filters;
 
-  void _go(BuildContext context, ListingFilters f) => context.go(f.toUri().toString());
+  // A changed filter or sort replaces this page, so Back returns to where
+  // the search started, not through every filter tried.
+  void _go(BuildContext context, ListingFilters f) => context.replace(f.toUri().toString());
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -27,6 +30,7 @@ class ResultsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const AppBack(),
         title: Text('$what ${filters.purpose.heading}$where'),
         actions: [
           PopupMenuButton<ListingSort>(
@@ -108,7 +112,7 @@ class ListingCard extends StatelessWidget {
       child: InkWell(
         onTap: () {
           onOpen?.call();
-          context.go('/listing/${l.slug}');
+          context.push('/listing/${l.slug}');
         },
         child: Padding(
           padding: EdgeInsets.all(b.spacing.lg),

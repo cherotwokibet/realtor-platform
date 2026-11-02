@@ -5,6 +5,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import '../providers.dart';
 import '../search/results_screen.dart';
+import '../nav.dart';
 
 /// Shared layout: a heading block, then the live homes.
 class _PlaceScaffold extends ConsumerWidget {
@@ -19,7 +20,7 @@ class _PlaceScaffold extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     final listings = ref.watch(liveListingsProvider(homes));
     return Scaffold(
-      appBar: AppBar(title: Text(title, overflow: TextOverflow.ellipsis)),
+      appBar: AppBar(leading: const AppBack(), title: Text(title, overflow: TextOverflow.ellipsis)),
       body: ListView(padding: EdgeInsets.all(b.spacing.gutter), children: [
         ...header,
         SizedBox(height: b.spacing.lg),
@@ -40,7 +41,7 @@ class _PlaceScaffold extends ConsumerWidget {
 }
 
 Widget _missing(BuildContext context, String what) =>
-    Scaffold(appBar: AppBar(), body: Center(child: Text('This $what is not here any more.', style: Theme.of(context).textTheme.bodyLarge)));
+    Scaffold(appBar: AppBar(leading: const AppBack()), body: Center(child: Text('This $what is not here any more.', style: Theme.of(context).textTheme.bodyLarge)));
 
 /// `/area/<slug>`: the guide, typical rent, what is nearby and live homes.
 class AreaScreen extends ConsumerWidget {
@@ -52,7 +53,7 @@ class AreaScreen extends ConsumerWidget {
     final b = context.brand;
     final text = Theme.of(context).textTheme;
     return ref.watch(areaProvider(slug)).when(
-          loading: () => Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator())),
+          loading: () => Scaffold(appBar: AppBar(leading: const AppBack()), body: const Center(child: CircularProgressIndicator())),
           error: (_, __) => _missing(context, 'area'),
           data: (a) => a == null
               ? _missing(context, 'area')
@@ -90,7 +91,7 @@ class AgentScreen extends ConsumerWidget {
     final b = context.brand;
     final text = Theme.of(context).textTheme;
     return ref.watch(agentProvider(id)).when(
-          loading: () => Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator())),
+          loading: () => Scaffold(appBar: AppBar(leading: const AppBack()), body: const Center(child: CircularProgressIndicator())),
           error: (_, __) => _missing(context, 'agent'),
           data: (a) {
             if (a == null) return _missing(context, 'agent');

@@ -120,17 +120,27 @@ class _SectionShell extends StatelessWidget {
       context.go(sections[i].path);
     }
 
+    // Phone back on another tab (Saved, Account, …) goes to Search; only
+    // Search itself leaves the app. Screens pushed above a tab pop as usual.
+    Widget backToSearch(Widget page) => PopScope(
+          canPop: location == '/' || i < 0,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) go(0);
+          },
+          child: page,
+        );
+
     if (MediaQuery.sizeOf(context).width < wideFrom) {
-      return Scaffold(
+      return backToSearch(Scaffold(
         body: child,
         bottomNavigationBar: NavigationBar(
           selectedIndex: selected,
           onDestinationSelected: go,
           destinations: [for (final s in sections) NavigationDestination(icon: Icon(s.icon), label: s.label)],
         ),
-      );
+      ));
     }
-    return Scaffold(
+    return backToSearch(Scaffold(
       body: Row(
         children: [
           NavigationRail(
@@ -150,15 +160,42 @@ class _SectionShell extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 }
 
-class PlaceholderScreen extends StatelessWidget {
+/// A section whose screen is still being built (in-app chat): says so in
+/// plain words and offers WhatsApp, which already reaches the realtor.
+class PlaceholderScreen extends ConsumerWidget {
   const PlaceholderScreen({super.key, required this.title});
   final String title;
 
   @override
-  Widget build(BuildContext context) =>
-      Scaffold(appBar: AppBar(title: Text(title)), body: const Center(child: Text('Coming in Phase 4')));
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tenant = ref.watch(tenantProvider);
+    final b = context.brand;
+    final text = Theme.of(context).textTheme;
+    final wa = tenant.whatsappLink('Hello ${tenant.name}, I have a question.');
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(b.spacing.gutter),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('$title is coming soon.', style: text.titleMedium, textAlign: TextAlign.center),
+            SizedBox(height: b.spacing.sm),
+            Text(
+              wa == null ? 'Meanwhile, ask about any home from its page.' : 'Meanwhile, ${tenant.name} answers on WhatsApp.',
+              style: text.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            if (wa != null) ...[
+              SizedBox(height: b.spacing.lg),
+              FilledButton.icon(onPressed: () => ref.read(urlOpenerProvider)(wa), icon: const Icon(Icons.chat), label: const Text('Message on WhatsApp')),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
 }

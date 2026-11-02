@@ -63,7 +63,7 @@ void main() {
     expect(find.text('Rent · Kasarani · up to KES 10,000'), findsOneWidget);
     await tester.tap(find.text('Rent · Kasarani · up to KES 10,000'));
     await tester.pumpAndSettle();
-    expect(c.read(routerProvider).routerDelegate.currentConfiguration.uri.toString(), uri(kasarani));
+    expect(c.read(routerProvider).state.uri.toString(), uri(kasarani));
 
     await go(tester, '/');
     await tester.tap(find.text('Clear'));

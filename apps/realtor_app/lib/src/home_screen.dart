@@ -24,9 +24,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   static const _types = ['bedsitter', 'single-room', 'apartment', 'maisonette', 'townhouse', 'hostel'];
 
-  void _search({String? q, String? type}) => context.go(
-        ListingFilters(purpose: _purpose, q: q, types: [if (type != null) type]).toUri().toString(),
-      );
+  void _search({String? q, String? type}) {
+    // Plain search: an exact area name ("Ruaka") is that area, so results
+    // and alerts match the area rather than the words.
+    final typed = q?.trim().toLowerCase();
+    final names = ref.read(areaNamesProvider).value ?? const <String, String>{};
+    final area = typed == null || typed.isEmpty
+        ? null
+        : names.entries.where((e) => e.value.toLowerCase() == typed || e.key == typed.replaceAll(' ', '-')).map((e) => e.key).firstOrNull;
+    context.push(ListingFilters(
+      purpose: _purpose,
+      q: area == null ? q : null,
+      types: [if (type != null) type],
+      areas: [if (area != null) area],
+    ).toUri().toString());
+  }
 
   /// Conversational search (P7-s01): "2br Kilimani under 60k with parking"
   /// becomes filters; the results screen shows each one as a chip to remove.
@@ -38,14 +50,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       areas: ref.read(areaNamesProvider).value ?? const {},
       allowed: {for (final p in Purpose.values) if (features.isOn(p.feature)) p},
     );
-    context.go(parsed.filters.toUri().toString());
+    context.push(parsed.filters.toUri().toString());
   }
 
   @override
   Widget build(BuildContext context) {
     final tenant = ref.watch(tenantProvider);
     // Area names for typed searches, loaded before anyone presses search.
-    if (tenant.features.aiSearch) ref.watch(areaNamesProvider);
+    ref.watch(areaNamesProvider);
     final b = context.brand;
     final text = Theme.of(context).textTheme;
     final purposes = [for (final p in Purpose.values) if (tenant.features.isOn(p.feature)) p];

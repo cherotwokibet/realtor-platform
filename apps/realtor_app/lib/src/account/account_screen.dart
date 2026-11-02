@@ -160,7 +160,9 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               color: b.primarySoft,
               child: ListTile(
                 leading: const Icon(Icons.notifications_active_outlined),
-                title: Text('Sign in to get alerts for: ${describeSearch(pendingAlert)}'),
+                // What the alert will match: typed words are not part of alerts.
+                title: Text('Sign in to get alerts for: ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}'),
+                subtitle: pendingAlert.q == null ? null : Text('Alerts match the filters, not the words "${pendingAlert.q}".'),
               ),
             ),
           ],
@@ -188,12 +190,13 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           if (pendingAlert != null) ...[
             FilledButton.icon(
               icon: const Icon(Icons.notifications_active_outlined),
-              label: Text('Get alerts for ${describeSearch(pendingAlert)}'),
+              label: Text('Get alerts for ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}'),
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
                 await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, pendingAlert);
                 ref.read(pendingAlertProvider.notifier).set(null);
-                messenger.showSnackBar(SnackBar(content: Text('Saved: ${describeSearch(pendingAlert)}. New matches will show here.')));
+                messenger.showSnackBar(
+                    SnackBar(content: Text('Saved: ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}. New matches will show here.')));
               },
             ),
           ],
@@ -243,7 +246,7 @@ class _Alerts extends ConsumerWidget {
           trailing: IconButton(tooltip: 'Clear', icon: const Icon(Icons.close), onPressed: () => repo.clear(uid, a.id)),
           onTap: () {
             repo.markRead(uid, a.id);
-            context.go('/listing/${a.slug}');
+            context.push('/listing/${a.slug}');
           },
         ),
     ]);
@@ -265,7 +268,7 @@ class _Searches extends ConsumerWidget {
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(describeSearch(s.filters)),
-          onTap: () => context.go(s.filters.toUri().toString()),
+          onTap: () => context.push(s.filters.toUri().toString()),
           trailing: IconButton(
             tooltip: 'Stop these alerts',
             icon: const Icon(Icons.notifications_off_outlined),

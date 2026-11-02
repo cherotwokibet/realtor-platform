@@ -107,7 +107,7 @@ void main() {
     expect(find.text('Rent · Apartment · Kilimani'), findsOneWidget);
     await tester.tap(find.text(l.title));
     await tester.pumpAndSettle();
-    expect(c.read(routerProvider).routerDelegate.currentConfiguration.uri.path, '/listing/${l.slug}');
+    expect(c.read(routerProvider).state.uri.path, '/listing/${l.slug}');
 
     c.read(routerProvider).go('/account');
     await tester.pumpAndSettle();
@@ -128,5 +128,13 @@ void main() {
     expect(find.text('Get alerts for Rent · Apartment · Kilimani'), findsNothing);
     expect(find.text('Rent · Apartment · Kilimani'), findsOneWidget, reason: 'listed under Saved searches');
     expect(c.read(pendingAlertProvider), isNull);
+  });
+
+  testWidgets('Account says what an alert will match when the search had typed words', (tester) async {
+    await open(tester, '/rent?q=near+the+mall');
+    await tester.tap(find.text('Get alerts for new matches'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sign in to get alerts for: Rent'), findsOneWidget);
+    expect(find.text('Alerts match the filters, not the words "near the mall".'), findsOneWidget);
   });
 }
