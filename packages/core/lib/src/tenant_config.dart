@@ -246,6 +246,8 @@ class TenantConfig {
     required this.extraLocales,
     required this.currency,
     required this.features,
+    this.mapTiles = defaultMapTiles,
+    this.mapAttribution = defaultMapAttribution,
   });
 
   final String id, name;
@@ -267,6 +269,11 @@ class TenantConfig {
   final List<String> extraLocales;
   final String currency;
   final Features features;
+
+  /// Map search (P3-s04): a raster tile URL template ({z}/{x}/{y}) and the
+  /// credit the provider requires. OpenStreetMap unless the tenant file sets
+  /// `map`, so a realtor can move to MapTiler, Stadia or similar without code.
+  final String mapTiles, mapAttribution;
 
   bool get hasContactNumbers => phone != 'TBC' && whatsapp != 'TBC';
 
@@ -293,6 +300,8 @@ class TenantConfig {
         extraLocales: extraLocales,
         currency: currency,
         features: f,
+        mapTiles: mapTiles,
+        mapAttribution: mapAttribution,
       );
 
   /// WhatsApp deep link with a prefilled message, or null until a number exists.
@@ -334,6 +343,14 @@ class TenantConfig {
       extraLocales: _req<List<Object?>>(locale, 'extra', 'locale').cast<String>(),
       currency: _req<String>(locale, 'currency', 'locale'),
       features: Features.fromJson(_obj(j, 'features', p)),
+      mapTiles: (j['map'] as Map?)?['tiles'] as String? ?? defaultMapTiles,
+      mapAttribution: (j['map'] as Map?)?['attribution'] as String? ?? defaultMapAttribution,
     );
   }
 }
+
+/// OpenStreetMap's standard tiles (decided 2 Nov): free, no key. Their usage
+/// policy asks for attribution and an identifying User-Agent; a busy tenant
+/// should move to a paid tile host via the tenant file's `map` block.
+const defaultMapTiles = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const defaultMapAttribution = '© OpenStreetMap contributors';

@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:realtor_core/realtor_core.dart';
+import 'package:realtor_core/realtor_core.dart' hide GeoPoint;
 
 typedef _Doc = QueryDocumentSnapshot<Map<String, Object?>>;
 

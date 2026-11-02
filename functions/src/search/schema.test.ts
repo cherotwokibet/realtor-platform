@@ -33,6 +33,14 @@ test('the description is searchable, weighted below title, area and estate (P7-s
   assert.equal(String(p.query_by_weights).split(',').length, 5);
 });
 
+test('drawn polygon becomes a Typesense geo polygon filter; too few or too many corners are ignored (P3-s04)', () => {
+  const tri = [{ lat: -1.28, lng: 36.8 }, { lat: -1.28, lng: 36.84 }, { lat: -1.3, lng: 36.82 }];
+  assert.match(toSearchParams({ purpose: 'rent', polygon: tri } as any).filter_by!, /location:\(-1\.28, 36\.8, -1\.28, 36\.84, -1\.3, 36\.82\)$/);
+  assert.doesNotMatch(toSearchParams({ purpose: 'rent', polygon: tri.slice(0, 2) } as any).filter_by!, /location/);
+  const many = Array.from({ length: 21 }, (_, i) => ({ lat: -1.2 - i / 1000, lng: 36.8 + (i % 2) / 100 }));
+  assert.doesNotMatch(toSearchParams({ purpose: 'rent', polygon: many } as any).filter_by!, /location/);
+});
+
 test('verification lapses after expiresAt', () => {
   const l = seedListing('listing-001');
   assert.equal(toSearchDoc('x', { ...l, expiresAt: new Date(now.getTime() - 1) }, now)!.verified, false);
