@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { join, basename, relative } from 'node:path';
 import { validateTenants, repoRoot } from './validate.ts';
@@ -11,7 +11,7 @@ import { createTenant } from './create.ts';
 import { rebrandTenant } from './rebrand.ts';
 import { patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
 import { tenantFontFiles } from './fonts.ts';
-import { ENVS, type Env, blockingChanges, deploySteps, imageRepo, parseBilling, parseParts, planProblems, planSummary, shellLine } from './deploy.ts';
+import { ENVS, type Env, blockingChanges, deploySteps, failedFunctions, functionBatches, imageRepo, parseBilling, parseParts, planProblems, planSummary, shellLine } from './deploy.ts';
 import { fromGoogleServices, fromServiceInfoPlist, type MobileFirebase, pickApps } from './firebase-config.ts';
 import {
   flavorName,
@@ -97,6 +97,23 @@ async function writeAppAssets(root: string, t: any, rel: string, alsoTo: string[
     mkdirSync(join(out, 'icons'), { recursive: true });
     for (const f of r.files.filter((f) => f.endsWith('.png'))) copyFileSync(join(r.outDir, f), join(out, 'icons', f));
   }
+}
+
+/** Runs a command with its output shown as it comes and returned when it ends. */
+function runTee(argv: string[], cwd: string, env?: Record<string, string>): Promise<{ status: number; output: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(argv[0], argv.slice(1), { cwd, env: { ...process.env, ...env }, stdio: ['inherit', 'pipe', 'pipe'] });
+    let output = '';
+    child.stdout.on('data', (d) => {
+      process.stdout.write(d);
+      output += d;
+    });
+    child.stderr.on('data', (d) => {
+      process.stderr.write(d);
+      output += d;
+    });
+    child.on('close', (code) => resolve({ status: code ?? 1, output }));
+  });
 }
 
 switch (cmd) {
@@ -307,6 +324,28 @@ next, in apps/realtor_app:
     for (const s of steps) {
       if (s.skipIfExists && existsSync(join(root, s.skipIfExists))) continue;
       console.log(`\n▶ ${s.title}\n  ${shown(s)}`);
+      if (s.retryFunctions) {
+        // Shown live and kept, to find what Google's write quota made fail.
+        let r = await runTee(s.argv, join(root, s.cwd), s.env);
+        for (let round = 1; r.status !== 0 && round <= 3; round++) {
+          const failed = failedFunctions(r.output);
+          if (!failed.length) break;
+          console.log(`\n↻ ${failed.length} functions failed (usually the API's write quota); in a minute, again in sixes (round ${round} of 3)`);
+          await new Promise((done) => setTimeout(done, process.env.DEPLOY_RETRY_MS ? Number(process.env.DEPLOY_RETRY_MS) : 60_000));
+          let output = '', status = 0;
+          for (const only of functionBatches(failed)) {
+            const b = await runTee([s.argv[0], 'deploy', '--only', only, ...s.argv.slice(s.argv.indexOf('--project'))], join(root, s.cwd), s.env);
+            output += b.output;
+            if (b.status !== 0) status = b.status;
+          }
+          r = { status, output };
+        }
+        if (r.status !== 0) {
+          console.error(`\n✗ "${s.title}" failed. Fix it, then carry on with: tenant deploy ${id} ${env} --only=${parts.slice(parts.indexOf(s.part)).join(',')}`);
+          process.exit(1);
+        }
+        continue;
+      }
       const r = spawnSync(s.argv[0], s.argv.slice(1), {
         cwd: join(root, s.cwd),
         env: { ...process.env, ...s.env },

@@ -37,6 +37,11 @@ export interface Step {
   skipIfExists?: string;
   /** Not a command: check the saved Terraform plan, then ask before applying. */
   checkPlan?: boolean;
+  /**
+   * A Functions deploy: when some functions fail (Google's write quota is
+   * hit when ~35 update at once), redeploy just those in small batches.
+   */
+  retryFunctions?: boolean;
 }
 
 /** Cloud Shell's IPv6 route times out on uploads to Firebase; IPv4 first avoids it. */
@@ -73,6 +78,23 @@ export function shellLine(s: Step): string {
   return s.cwd === '.' ? cmd : `(cd ${s.cwd} && ${cmd})`;
 }
 
+/**
+ * Function names a `firebase deploy` run reports as failed ("Failed to
+ * update function X", "Failed to create function X", "Failed to set invoker
+ * function X"), each once, in the order reported.
+ */
+export function failedFunctions(output: string): string[] {
+  const names = [...output.matchAll(/Failed to (?:update|create|set invoker)(?: function)? (?:projects\/[^/\s]+\/locations\/[^/\s]+\/functions\/)?([A-Za-z][\w-]*)/g)].map((m) => m[1]);
+  return [...new Set(names.filter((n) => n !== 'function'))];
+}
+
+/** `firebase deploy --only` arguments for [names], [size] functions at a time. */
+export function functionBatches(names: string[], size = 6): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < names.length; i += size) out.push(names.slice(i, i + size).map((n) => `functions:${n}`).join(','));
+  return out;
+}
+
 /** The parts to run, in order: an empty list means all of them. */
 export function parseParts(list: string | undefined): Part[] {
   if (!list) return [...PARTS];
@@ -91,7 +113,7 @@ export function deploySteps(i: DeployInputs): Step[] {
   const on = (part: Part) => i.parts.includes(part);
 
   if (on('functions')) {
-    steps.push({ part: 'functions', title: 'Cloud Functions', argv: ['firebase', 'deploy', '--only', 'functions', ...p], cwd: '.', env: NODE_IPV4 });
+    steps.push({ part: 'functions', title: 'Cloud Functions', argv: ['firebase', 'deploy', '--only', 'functions', ...p], cwd: '.', env: NODE_IPV4, retryFunctions: true });
   }
   if (on('images')) {
     steps.push(

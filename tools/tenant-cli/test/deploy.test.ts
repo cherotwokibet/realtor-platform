@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { blockingChanges, deploySteps, imageRepo, parseBilling, shellLine, parseParts, planProblems, planSummary } from '../src/deploy.ts';
+import { blockingChanges, deploySteps, failedFunctions, functionBatches, imageRepo, parseBilling, shellLine, parseParts, planProblems, planSummary } from '../src/deploy.ts';
 
 const base = { id: 'acme', env: 'dev' as const, project: 'acme-dev', region: 'europe-west1', tag: 'abc1234', billing: 'ABCDEF-123456-0A1B2C' };
 const repo = imageRepo('acme-dev', 'europe-west1');
@@ -111,4 +111,20 @@ test('steps print as shell lines a person could paste', () => {
     "(cd apps/admin && sh -c 'flutter create . --platforms=web --project-name realtor_admin && rm -f test/widget_test.dart')",
   );
   assert.equal(shellLine(steps.at(-1)!), 'NODE_OPTIONS=--dns-result-order=ipv4first firebase deploy --only hosting:admin,hosting:app,hosting:share --project acme-dev');
+});
+
+test('failed functions from a firebase deploy log, then batches of six', () => {
+  const log = [
+    '✔  functions[health(europe-west1)] Successful update operation.',
+    '⚠  functions:  failed to update function projects/acme-dev/locations/europe-west1/functions/onListingVideo',
+    'Failed to update function projects/acme-dev/locations/europe-west1/functions/onListingVideo',
+    'Failed to get the IAM Policy on the Service projects/acme-dev/locations/europe-west1/services/sharebookviewing',
+    '- Error Failed to set invoker function shareBookViewing in region europe-west1',
+    '- Error Failed to update function addAgentBlock in region europe-west1',
+    '- Error Failed to create function newThing in region europe-west1',
+  ].join('\n');
+  assert.deepEqual(failedFunctions(log), ['onListingVideo', 'shareBookViewing', 'addAgentBlock', 'newThing']);
+  assert.deepEqual(failedFunctions('✔  Deploy complete!'), []);
+  const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+  assert.deepEqual(functionBatches(names), ['functions:a,functions:b,functions:c,functions:d,functions:e,functions:f', 'functions:g']);
 });
