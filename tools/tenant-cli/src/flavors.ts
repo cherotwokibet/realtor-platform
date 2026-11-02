@@ -45,6 +45,17 @@ project.extensions.getByType(ApplicationExtension::class.java).apply {
     // compiled declarations"), which fails every release build. CI's
     // analyzers and tests cover the Dart code; Lint stays on for debug builds.
     lint { checkReleaseBuilds = false }
+    // Release signing with the tenant's upload key (P4-s07): \`tenant release\`
+    // sets these from Secret Manager; without them release builds keep the
+    // template's debug key (phone tests).
+    System.getenv("UPLOAD_KEYSTORE")?.let { path ->
+        signingConfigs.create("upload") {
+            storeFile = project.file(path)
+            storePassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("UPLOAD_KEY_ALIAS") ?: "upload"
+            keyPassword = System.getenv("UPLOAD_KEY_PASSWORD") ?: System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+        }
+    }
     flavorDimensions += "tenant"
     productFlavors {
 ${flavors}
@@ -64,13 +75,18 @@ function kotlinString(s: string): string {
 
 const APPLY = 'apply(from = "tenant-flavors.gradle.kts")';
 
-/** Adds the apply line once, after the plugins block. */
+const DEBUG_SIGNING = 'signingConfig = signingConfigs.getByName("debug")';
+const UPLOAD_OR_DEBUG = 'signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")';
+
+/** Adds the apply line once, after the plugins block, and lets release
+ * builds use the `upload` signing config when the flavors script made one. */
 export function patchBuildGradle(src: string): string {
-  if (src.includes(APPLY)) return src;
-  const m = /^plugins \{[\s\S]*?^\}\n/m.exec(src);
+  let out = src.includes(DEBUG_SIGNING) && !src.includes(UPLOAD_OR_DEBUG) ? src.replace(DEBUG_SIGNING, UPLOAD_OR_DEBUG) : src;
+  if (out.includes(APPLY)) return out;
+  const m = /^plugins \{[\s\S]*?^\}\n/m.exec(out);
   if (!m) throw new Error('android/app/build.gradle.kts has no plugins block');
   const at = m.index + m[0].length;
-  return src.slice(0, at) + '\n' + APPLY + '\n' + src.slice(at);
+  return out.slice(0, at) + '\n' + APPLY + '\n' + out.slice(at);
 }
 
 /** Share-page paths the app opens itself (App Links, P3-s07). Keep in step

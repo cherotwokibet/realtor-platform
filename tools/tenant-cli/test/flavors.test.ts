@@ -41,6 +41,15 @@ test('each tenant gets its own application id', () => {
   assert.match(g, /manifestPlaceholders\["appName"\] = "Realtime Estates"/);
   // Lint's release check crashes on this script; release builds must still work.
   assert.match(g, /lint \{ checkReleaseBuilds = false \}/);
+  // Release signing with the upload key only when `tenant release` provides it.
+  assert.match(g, /System\.getenv\("UPLOAD_KEYSTORE"\)\?\.let \{ path ->\n\s+signingConfigs\.create\("upload"\)/);
+});
+
+test('release builds sign with the upload key when there is one, else the debug key', () => {
+  const template = 'plugins {\n}\n\nandroid {\n    buildTypes {\n        release {\n            signingConfig = signingConfigs.getByName("debug")\n        }\n    }\n}\n';
+  const once = patchBuildGradle(template);
+  assert.match(once, /signingConfig = signingConfigs\.findByName\("upload"\) \?: signingConfigs\.getByName\("debug"\)/);
+  assert.equal(patchBuildGradle(once), once);
 });
 
 test('gradle and manifest patches apply once', () => {
