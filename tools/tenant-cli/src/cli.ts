@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
+import { createInterface } from 'node:readline/promises';
 import { join, basename, relative } from 'node:path';
 import { validateTenants, repoRoot } from './validate.ts';
 import { tenantCss } from './css.ts';
@@ -10,6 +11,7 @@ import { createTenant } from './create.ts';
 import { rebrandTenant } from './rebrand.ts';
 import { patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
 import { tenantFontFiles } from './fonts.ts';
+import { ENVS, type Env, deploySteps, imageRepo, parseBilling, parseParts, planProblems, planSummary } from './deploy.ts';
 import { fromGoogleServices, fromServiceInfoPlist, type MobileFirebase, pickApps } from './firebase-config.ts';
 import {
   flavorName,
@@ -43,8 +45,12 @@ function usage(): never {
   firebase-config <id> <dev|stage|prod> [--flavor]
                      After prepare (or flavors): fetch the Android/iOS Firebase settings with the
                      firebase CLI into the app's firebase.json asset (generated, not committed)
+  deploy <id> <dev|stage|prod> [--only=functions,images,infra,web] [--dry-run] [--yes]
+                     In Cloud Shell: Functions, both images (tagged with the commit), Terraform
+                     (refuses a plan that would change billing, delete anything or point Cloud Run
+                     outside the project's repo; asks before applying) and the Hosting sites
 
-Coming later: deploy <id> <env>, build <id> <platform>, iOS flavors`);
+Coming later: build <id> <platform>, iOS flavors`);
   process.exit(cmd ? 1 : 0);
 }
 
@@ -252,6 +258,87 @@ next, in apps/realtor_app:
     const file = join(repoRoot(), 'apps', 'realtor_app', dir, 'firebase.json');
     writeFileSync(file, JSON.stringify(out, null, 2));
     console.log(`wrote ${relative(repoRoot(), file)} (${env}: ${project}${ids.android ? ', android' : ''}${ids.ios ? ', ios' : ''})`);
+    break;
+  }
+  case 'deploy': {
+    // In Cloud Shell, from the repo: deploy <id> <dev|stage|prod>
+    //   [--only=functions,images,infra,web] [--billing=XXXXXX-XXXXXX-XXXXXX] [--dry-run] [--yes]
+    const [id, env] = args.filter((a) => !a.startsWith('--'));
+    const opt = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+    const flag = (name: string) => args.includes(`--${name}`);
+    if (!id || !(ENVS as readonly string[]).includes(env)) usage();
+    const t = loadValid(id);
+    const project: string | undefined = t.firebase.projects[env];
+    if (!project) throw new Error(`tenant ${id} has no ${env} project`);
+    const root = repoRoot();
+    const parts = parseParts(opt('only'));
+    const git = (c: string) => execSync(`git ${c}`, { cwd: root, encoding: 'utf8' }).trim();
+    const tag = git('rev-parse --short HEAD');
+    const dryRun = flag('dry-run');
+    // Images are tagged with the commit, so they must be built from exactly it.
+    if (parts.includes('images') && !dryRun && git('status --porcelain')) {
+      console.error('✗ uncommitted changes: commit or stash them first (images are tagged with the commit)');
+      process.exit(1);
+    }
+    let billing: string | undefined;
+    if (parts.includes('infra')) {
+      const raw =
+        opt('billing') ??
+        (dryRun ? 'XXXXXX-XXXXXX-XXXXXX' : execSync(`gcloud billing projects describe ${project} --format="value(billingAccountName)"`, { encoding: 'utf8' }));
+      billing = dryRun ? raw : (parseBilling(raw) ?? undefined);
+      if (!billing) {
+        console.error(`✗ no billing account for ${project} ("${raw.trim()}"); pass --billing=XXXXXX-XXXXXX-XXXXXX`);
+        process.exit(1);
+      }
+    }
+    const steps = deploySteps({ id, env: env as Env, project, region: t.firebase.region, tag, billing, parts });
+    const shown = (s: (typeof steps)[number]) =>
+      `${s.cwd === '.' ? '' : `(cd ${s.cwd} && `}${Object.entries(s.env ?? {}).map(([k, v]) => `${k}=${v} `).join('')}${s.argv.join(' ')}${s.cwd === '.' ? '' : ')'}`;
+    console.log(`deploy ${id} → ${project} (${env}), commit ${tag}: ${parts.join(', ')}`);
+    if (dryRun) {
+      for (const s of steps) console.log(`\n# ${s.title}${s.skipIfExists ? ` (skipped if ${s.skipIfExists} exists)` : ''}\n${shown(s)}`);
+      break;
+    }
+    const missing = [...new Set(steps.map((s) => s.argv[0]))].filter((bin) => spawnSync('which', [bin]).status !== 0);
+    if (missing.length) {
+      console.error(`✗ not on PATH: ${missing.join(', ')}`);
+      process.exit(1);
+    }
+    for (const s of steps) {
+      if (s.skipIfExists && existsSync(join(root, s.skipIfExists))) continue;
+      console.log(`\n▶ ${s.title}\n  ${shown(s)}`);
+      const r = spawnSync(s.argv[0], s.argv.slice(1), {
+        cwd: join(root, s.cwd),
+        env: { ...process.env, ...s.env },
+        stdio: s.checkPlan ? ['ignore', 'pipe', 'inherit'] : 'inherit',
+        encoding: 'utf8',
+        maxBuffer: 256 * 1024 * 1024,
+      });
+      if (r.status !== 0) {
+        console.error(`\n✗ "${s.title}" failed. Fix it, then carry on with: tenant deploy ${id} ${env} --only=${parts.slice(parts.indexOf(s.part)).join(',')}`);
+        process.exit(1);
+      }
+      if (s.checkPlan) {
+        const plan = JSON.parse(r.stdout);
+        const problems = planProblems(plan, imageRepo(project, t.firebase.region));
+        if (problems.length) {
+          console.error(`✗ refusing to apply this plan:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
+          process.exit(1);
+        }
+        const n = planSummary(plan);
+        console.log(`  plan: ${n.add} to add, ${n.change} to change, ${n.replace} to replace, ${n.destroy} to destroy`);
+        if (!flag('yes')) {
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          const answer = await rl.question(`  Apply to ${project} (${env})? [y/N] `);
+          rl.close();
+          if (answer.trim().toLowerCase() !== 'y') {
+            console.log('  not applied');
+            process.exit(1);
+          }
+        }
+      }
+    }
+    console.log(`\n✓ deployed ${id} to ${project} at ${tag}`);
     break;
   }
   default:
