@@ -66,8 +66,11 @@ export function parseBilling(s: string): string | null {
 export function blockingChanges(porcelain: string): string[] {
   return porcelain
     .split('\n')
-    .filter((l) => l.trim() && !l.startsWith('??'))
-    .map((l) => l.slice(3))
+    // The status is two columns then a space, but a caller that trims the
+    // output loses the first line's leading space (" M .firebaserc").
+    .map((l) => /^\s*(\S{1,2})\s+(.+)$/.exec(l))
+    .filter((m): m is RegExpExecArray => m != null && m[1] !== '??')
+    .map((m) => m[2].replace(/^.* -> /, ''))
     .filter((path) => path !== '.firebaserc');
 }
 

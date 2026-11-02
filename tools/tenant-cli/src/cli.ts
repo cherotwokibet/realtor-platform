@@ -293,7 +293,7 @@ next, in apps/realtor_app:
     const tag = git('rev-parse --short HEAD');
     const dryRun = flag('dry-run');
     // Images are tagged with the commit, so they must be built from exactly it.
-    const dirty = blockingChanges(git('status --porcelain'));
+    const dirty = blockingChanges(execSync('git status --porcelain', { cwd: root, encoding: 'utf8' }));
     if (parts.includes('images') && !dryRun && dirty.length) {
       console.error(`✗ uncommitted changes in ${dirty.join(', ')}: commit or stash them first (images are tagged with the commit)`);
       process.exit(1);
