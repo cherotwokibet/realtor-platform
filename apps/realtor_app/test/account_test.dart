@@ -56,6 +56,7 @@ void main() {
     await tester.tap(find.text('Get alerts for new matches'));
     await tester.pumpAndSettle();
     expect(find.text('Email me a sign-in link'), findsOneWidget);
+    expect(find.text('Sign in to get alerts for: Rent · Apartment'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('email')), 'amina@example.com');
     await tester.tap(find.text('Email me a sign-in link'));
     await tester.pumpAndSettle();
@@ -113,5 +114,19 @@ void main() {
     await tester.tap(find.byTooltip('Stop these alerts'));
     await tester.pumpAndSettle();
     expect(find.textContaining('then tap "Get alerts"'), findsOneWidget);
+  });
+
+  testWidgets('after signing in, Account offers the search "Get alerts" was tapped on', (tester) async {
+    final c = await open(tester, '/rent/apartments/kilimani');
+    await tester.tap(find.text('Get alerts for new matches'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue with Google'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Get alerts for Rent · Apartment · Kilimani'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Saved: Rent · Apartment · Kilimani'), findsOneWidget);
+    expect(find.text('Get alerts for Rent · Apartment · Kilimani'), findsNothing);
+    expect(find.text('Rent · Apartment · Kilimani'), findsOneWidget, reason: 'listed under Saved searches');
+    expect(c.read(pendingAlertProvider), isNull);
   });
 }
