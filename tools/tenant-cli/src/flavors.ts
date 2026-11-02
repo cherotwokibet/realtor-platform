@@ -40,6 +40,11 @@ export function androidFlavorsGradle(tenants: any[]): string {
 import com.android.build.api.dsl.ApplicationExtension
 
 project.extensions.getByType(ApplicationExtension::class.java).apply {
+    // Android Lint's release check (lintVitalAnalyzeRelease) crashes reading
+    // this applied Kotlin script ("findFirCompiledSymbol only works on
+    // compiled declarations"), which fails every release build. CI's
+    // analyzers and tests cover the Dart code; Lint stays on for debug builds.
+    lint { checkReleaseBuilds = false }
     flavorDimensions += "tenant"
     productFlavors {
 ${flavors}

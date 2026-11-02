@@ -63,8 +63,8 @@ jobs:
           mkdir -p ../../out
           for f in $(ls assets/flavors); do
             flutter build apk --release --flavor "$f" --split-per-abi --target-platform android-arm64
-            cp build/app/outputs/flutter-apk/app-arm64-v8a-"$f"-release.apk ../../out/"$f"-arm64.apk 2>/dev/null \
-              || cp "$(ls build/app/outputs/flutter-apk/*"$f"*release.apk | head -1)" ../../out/"$f"-arm64.apk
+            # Gradle lower-cases the flavor in the file name (app-arm64-v8a-demohomes-release.apk).
+            cp "$(ls build/app/outputs/flutter-apk/app-arm64-v8a-*release.apk | grep -i -- "-$f-release" | head -1)" ../../out/"$f"-arm64.apk
             rm -rf build/app/intermediates build/app/tmp
           done
           ls -l ../../out
