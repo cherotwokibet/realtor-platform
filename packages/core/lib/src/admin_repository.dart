@@ -2,6 +2,7 @@ import 'agent_profile.dart';
 import 'area_guide.dart';
 import 'listing_draft.dart';
 import 'staff.dart';
+import 'viewing_week.dart';
 
 /// Lead pipeline stages, in order (functions/src/model/schema.ts).
 const leadStages = ['new', 'contacted', 'viewing', 'offer', 'won', 'lost'];
@@ -271,6 +272,10 @@ abstract interface class AdminRepository {
   /// Time off not yet over at [now], soonest first: an agent's own, or
   /// everyone's for managers.
   Future<List<AgentBlock>> timeOff(StaffUser who, DateTime now);
+
+  /// Viewings in [calendarViewingStatuses] with a slot in [from, to),
+  /// earliest first: an agent's own, or everyone's for managers.
+  Future<List<ViewingRow>> viewingsBetween(StaffUser who, DateTime from, DateTime to);
 }
 
 /// The rows [who] may see: an agent's own, everyone's for managers.

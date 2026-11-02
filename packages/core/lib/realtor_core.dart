@@ -17,3 +17,4 @@ export 'src/price_insight.dart';
 export 'src/staff.dart';
 export 'src/tenant_config.dart';
 export 'src/viewing_slots.dart';
+export 'src/viewing_week.dart';

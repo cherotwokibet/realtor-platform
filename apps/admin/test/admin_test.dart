@@ -851,6 +851,62 @@ void main() {
     expect(await actions.rescheduleViewing(wanjiku, viewingId: v.id, slot: viewingSlot(day.value, '10:00')), isNotEmpty);
   });
 
+  testWidgets('week calendar: the same bookings as the list, day by day in Nairobi time; weeks move', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Week'));
+    await tester.pumpAndSettle();
+    final start = weekStart(DateTime.now());
+    expect(find.text('Week of ${nairobiDayLabel(start)}'), findsOneWidget);
+    expect(find.text('This week'), findsNothing);
+    final repo = container.read(adminRepositoryProvider);
+    final week = await repo.viewingsBetween(manager, start, start.add(const Duration(days: 7)));
+    expect(week.every((v) => v.status != 'cancelled'), isTrue);
+    for (var i = 0; i < 7; i++) {
+      expect(find.text(nairobiDayLabel(start.add(Duration(days: i)))), findsOneWidget);
+    }
+    // Every booking this week shows once, with its time and agent (managers).
+    for (final v in week) {
+      expect(find.text([v.clientName ?? '—', label(v.status), v.agentName].join(' · ')), findsWidgets, reason: v.id);
+    }
+
+    await tester.tap(find.byTooltip('Next week'));
+    await tester.pumpAndSettle();
+    final next = start.add(const Duration(days: 7));
+    expect(find.text('Week of ${nairobiDayLabel(next)}'), findsOneWidget);
+    final nextWeek = await repo.viewingsBetween(manager, next, next.add(const Duration(days: 7)));
+    expect(find.text('Nothing booked'), findsNWidgets(7 - {for (final v in nextWeek) nairobiDayLabel(v.slot)}.length));
+    await tester.tap(find.text('This week'));
+    await tester.pumpAndSettle();
+    expect(find.text('Week of ${nairobiDayLabel(start)}'), findsOneWidget);
+  });
+
+  testWidgets('week calendar: an agent sees only their own viewings and their time off', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Viewings'));
+    await tester.pumpAndSettle();
+    final repo = container.read(adminRepositoryProvider);
+    final start = weekStart(DateTime.now());
+    // Time off on the last viewing day of next week, so it is always ahead.
+    final day = start.add(const Duration(days: 12));
+    await container.read(adminActionsProvider).addTimeOff(wanjiku,
+        start: day.add(const Duration(hours: 10)).toIso8601String(), end: day.add(const Duration(hours: 14)).toIso8601String(), note: 'Clinic');
+    await tester.tap(find.text('Week'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Next week'));
+    await tester.pumpAndSettle();
+    expect(find.text('Time off'), findsOneWidget);
+    expect(find.text('Clinic'), findsOneWidget);
+    expect(find.text('10:00–14:00'), findsOneWidget);
+    final next = start.add(const Duration(days: 7));
+    final mine = await repo.viewingsBetween(wanjiku, next, next.add(const Duration(days: 7)));
+    expect(mine.every((v) => v.agentId == 'agent-wanjiku'), isTrue);
+    for (final v in mine) {
+      expect(find.text([v.clientName ?? '—', label(v.status)].join(' · ')), findsWidgets, reason: v.id);
+    }
+  });
+
   testWidgets('a manager adds an agent profile, then gives them a photo', (tester) async {
     final picked = <PickedFile>[(name: 'mercy.jpg', bytes: Uint8List(4096), type: 'image/jpeg')];
     await open(tester, as: manager, overrides: [filePickerProvider.overrideWithValue(_FakePicker(picked))]);
