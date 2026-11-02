@@ -39,6 +39,8 @@ test('each tenant gets its own application id', () => {
   assert.match(g, /create\("realtimeEstates"\) \{\n\s+dimension = "tenant"\n\s+applicationId = "ke\.co\.realtimeestates\.app"/);
   assert.match(g, /create\("demoHomes"\)[\s\S]*applicationId = "com\.example\.demohomes"/);
   assert.match(g, /manifestPlaceholders\["appName"\] = "Realtime Estates"/);
+  // Lint's release check crashes on this script; release builds must still work.
+  assert.match(g, /lint \{ checkReleaseBuilds = false \}/);
 });
 
 test('gradle and manifest patches apply once', () => {
