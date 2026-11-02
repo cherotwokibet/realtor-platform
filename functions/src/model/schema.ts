@@ -53,6 +53,8 @@ export const listing = z
     /** areas/{slug} */
     area: slug,
     estate: z.string().max(80).optional(),
+    /** The listing's text (P7-s02): the agent's own words, or a suggestion they edited. */
+    description: z.string().max(3000).optional(),
     amenities: z.array(z.string().max(40)).max(40),
     utilities: z.object({ water: z.boolean(), electricity: z.boolean(), wifi: z.boolean() }).partial(),
     media: z.array(mediaItem).max(60),

@@ -173,6 +173,11 @@ describe('listings', () => {
     assert.notEqual(slug, '2-bedroom-apartment-kilimani', 'the seed already uses that slug');
     assert.match(slug, /^2-bedroom-apartment-kilimani-[a-z0-9]{6}$/);
   });
+  test('the description is stored trimmed, and an over-long one refused (P7-s02)', async () => {
+    const { listingId } = await submitListing(db, wanjiku, { ...newListing, description: '  Near Yaya Centre.  ' }, now);
+    assert.equal((await db.collection('listings').doc(listingId).get()).get('description'), 'Near Yaya Centre.');
+    await rejectsWith(submitListing(db, wanjiku, { ...newListing, description: 'x'.repeat(3001) }, now), 'invalid-argument');
+  });
   test("a purpose the tenant switched off is refused at submit and at approval", async () => {
     const short = { ...newListing, purpose: 'short-stay' };
     const { listingId } = await submitListing(db, wanjiku, short, now);

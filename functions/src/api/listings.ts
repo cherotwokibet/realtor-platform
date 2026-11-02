@@ -24,6 +24,7 @@ export const submitListingInput = z.object({
   lng: z.number().min(-180).max(180),
   area: slug,
   estate: z.string().max(80).optional(),
+  description: z.string().trim().max(3000).optional(),
   amenities: z.array(z.string().max(40)).max(40).default([]),
   utilities: z.object({ water: z.boolean(), electricity: z.boolean(), wifi: z.boolean() }).partial().default({}),
   /**

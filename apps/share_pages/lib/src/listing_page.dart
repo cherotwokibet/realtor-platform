@@ -101,6 +101,8 @@ class ListingPage extends StatelessComponent {
               ),
           ]),
         p([Component.text(seo.description)]),
+        // The agent's own text, paragraph by paragraph (escaped like all text).
+        for (final para in l.description.split(RegExp(r'\n\s*\n'))) if (para.trim().isNotEmpty) p([Component.text(para.trim())]),
         if (l.amenities.isNotEmpty) ul([for (final am in l.amenities) li([Component.text(am)])]),
         div(classes: 'cta', [
           a(href: seo.appUrl, classes: 'open', const [Component.text('Open in app')]),

@@ -26,6 +26,7 @@ class ListingDraft {
     this.lng = 0,
     this.area = '',
     this.estate,
+    this.description = '',
     this.amenities = const [],
     this.agentId,
   });
@@ -37,6 +38,9 @@ class ListingDraft {
   final int? depositMonths, serviceChargeKES;
   final double lat, lng;
   final String? estate;
+
+  /// The listing's text (P7-s02); may be empty.
+  final String description;
   final List<String> amenities;
 
   /// Who it is listed for; managers choose, an agent is always themself.
@@ -60,6 +64,7 @@ class ListingDraft {
       lng: ((geo['lng'] ?? d['lng']) as num?)?.toDouble() ?? 0,
       area: d['area'] as String? ?? '',
       estate: d['estate'] as String?,
+      description: d['description'] as String? ?? '',
       amenities: [for (final a in (d['amenities'] as List<Object?>?) ?? const []) '$a'],
       agentId: d['agentId'] as String?,
     );
@@ -78,6 +83,7 @@ class ListingDraft {
     double? lng,
     String? area,
     String? Function()? estate,
+    String? description,
     List<String>? amenities,
     String? agentId,
   }) =>
@@ -95,6 +101,7 @@ class ListingDraft {
         lng: lng ?? this.lng,
         area: area ?? this.area,
         estate: estate == null ? this.estate : estate(),
+        description: description ?? this.description,
         amenities: amenities ?? this.amenities,
         agentId: agentId ?? this.agentId,
       );
@@ -112,6 +119,7 @@ class ListingDraft {
         if (!_slug.hasMatch(area)) 'area': 'Pick an area.',
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180 || (lat == 0 && lng == 0)) 'location': 'Set the map position.',
         if ((estate ?? '').length > 80) 'estate': 'Under 80 characters.',
+        if (description.trim().length > 3000) 'description': 'Under 3,000 characters.',
         if (amenities.length > 40 || amenities.any((a) => a.length > 40)) 'amenities': 'Up to 40, each under 40 characters.',
       };
 
@@ -131,6 +139,7 @@ class ListingDraft {
         'lng': lng,
         'area': area,
         if ((estate ?? '').trim().isNotEmpty) 'estate': estate!.trim(),
+        if (description.trim().isNotEmpty) 'description': description.trim(),
         'amenities': [for (final a in amenities) if (a.trim().isNotEmpty) a.trim()],
         if (agentId != null) 'agentId': agentId,
       };

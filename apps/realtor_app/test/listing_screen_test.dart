@@ -55,6 +55,7 @@ void main() {
     expect(find.text('2 bedroom apartment, Kilimani'), findsWidgets);
     expect(find.text('2 bed · 2 bath · Kilimani'), findsOneWidget);
     expect(find.text('Deposit: 2 months'), findsOneWidget);
+    expect(find.textContaining('A 2-bedroom, 2-bathroom apartment to let in Kilimani.'), findsOneWidget, reason: 'the description (P7-s02)');
     expect(find.text('Listed by Wanjiku Mwangi'), findsOneWidget);
     for (final action in ['WhatsApp', 'Call', 'Enquire', 'Book a viewing']) {
       expect(find.text(action), findsOneWidget, reason: action);

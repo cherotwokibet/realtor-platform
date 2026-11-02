@@ -95,6 +95,10 @@ class _ListingView extends ConsumerWidget {
                   SizedBox(height: b.spacing.xs),
                   Text('Deposit: ${detail.depositMonths} month${detail.depositMonths == 1 ? '' : 's'}', style: text.bodyMedium),
                 ],
+                if (detail.description.trim().isNotEmpty) ...[
+                  SizedBox(height: b.spacing.md),
+                  Text(detail.description.trim(), style: text.bodyMedium),
+                ],
                 if (l.amenities.isNotEmpty) ...[
                   SizedBox(height: b.spacing.md),
                   Wrap(

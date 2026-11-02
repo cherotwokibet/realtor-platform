@@ -15,9 +15,15 @@ class DemoListingRepository implements ListingRepository {
   Future<ListingDetail?> bySlug(String slug) async {
     for (final (i, l) in demoListings.indexed) {
       if (l.slug == slug) {
+        final deposit = l.purpose == Purpose.rent ? (l.type == 'hostel' ? 1 : 2) : null;
         return ListingDetail(
           summary: l,
-          depositMonths: l.purpose == Purpose.rent ? (l.type == 'hostel' ? 1 : 2) : null,
+          depositMonths: deposit,
+          // Demo text from the copy assistant (P7-s02), as an agent might start.
+          description: suggestListingCopy(
+            ListingDraft(purpose: l.purpose.value, type: l.type, beds: l.beds, baths: l.baths, priceKES: l.priceKES, depositMonths: deposit, area: l.area, amenities: l.amenities),
+            areaName: areaName(l.area),
+          ).description,
           agent: _agents[i % _agents.length],
         );
       }
