@@ -22,6 +22,10 @@ abstract interface class LeadApi {
   /// `logContactTap`: counts a call or WhatsApp tap, no personal data (D13).
   Future<void> logTap({required String listingId, required String channel});
 
+  /// `logRecommendation` (P7-s04): counts "Similar homes" under [listingId]
+  /// being `shown`, or one of them `opened`, on the web. Counts only.
+  Future<void> logRecommendation({required String listingId, required String event});
+
   /// `bookViewing`: [slot] is ISO 8601 with the Nairobi offset.
   Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message});
 
@@ -107,6 +111,10 @@ class CallableLeadApi implements LeadApi {
   @override
   Future<void> logTap({required String listingId, required String channel}) =>
       _call('logContactTap', {'listingId': listingId, 'channel': channel});
+
+  @override
+  Future<void> logRecommendation({required String listingId, required String event}) =>
+      _call('logRecommendation', {'listingId': listingId, 'event': event, 'surface': 'web'});
 
   @override
   Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message}) =>
