@@ -11,6 +11,8 @@ void main() {
     expect(json['leadStage'], leadStageMoves);
     expect(json['listingStatus'], listingStatusMoves);
     expect(json['moderation'], moderationTargets);
+    expect(json['viewingStatus'], viewingStatusMoves);
+    expect(viewingStatusMoves.keys, unorderedEquals(viewingStatuses));
     expect(leadStageMoves.keys, unorderedEquals(leadStages));
     expect(listingStatusMoves.keys, unorderedEquals(listingStatuses));
   });
@@ -28,5 +30,13 @@ void main() {
     expect(moderationsFor('let'), ['approve']);
     expect(moderationsFor('draft'), isEmpty);
     expect(moderationsFor('sold'), isEmpty);
+  });
+
+  test('viewings are marked done or no-show only after their time', () {
+    final slot = DateTime.utc(2026, 10, 26, 7, 30);
+    expect(nextViewingStatuses('confirmed', slot, slot.subtract(const Duration(hours: 1))), ['cancelled']);
+    expect(nextViewingStatuses('confirmed', slot, slot.add(const Duration(minutes: 1))), ['done', 'no-show', 'cancelled']);
+    expect(nextViewingStatuses('requested', slot, slot), ['confirmed', 'cancelled']);
+    expect(nextViewingStatuses('done', slot, slot), isEmpty);
   });
 }

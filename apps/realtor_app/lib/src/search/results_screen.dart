@@ -5,6 +5,8 @@ import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
 import '../providers.dart';
+import '../account/account_screen.dart';
+import '../saved/favourites.dart';
 import 'purpose.dart';
 
 /// Results for a filter URL. Every change of filter is a new URL, so the
@@ -62,7 +64,13 @@ class ResultsScreen extends ConsumerWidget {
               ],
             ),
             SizedBox(height: b.spacing.md),
-            Text('${r.found} ${r.found == 1 ? 'home' : 'homes'}', style: text.labelLarge),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: b.spacing.md,
+              runSpacing: b.spacing.sm,
+              children: [Text('${r.found} ${r.found == 1 ? 'home' : 'homes'}', style: text.labelLarge), AlertButton(filters: filters)],
+            ),
             SizedBox(height: b.spacing.sm),
             if (r.hits.isEmpty)
               Padding(
@@ -70,7 +78,7 @@ class ResultsScreen extends ConsumerWidget {
                 child: Text('Nothing matches yet. Try fewer filters.', style: text.bodyMedium, textAlign: TextAlign.center),
               ),
             for (final l in r.hits) ...[
-              _ListingCard(listing: l),
+              ListingCard(listing: l),
               SizedBox(height: b.spacing.md),
             ],
           ],
@@ -80,8 +88,9 @@ class ResultsScreen extends ConsumerWidget {
   }
 }
 
-class _ListingCard extends StatelessWidget {
-  const _ListingCard({required this.listing});
+/// A home in a list (results, saved), with its save heart.
+class ListingCard extends StatelessWidget {
+  const ListingCard({super.key, required this.listing});
   final ListingSummary listing;
 
   @override
@@ -100,7 +109,7 @@ class _ListingCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (l.verified) ...[const VerifiedBadge(), SizedBox(height: b.spacing.sm)],
-              Text(l.title, style: text.titleMedium),
+              Row(children: [Expanded(child: Text(l.title, style: text.titleMedium)), FavouriteButton(listing: l)]),
               SizedBox(height: b.spacing.xs),
               PriceText(l.priceKES, period: l.purpose.period, compact: l.purpose == Purpose.sale),
               SizedBox(height: b.spacing.xs),

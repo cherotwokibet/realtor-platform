@@ -5,6 +5,7 @@ import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
 import '../providers.dart';
+import '../saved/favourites.dart';
 import '../search/purpose.dart';
 import 'lead_sheets.dart';
 
@@ -72,7 +73,7 @@ class _ListingView extends ConsumerWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(l.title, overflow: TextOverflow.ellipsis)),
+      appBar: AppBar(title: Text(l.title, overflow: TextOverflow.ellipsis), actions: [FavouriteButton(listing: l)]),
       body: ListView(
         padding: EdgeInsets.only(bottom: b.spacing.xxl),
         children: [

@@ -31,6 +31,8 @@ class ListingPage extends StatelessComponent {
     this.enquiry,
     this.viewing,
     this.viewingDays = const [],
+    this.areaMedianRentKES,
+    this.freeTimes,
     super.key,
   });
   final TenantConfig tenant;
@@ -48,6 +50,12 @@ class ListingPage extends StatelessComponent {
 
   /// Days offered in the viewing form (see `viewingDays`).
   final List<({String value, String label})> viewingDays;
+
+  /// The area's typical rent, for the "below typical rent" note on rentals.
+  final int? areaMedianRentKES;
+
+  /// After "Show free times" (`?day=`): that day and its free times only.
+  final ({String day, List<String> times})? freeTimes;
 
   @override
   Component build(BuildContext context) {
@@ -72,6 +80,11 @@ class ListingPage extends StatelessComponent {
         h1([Component.text(l.title)]),
         p(classes: 'price', priceText(l)),
         p(classes: 'facts', [Component.text(facts)]),
+        if (l.purpose == Purpose.rent)
+          if (percentBelowTypical(l.priceKES, areaMedianRentKES) case final int pct)
+            p(classes: 'insight', [
+              Component.text('$pct% below the typical rent in ${ListingSeo.placeName(l.area)} (${formatKes(areaMedianRentKES!)} a month)'),
+            ]),
         if (l.photos.isNotEmpty)
           div(classes: 'photos', [
             for (final (i, ph) in l.photos.take(6).indexed)
@@ -163,16 +176,34 @@ class ListingPage extends StatelessComponent {
             for (final o in options) option(value: o.value, selected: f.values[name] == o.value, [Component.text(o.label)]),
           ],
         );
+    final free = freeTimes;
     return section(id: 'viewing', classes: 'enquire', [
       const h2([Component.text('Book a viewing')]),
       if (f.notice != null) p(classes: 'notice', [Component.text(f.notice!)]),
       if (f.failed)
         const p(classes: 'notice', [Component.text('Sorry, we could not book that just now. Please try again or ask on WhatsApp.')]),
+      // Step 1 (optional, no script): pick a day to see only its free times.
+      form(classes: 'days', action: '/listing/${listing.slug}#viewing', method: FormMethod.get, [
+        const label(htmlFor: 'f-day', [Component.text('Day')]),
+        select(name: 'day', id: 'f-day', [
+          for (final d in viewingDays) option(value: d.value, selected: (free?.day ?? f.values['day']) == d.value, [Component.text(d.label)]),
+        ]),
+        const button(type: ButtonType.submit, classes: 'wa', [Component.text('Show free times')]),
+      ]),
       form(action: '/listing/${listing.slug}/viewing#viewing', method: FormMethod.post, [
-        const label(htmlFor: 'v-day', [Component.text('Day')]),
-        select_('day', 'v-day', viewingDays),
-        const label(htmlFor: 'v-time', [Component.text('Time')]),
-        select_('time', 'v-time', [for (final t in viewingTimes) (value: t, label: t)]),
+        if (free == null) ...[
+          const label(htmlFor: 'v-day', [Component.text('Day')]),
+          select_('day', 'v-day', viewingDays),
+        ] else
+          input(type: InputType.hidden, name: 'day', value: free.day),
+        if (free != null && free.times.isEmpty)
+          const p(classes: 'notice', [Component.text('No free times that day. Please pick another day above.')])
+        else ...[
+          label(htmlFor: 'v-time', [
+            Component.text(free == null ? 'Time' : 'Free times on ${viewingDays.where((d) => d.value == free.day).firstOrNull?.label ?? free.day}'),
+          ]),
+          select_('time', 'v-time', [for (final t in free?.times ?? viewingTimes) (value: t, label: t)]),
+        ],
         ?error('slot'),
         const label(htmlFor: 'v-name', [Component.text('Your name')]),
         input(

@@ -10,7 +10,12 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import type { Bucket } from '@google-cloud/storage';
 import { seedDocs } from '../seed/data';
-import { handleListingUpload } from './upload';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { handleAgentPhoto, handleListingUpload, handleListingVideo, refuseVideo } from './upload';
+import { ffmpegBinary } from './video';
 
 let db: Firestore;
 let bucket: Bucket;
@@ -115,3 +120,59 @@ test("the same photo on another agent's listing is flagged for managers; plain p
   assert.deepEqual(d.status === 'processed' && d.duplicates, []);
 });
 
+const hasFfmpeg = spawnSync(ffmpegBinary(), ['-version']).status === 0;
+function clip(size: string): Buffer {
+  const out = join(mkdtempSync(join(tmpdir(), 'clip-')), 'c.mp4');
+  const r = spawnSync(ffmpegBinary(), ['-y', '-f', 'lavfi', '-i', `testsrc=size=${size}:rate=24:duration=2`, '-pix_fmt', 'yuv420p', out]);
+  assert.equal(r.status, 0);
+  return readFileSync(out);
+}
+
+test('a video upload becomes an HLS ladder and a media entry; photos skip videos', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
+  const path = 'uploads/agents/agent-wanjiku/listings/listing-001/walkthrough.mp4';
+  await bucket.file(path).save(clip('1280x720'), { contentType: 'video/mp4' });
+  assert.deepEqual(await handleListingUpload(bucket, db, path), { status: 'ignored' });
+  const r = await handleListingVideo(bucket, db, path);
+  assert.equal(r.status, 'processed');
+  if (r.status !== 'processed') return;
+  for (const p of Object.values(r.variants)) assert.ok((await bucket.file(p).exists())[0], p);
+  assert.equal((await bucket.file(path).exists())[0], false);
+  const media = (await db.collection('listings').doc('listing-001').get()).get('media') as { kind: string }[];
+  assert.equal(media.filter((x) => x.kind === 'video').length, 1);
+});
+
+test('a small video is rejected and recorded on the listing', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {
+  const path = 'uploads/agents/agent-wanjiku/listings/listing-001/small.mp4';
+  await bucket.file(path).save(clip('640x360'), { contentType: 'video/mp4' });
+  const r = await handleListingVideo(bucket, db, path);
+  assert.equal(r.status, 'rejected');
+  assert.match((await db.collection('listings').doc('listing-001').get()).get('lastMediaError').reason, /at least 720px/);
+  assert.equal((await bucket.file(path).exists())[0], false);
+});
+
+test('with no transcode job, a video is refused with a note on the listing and the raw file deleted', async () => {
+  const path = 'uploads/agents/agent-wanjiku/listings/listing-001/tour.mov';
+  await bucket.file(path).save(Buffer.from('not really a video'), { contentType: 'video/quicktime' });
+  await refuseVideo(bucket, db, path, 'videos are not switched on for this site yet');
+  const err = (await db.collection('listings').doc('listing-001').get()).get('lastMediaError');
+  assert.deepEqual([err.file, err.reason], ['tour.mov', 'videos are not switched on for this site yet']);
+  assert.equal((await bucket.file(path).exists())[0], false);
+});
+
+test("a manager's agent portrait becomes the agent's photo; a small one is refused on the agent", async () => {
+  const path = 'uploads/staff/boss/agents/agent-wanjiku/portrait.jpg';
+  await bucket.file(path).save(await photo(1600, 2000), { contentType: 'image/jpeg' });
+  assert.deepEqual(await handleListingUpload(bucket, db, path), { status: 'ignored' });
+  const r = await handleAgentPhoto(bucket, db, path);
+  if (r.status !== 'processed') return assert.fail(JSON.stringify(r));
+  const agent = (await db.collection('agents').doc('agent-wanjiku').get()).data()!;
+  assert.equal(agent.photo, r.variants.card);
+  assert.ok((await bucket.file(agent.photo).exists())[0]);
+  assert.equal((await bucket.file(path).exists())[0], false);
+
+  const small = 'uploads/staff/boss/agents/agent-wanjiku/tiny.jpg';
+  await bucket.file(small).save(await photo(400, 400), { contentType: 'image/jpeg' });
+  assert.equal((await handleAgentPhoto(bucket, db, small)).status, 'rejected');
+  assert.match((await db.collection('agents').doc('agent-wanjiku').get()).get('lastPhotoError').reason, /long edge/);
+  assert.deepEqual(await handleAgentPhoto(bucket, db, 'uploads/staff/boss/agents/agent-ghost/x.jpg'), { status: 'rejected', reason: 'no such agent' });
+});

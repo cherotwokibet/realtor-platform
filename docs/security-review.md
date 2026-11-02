@@ -24,7 +24,7 @@ A running record of what was checked, what was found and what is still open. Rev
 ### Open
 | # | Finding | Risk | Plan |
 |---|---|---|---|
-| 1 | Public callables (`createLead`, `logContactTap`, `bookViewing`) have no App Check. Rate limits are in (P6-s05): per hour, 5 enquiries per phone or email and 30 per listing, 3 viewings per phone and 20 per listing, 300 taps per listing | Spam leads (now bounded) | P6-s05: App Check per **D16 (Proposed)**, share pages through service-account-only twins; waits on Boniface's decision |
+| 1 | Public callables (`createLead`, `logContactTap`, `bookViewing`) have no App Check. Rate limits are in (P6-s05): per hour, 5 enquiries per phone or email and 30 per listing, 3 viewings per phone and 20 per listing, 300 taps per listing | Spam leads (now bounded) | D16 (Decided): watch mode in, share pages on service-account-only twins. Enforce once the app sends tokens (it has no Firebase client yet) |
 | 2 | ~~Lead personal data is kept past `retainUntil`~~ Fixed: `purgeExpiredLeads` deletes expired leads and viewings nightly (D12) | — | Done; confirm the job runs after the next Functions deploy (Cloud Scheduler) |
 | 3 | Load test scripts ready (`tools/load/`, CI smoke green); no run against a deployed environment yet | Unknown capacity | Boniface runs `PROFILE=load` against dev share pages once deployed, and search once the Typesense host exists (D4); record p95 and errors here |
 | 4 | ASVS L1 pass done (`docs/asvs-l1.md`): no critical findings. Open from it: server-side password policy (console, Boniface), full CSP on the Flutter sites and alerting | Low | Re-run before stage and prod; CSP report-only on dev first; alerts in P8-s02 (Dependabot is on) |

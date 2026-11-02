@@ -23,6 +23,15 @@ final listingDetailProvider = FutureProvider.family<ListingDetail?, String>(
   (ref, slug) => ref.watch(listingRepositoryProvider).bySlug(slug),
 );
 
+final areaProvider = FutureProvider.family<AreaGuide?, String>((ref, slug) => ref.watch(listingRepositoryProvider).area(slug));
+
+final agentProvider = FutureProvider.family<AgentProfile?, String>((ref, id) => ref.watch(listingRepositoryProvider).agent(id));
+
+/// Live listings in an area (`area`) or by an agent (`agent`), newest first.
+final liveListingsProvider = FutureProvider.family<List<ListingSummary>, ({String? area, String? agent})>(
+  (ref, q) => ref.watch(listingRepositoryProvider).live(area: q.area, agentId: q.agent),
+);
+
 /// Leads stay on the phone until the app calls the Functions (P4).
 final leadRepositoryProvider = Provider<LeadRepository>((ref) => DemoLeadRepository());
 

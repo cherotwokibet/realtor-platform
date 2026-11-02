@@ -3,16 +3,28 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
 
+import 'agent_profiles.dart';
+import 'area_guides.dart';
 import 'format.dart';
+import 'links.dart';
+import 'listing_editor.dart';
+import 'reviews_dialog.dart';
+import 'site_pages.dart';
 import 'paged_table.dart';
 import 'providers.dart';
 
+/// A new lead should get its first reply within this many minutes (P5-s03).
+const leadReplyTargetMins = 60;
+
 /// Heading, optional filters and a table, in a scrollable page.
 class _TablePage extends StatelessWidget {
-  const _TablePage({required this.title, this.subtitle, this.filters, required this.table});
+  const _TablePage({required this.title, this.subtitle, this.filters, this.action, required this.table});
   final String title;
   final String? subtitle;
   final Widget? filters;
+
+  /// A button beside the title (e.g. Import CSV).
+  final Widget? action;
   final Widget table;
 
   @override
@@ -21,7 +33,7 @@ class _TablePage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(title, style: t.headlineSmall),
+        Row(children: [Expanded(child: Text(title, style: t.headlineSmall)), if (action != null) action!]),
         if (subtitle != null)
           Padding(padding: const EdgeInsets.only(top: 4), child: Text(subtitle!, style: t.bodyMedium)),
         if (filters != null) Padding(padding: const EdgeInsets.only(top: 12), child: filters),
@@ -95,6 +107,8 @@ String moderationLabel(String action, String status) => switch ((action, status)
       ('let', _) => 'Mark let',
       ('sold', _) => 'Mark sold',
       ('confirm', _) => 'Confirm still available',
+      ('feature', _) => 'Feature for $featureDays days',
+      ('unfeature', _) => 'Stop featuring',
       _ => label(action),
     };
 
@@ -192,7 +206,23 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
         },
         load: (after) => repo.leads(who, stage: _stage, after: after, limit: pageSize),
         columns: [
-          TableColumn('Received', (r) => Text(shortDateTime(r.createdAt))),
+          TableColumn('Received', (r) {
+            final received = Text(shortDateTime(r.createdAt));
+            if (r.stage != 'new') return received;
+            // SLA (P5-s03): a new lead waiting over an hour shows red.
+            final waiting = DateTime.now().difference(r.createdAt).inMinutes;
+            return Row(mainAxisSize: MainAxisSize.min, children: [
+              received,
+              const SizedBox(width: 8),
+              Text(
+                'waiting ${minutesLabel(waiting < 0 ? 0 : waiting)}',
+                style: TextStyle(
+                  color: waiting > leadReplyTargetMins ? Theme.of(context).colorScheme.error : null,
+                  fontWeight: waiting > leadReplyTargetMins ? FontWeight.w600 : null,
+                ),
+              ),
+            ]);
+          }),
           TableColumn('Name', (r) => Text(r.contactName ?? '—')),
           TableColumn('Phone', (r) => Text(r.contactPhone ?? '—')),
           TableColumn('Listing', (r) => Text(r.listingTitle)),
@@ -212,6 +242,135 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
             },
           ),
           if (who.isManager) TableColumn('Agent', (r) => Text(r.agentName)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Viewings (P5-s05): upcoming ones soonest first, or the history by
+/// status. The agent (or a manager) confirms, cancels, and after the time
+/// marks each done or a no-show.
+class ViewingsScreen extends ConsumerStatefulWidget {
+  const ViewingsScreen({super.key});
+  @override
+  ConsumerState<ViewingsScreen> createState() => _ViewingsScreenState();
+}
+
+class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
+  String? _status;
+  var _reload = 0;
+  final _saving = <String, String>{}, _saved = <String, String>{};
+
+  Future<void> _move(StaffUser who, ViewingRow v, String to) async {
+    if (_saving.containsKey(v.id)) return;
+    setState(() => _saving[v.id] = to);
+    final ok = await _act(
+      context,
+      () => ref.read(adminActionsProvider).updateViewing(who, viewingId: v.id, status: to),
+      'Viewing ${shortDateTime(v.slot)}: ${label(to)}',
+    );
+    if (!mounted) return;
+    setState(() {
+      _saving.remove(v.id);
+      if (ok) {
+        _saved[v.id] = to;
+        _reload++;
+      }
+    });
+  }
+
+  /// Sends the client their one-time review link on WhatsApp (P6-s03).
+  void _askReview(ViewingRow v) {
+    final tenant = ref.read(tenantProvider);
+    final link = 'https://${shareHost(tenant.shareDomain, ref.read(adminBaseProvider))}/review/${v.reviewToken}';
+    final text = 'Hi${v.clientName == null ? '' : ' ${v.clientName!.split(' ').first}'}, thank you for viewing '
+        '${v.listingTitle} with ${tenant.name}. How did it go? It takes a minute: $link';
+    ref.read(linkOpenerProvider).open(Uri.https('wa.me', '/${v.clientPhone!.replaceAll('+', '')}', {'text': text}));
+  }
+
+  Future<void> _reschedule(StaffUser who, ViewingRow v) async {
+    final slot = await showDialog<String>(context: context, builder: (_) => _RescheduleDialog(from: v.slot));
+    if (slot == null || !mounted) return;
+    setState(() => _saving[v.id] = 'cancelled');
+    final ok = await _act(
+      context,
+      () => ref.read(adminActionsProvider).rescheduleViewing(who, viewingId: v.id, slot: slot),
+      'Viewing moved to ${shortDateTime(DateTime.parse(slot).toLocal())}, confirmed',
+    );
+    if (!mounted) return;
+    setState(() {
+      _saving.remove(v.id);
+      if (ok) _reload++;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final who = ref.watch(staffProvider)!;
+    final repo = ref.watch(adminRepositoryProvider);
+    return _TablePage(
+      title: 'Viewings',
+      action: OutlinedButton.icon(
+        onPressed: () => showDialog<void>(context: context, builder: (_) => const _TimeOffDialog()),
+        icon: const Icon(Icons.event_busy_outlined),
+        label: const Text('Time off…'),
+      ),
+      subtitle: _status == null
+          ? 'Viewings to confirm or close, earliest first: past ones still need marking done or no-show.'
+          : 'Latest first.',
+      filters: FilterChips(
+        values: viewingHistory,
+        selected: _status,
+        allLabel: 'Open',
+        labelOf: label,
+        onSelected: (s) => setState(() => _status = s),
+      ),
+      table: PagedTable<ViewingRow>(
+        key: ValueKey(('viewings', who.uid, _status)),
+        empty: _status == null ? 'No open viewings.' : 'None.',
+        reload: _reload,
+        onLoaded: () {
+          if (_saved.isNotEmpty && mounted) setState(_saved.clear);
+        },
+        load: (after) {
+          final now = DateTime.now();
+          final from = DateTime(now.year, now.month, now.day - openViewingsDays);
+          return repo.viewings(who, status: _status, from: from, after: after, limit: pageSize);
+        },
+        columns: [
+          TableColumn('When', (v) => Text(shortDateTime(v.slot))),
+          TableColumn('Listing', (v) => Text(v.listingTitle)),
+          TableColumn('Client', (v) => Text(v.clientName ?? '—')),
+          TableColumn('Phone', (v) => Text(v.clientPhone ?? '—')),
+          TableColumn('Status', (v) {
+            final status = _saving[v.id] ?? _saved[v.id] ?? v.status;
+            return _MenuCell(
+              text: label(status),
+              tooltip: 'Update the viewing ${shortDateTime(v.slot)}',
+              options: [
+                ...nextViewingStatuses(status, v.slot, DateTime.now()),
+                if (status == 'requested' || status == 'confirmed') 'reschedule',
+                if (status == 'done' && v.reviewToken != null && v.clientPhone != null) 'review',
+              ],
+              labelOf: (s) => switch (s) {
+                'reschedule' => 'Reschedule…',
+                'review' => 'Ask for a review…',
+                'confirmed' => 'Confirm',
+                'done' => 'Mark done',
+                'no-show' => 'Mark no-show',
+                'cancelled' => 'Cancel viewing',
+                _ => label(s),
+              },
+              saving: _saving.containsKey(v.id),
+              onSelected: (s) => switch (s) {
+                'reschedule' => _reschedule(who, v),
+                'review' => _askReview(v),
+                _ => _move(who, v, s),
+              },
+            );
+          }),
+          if (who.isManager) TableColumn('Agent', (v) => Text(v.agentName)),
         ],
       ),
     );
@@ -238,15 +397,27 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
       if (reason == null || !mounted) return;
     }
     if (_saving.containsKey(r.id)) return;
-    final to = action == 'confirm' ? 'live' : moderationTargets[action]!;
+    final to = switch (action) {
+      'confirm' => 'live',
+      'feature' || 'unfeature' => r.status,
+      _ => moderationTargets[action]!,
+    };
     setState(() => _saving[r.id] = to);
     final actions = ref.read(adminActionsProvider);
     final ok = await _act(
       context,
-      () => action == 'confirm'
-          ? actions.confirmListing(who, listingId: r.id)
-          : actions.moderateListing(who, listingId: r.id, action: action, reason: reason),
-      action == 'confirm' ? '${r.title}: confirmed, verified for 30 days' : '${r.title}: ${label(to)}',
+      () => switch (action) {
+        'confirm' => actions.confirmListing(who, listingId: r.id),
+        'feature' => actions.featureListing(who, listingId: r.id, days: featureDays),
+        'unfeature' => actions.featureListing(who, listingId: r.id, days: 0),
+        _ => actions.moderateListing(who, listingId: r.id, action: action, reason: reason),
+      },
+      switch (action) {
+        'confirm' => '${r.title}: confirmed, verified for 30 days',
+        'feature' => '${r.title}: featured for $featureDays days',
+        'unfeature' => '${r.title}: no longer featured',
+        _ => '${r.title}: ${label(to)}',
+      },
     );
     if (!mounted) return;
     setState(() {
@@ -258,12 +429,43 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
     });
   }
 
+  /// Opens the editor; a save sends the listing to Pending.
+  Future<void> _edit(String? listingId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await showDialog<String>(context: context, builder: (_) => ListingEditorDialog(listingId: listingId));
+    if (saved == null || !mounted) return;
+    messenger.showSnackBar(const SnackBar(content: Text('Saved. The listing waits in Pending for approval.')));
+    setState(() => _reload++);
+  }
+
   @override
   Widget build(BuildContext context) {
     final who = ref.watch(staffProvider)!;
     final repo = ref.watch(adminRepositoryProvider);
     return _TablePage(
       title: 'Listings',
+      action: Wrap(spacing: 8, runSpacing: 8, children: [
+        FilledButton.icon(
+          onPressed: () => _edit(null),
+          icon: const Icon(Icons.add),
+          label: const Text('New listing'),
+        ),
+        if (who.isManager)
+          OutlinedButton.icon(
+            onPressed: () => showDialog<void>(context: context, builder: (_) => const AreaGuidesDialog()),
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('Areas…'),
+          ),
+        if (who.isManager)
+          OutlinedButton.icon(
+            onPressed: () async {
+              final imported = await showDialog<int>(context: context, builder: (_) => const _ImportDialog());
+              if ((imported ?? 0) > 0 && mounted) setState(() => _reload++);
+            },
+            icon: const Icon(Icons.upload_file),
+            label: const Text('Import CSV…'),
+          ),
+      ]),
       subtitle:
           who.isManager ? 'Every listing, most recently updated first.' : 'Your listings, most recently updated first.',
       filters: FilterChips(
@@ -283,16 +485,31 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
         columns: [
           TableColumn(
             'Title',
-            (r) => r.photoMatch
-                ? Row(mainAxisSize: MainAxisSize.min, children: [
-                    Flexible(child: Text(r.title)),
-                    const SizedBox(width: 6),
-                    Tooltip(
-                      message: 'A photo here matches another listing. Check it is theirs to use.',
-                      child: Icon(Icons.flag_outlined, size: 18, color: Theme.of(context).colorScheme.error),
-                    ),
-                  ])
-                : Text(r.title),
+            (r) {
+              final featured = r.featuredAt(DateTime.now());
+              final title = Tooltip(
+                message: 'Edit ${r.title}',
+                child: InkWell(onTap: () => _edit(r.id), child: Text(r.title, style: const TextStyle(decoration: TextDecoration.underline))),
+              );
+              if (!r.photoMatch && !featured) return title;
+              return Row(mainAxisSize: MainAxisSize.min, children: [
+                Flexible(child: title),
+                if (featured) ...[
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'Featured until ${shortDateTime(r.featuredUntil!)}',
+                    child: Icon(Icons.star, size: 18, color: Theme.of(context).colorScheme.primary),
+                  ),
+                ],
+                if (r.photoMatch) ...[
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'A photo here matches another listing. Check it is theirs to use.',
+                    child: Icon(Icons.flag_outlined, size: 18, color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
+              ]);
+            },
           ),
           TableColumn('Area', (r) => Text(label(r.area))),
           TableColumn('Price', (r) => Text(formatKes(r.priceKES)), numeric: true),
@@ -304,7 +521,7 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
                 text: label(status),
                 tooltip: 'Change ${r.title}',
                 // Managers moderate; agents confirm their own. The Functions refuse anything else.
-                options: listingActionsFor(who, status: status, agentId: r.agentId),
+                options: listingActionsFor(who, status: status, agentId: r.agentId, featured: r.featuredAt(DateTime.now())),
                 labelOf: (a) => moderationLabel(a, status),
                 saving: _saving.containsKey(r.id),
                 onSelected: (a) => _moderate(who, r, a),
@@ -424,6 +641,18 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     final who = ref.watch(staffProvider)!;
     return _TablePage(
       title: 'Team',
+      action: Wrap(spacing: 8, runSpacing: 8, children: [
+        OutlinedButton.icon(
+          onPressed: () => showDialog<void>(context: context, builder: (_) => const ReviewsDialog()),
+          icon: const Icon(Icons.star_outline),
+          label: const Text('Reviews…'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => showDialog<void>(context: context, builder: (_) => const AgentProfilesDialog()),
+          icon: const Icon(Icons.badge_outlined),
+          label: const Text('Agent profiles…'),
+        ),
+      ]),
       subtitle: who.canManageStaff
           ? 'Add people after they have signed in to this admin once. Changes apply on their next sign-in.'
           : 'Only owners change roles.',
@@ -459,6 +688,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                 DataColumn(label: Text('Name')),
                 DataColumn(label: Text('Role')),
                 DataColumn(label: Text('Acts as agent')),
+                DataColumn(label: Text('Typical reply')),
               ],
               rows: [
                 for (final m in team)
@@ -477,6 +707,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                       onSelected: (o) => o == 'edit' ? _edit(who, member: m) : _remove(who, m),
                     )),
                     DataCell(Text(m.agentName ?? m.agentId ?? '')),
+                    DataCell(Text(m.agentReplyMins == null ? (m.agentId == null ? '' : '—') : minutesLabel(m.agentReplyMins!))),
                   ]),
               ],
             ),
@@ -637,7 +868,14 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Privacy requests', style: t.headlineSmall),
+        Row(children: [
+          Expanded(child: Text('Privacy requests', style: t.headlineSmall)),
+          OutlinedButton.icon(
+            onPressed: () => showDialog<void>(context: context, builder: (_) => const SitePagesDialog()),
+            icon: const Icon(Icons.article_outlined),
+            label: const Text('Site pages…'),
+          ),
+        ]),
         Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
@@ -684,10 +922,10 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
           const SizedBox(height: 16),
           Text(
             r.kind == DataRequestKind.delete
-                ? 'Deleted ${r.leads} enquiries and ${r.viewings} viewing requests.'
+                ? 'Deleted ${r.leads} enquiries, ${r.viewings} viewing requests and ${r.reviews} reviews.'
                 : r.foundNothing
                     ? 'Nothing is held for $_who.'
-                    : 'Found ${r.leads} enquiries and ${r.viewings} viewing requests. Send them this copy.',
+                    : 'Found ${r.leads} enquiries, ${r.viewings} viewing requests and ${r.reviews} reviews. Send them this copy.',
             style: t.titleMedium,
           ),
           if (r.exportJson != null && !r.foundNothing) ...[
@@ -713,3 +951,307 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
   }
 }
 
+/// Paste a sheet saved as CSV, check it, then import its rows as pending
+/// listings (P5-s02). Pops with how many listings were made.
+class _ImportDialog extends ConsumerStatefulWidget {
+  const _ImportDialog();
+  @override
+  ConsumerState<_ImportDialog> createState() => _ImportDialogState();
+}
+
+class _ImportDialogState extends ConsumerState<_ImportDialog> {
+  final _text = TextEditingController();
+  ListingCsv? _checked;
+  bool _busy = false;
+  int _made = 0;
+  List<({int line, String problem})> _refused = const [];
+  bool _done = false;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  Future<void> _import() async {
+    final csv = _checked!;
+    setState(() => _busy = true);
+    final refused = <({int line, String problem})>[];
+    var made = 0;
+    try {
+      for (var i = 0; i < csv.rows.length; i += importChunk) {
+        final chunk = csv.rows.skip(i).take(importChunk).toList();
+        final r = await ref.read(adminActionsProvider).importListings(ref.read(staffProvider)!, [for (final c in chunk) c.row]);
+        made += r.created.length;
+        refused.addAll([for (final f in r.failed) (line: chunk[f.row - 1].line, problem: f.error)]);
+      }
+    } on AdminActionException catch (e) {
+      refused.add((line: 0, problem: e.message));
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _done = true;
+      _made = made;
+      _refused = refused;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final csv = _checked;
+    final t = Theme.of(context).textTheme;
+    final err = TextStyle(color: Theme.of(context).colorScheme.error);
+    Widget problems(List<({int line, String problem})> list) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [for (final p in list.take(20)) Text(p.line == 0 ? p.problem : 'Line ${p.line}: ${p.problem}', style: err)],
+        );
+    return AlertDialog(
+      title: const Text('Import listings'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+            if (_done) ...[
+              Text('Imported $_made listings. They wait in Pending for approval.', style: t.titleMedium),
+              if (_refused.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Not imported (${_refused.length}):', style: t.titleSmall),
+                problems(_refused),
+              ],
+            ] else ...[
+              Text(
+                'Save the sheet as CSV and paste it here. The first line names the columns: '
+                '${listingCsvColumns.join(', ')}. Amenities are separated by ";".',
+                style: t.bodyMedium,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _text,
+                minLines: 6,
+                maxLines: 12,
+                decoration: const InputDecoration(labelText: 'CSV', border: OutlineInputBorder()),
+                onChanged: (_) => setState(() => _checked = null),
+              ),
+              if (csv != null) ...[
+                const SizedBox(height: 8),
+                Text('${csv.rows.length} listings ready to import.', style: t.titleSmall),
+                if (!csv.ok) ...[
+                  Text('These lines will be left out:', style: t.bodyMedium),
+                  problems(csv.problems),
+                ],
+              ],
+              if (_busy) const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator())),
+            ],
+          ]),
+        ),
+      ),
+      actions: _done
+          ? [FilledButton(onPressed: () => Navigator.pop(context, _made), child: const Text('Done'))]
+          : [
+              TextButton(onPressed: _busy ? null : () => Navigator.pop(context, 0), child: const Text('Cancel')),
+              if (csv == null)
+                FilledButton(
+                  onPressed: _text.text.trim().isEmpty ? null : () => setState(() => _checked = ListingCsv.parse(_text.text)),
+                  child: const Text('Check'),
+                )
+              else
+                FilledButton(
+                  onPressed: _busy || csv.rows.isEmpty ? null : _import,
+                  child: Text('Import ${csv.rows.length}'),
+                ),
+            ],
+    );
+  }
+}
+
+
+/// Picks a new day and time for a viewing, from the slots clients can book.
+class _RescheduleDialog extends StatefulWidget {
+  const _RescheduleDialog({required this.from});
+  final DateTime from;
+  @override
+  State<_RescheduleDialog> createState() => _RescheduleDialogState();
+}
+
+class _RescheduleDialogState extends State<_RescheduleDialog> {
+  final _days = viewingDays(DateTime.now());
+  String? _day, _time;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Reschedule viewing'),
+        content: SizedBox(
+          width: 420,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('Now ${shortDateTime(widget.from)}. Pick the time agreed with the client; it is saved as confirmed.'),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Day', border: OutlineInputBorder()),
+              items: [for (final d in _days) DropdownMenuItem(value: d.value, child: Text(d.label))],
+              onChanged: (v) => setState(() => _day = v),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Time', border: OutlineInputBorder()),
+              items: [for (final t in viewingTimes) DropdownMenuItem(value: t, child: Text(t))],
+              onChanged: (v) => setState(() => _time = v),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: _day == null || _time == null ? null : () => Navigator.pop(context, viewingSlot(_day!, _time!)),
+            child: const Text('Move viewing'),
+          ),
+        ],
+      );
+}
+
+/// Time an agent blocks out (P5-s05): no viewing can be booked or moved
+/// into it. Agents manage their own; managers anyone's.
+class _TimeOffDialog extends ConsumerStatefulWidget {
+  const _TimeOffDialog();
+  @override
+  ConsumerState<_TimeOffDialog> createState() => _TimeOffDialogState();
+}
+
+class _TimeOffDialogState extends ConsumerState<_TimeOffDialog> {
+  final _days = viewingDays(DateTime.now(), count: 26);
+  final _note = TextEditingController();
+  List<AgentBlock>? _blocks;
+  List<AgentOption> _agents = const [];
+  String? _agent, _fromDay, _toDay, _error;
+  String _fromTime = '08:00', _toTime = '18:00';
+  bool _busy = false;
+
+  /// Start times, plus 18:00 to end at the close of the viewing day.
+  static final _ends = [...viewingTimes.skip(1), '18:00'];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final who = ref.read(staffProvider)!;
+    final repo = ref.read(adminRepositoryProvider);
+    final (blocks, agents) = await (repo.timeOff(who, DateTime.now()), who.isManager ? repo.agents(who) : Future.value(const <AgentOption>[])).wait;
+    if (mounted) {
+      setState(() {
+        _blocks = blocks;
+        _agents = agents;
+      });
+    }
+  }
+
+  Future<void> _run(Future<void> Function() change) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await change();
+      await _load();
+    } on AdminActionException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _add() {
+    final who = ref.read(staffProvider)!;
+    return _run(() async {
+      await ref.read(adminActionsProvider).addTimeOff(who,
+          agentId: who.isManager ? _agent : null,
+          start: viewingSlot(_fromDay!, _fromTime),
+          end: viewingSlot(_toDay ?? _fromDay!, _toTime),
+          note: _note.text);
+      _note.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final who = ref.watch(staffProvider)!;
+    final blocks = _blocks;
+    final t = Theme.of(context).textTheme;
+    DropdownButtonFormField<String> pick(String label, String? value, List<(String, String)> options, ValueChanged<String?> onChanged) =>
+        DropdownButtonFormField<String>(
+          initialValue: value,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), isDense: true),
+          items: [for (final (v, l) in options) DropdownMenuItem(value: v, child: Text(l))],
+          onChanged: _busy ? null : onChanged,
+        );
+    final dayOptions = [for (final d in _days) (d.value, d.label)];
+    final ready = _fromDay != null && (!who.isManager || _agent != null);
+    return AlertDialog(
+      title: const Text('Time off'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+            Text('Clients cannot book a viewing in these times, and viewings cannot be moved into them.', style: t.bodyMedium),
+            const SizedBox(height: 8),
+            if (blocks == null)
+              const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()))
+            else if (blocks.isEmpty)
+              Text('None coming up.', style: t.bodySmall)
+            else
+              for (final b in blocks)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('${shortDateTime(b.start)} to ${shortDateTime(b.end)}'),
+                  subtitle: Text([if (who.isManager) b.agentName, if (b.note != null) b.note!].join(' · ')),
+                  trailing: IconButton(
+                    tooltip: 'Remove this time off',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: _busy ? null : () => _run(() => ref.read(adminActionsProvider).removeTimeOff(who, blockId: b.id)),
+                  ),
+                ),
+            const Divider(height: 24),
+            Text('Add time off', style: t.titleSmall),
+            const SizedBox(height: 8),
+            if (who.isManager) ...[
+              pick('Agent', _agent, [for (final a in _agents) (a.id, a.name)], (v) => setState(() => _agent = v)),
+              const SizedBox(height: 8),
+            ],
+            Row(children: [
+              Expanded(child: pick('From', _fromDay, dayOptions, (v) => setState(() => _fromDay = v))),
+              const SizedBox(width: 8),
+              SizedBox(width: 140, child: pick('At', _fromTime, [for (final x in viewingTimes) (x, x)], (v) => setState(() => _fromTime = v!))),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: pick('To (same day if empty)', _toDay, dayOptions, (v) => setState(() => _toDay = v))),
+              const SizedBox(width: 8),
+              SizedBox(width: 140, child: pick('Until', _toTime, [for (final x in _ends) (x, x)], (v) => setState(() => _toTime = v!))),
+            ]),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _note,
+              maxLength: 120,
+              decoration: const InputDecoration(labelText: 'Note for the team (optional)', border: OutlineInputBorder(), isDense: true),
+            ),
+            if (_error != null) Text("Couldn't save: $_error", style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        FilledButton(onPressed: _busy || !ready ? null : _add, child: const Text('Add time off')),
+      ],
+    );
+  }
+}

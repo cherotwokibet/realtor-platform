@@ -109,6 +109,7 @@ class Brand {
   const Brand({
     required this.logo,
     required this.logoOnDark,
+    this.logoHorizontal,
     required this.appIcon,
     required this.colors,
     required this.displayFont,
@@ -123,6 +124,9 @@ class Brand {
   /// Repo-relative asset paths, e.g. `brand/<id>/logo-stacked.svg`.
   final String logo;
   final String? logoOnDark;
+
+  /// The wide lockup for page headers; null falls back to [logo].
+  final String? logoHorizontal;
   final String appIcon;
   final BrandColors colors;
   final String displayFont, bodyFont;
@@ -137,6 +141,7 @@ class Brand {
     return Brand(
       logo: _req<String>(logo, 'primary', '$p.logo'),
       logoOnDark: logo['onDark'] as String?,
+      logoHorizontal: logo['horizontal'] as String?,
       appIcon: _req<String>(j, 'appIcon', p),
       colors: BrandColors.fromJson(_obj(j, 'colors', p)),
       displayFont: _req<String>(fonts, 'display', '$p.fonts'),

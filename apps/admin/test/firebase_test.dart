@@ -7,8 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:realtor_admin/src/firebase/callable_actions.dart';
 import 'package:realtor_admin/src/firebase/firestore_admin.dart';
-import 'package:realtor_admin/src/firebase/hosting_config.dart';
 import 'package:realtor_core/realtor_core.dart';
+import 'package:realtor_ui/realtor_ui.dart' show parseHostingConfig, hostingFirebaseOptions;
 
 const agent = StaffUser(uid: 'u-a', name: 'Agent A', role: StaffRole.agent, agentId: 'agent-a');
 const manager = StaffUser(uid: 'u-m', name: 'Manager', role: StaffRole.manager);
@@ -60,7 +60,7 @@ void main() {
     setUp(() async {
       db = FakeFirebaseFirestore();
       repo = FirestoreAdminRepository(db);
-      await db.collection('agents').doc('agent-a').set({'name': 'Agent A', 'active': true});
+      await db.collection('agents').doc('agent-a').set({'name': 'Agent A', 'active': true, 'responseMins': 25});
       await db.collection('agents').doc('agent-b').set({'name': 'Agent B', 'active': true});
       for (var i = 0; i < 5; i++) {
         final agentId = i.isEven ? 'agent-a' : 'agent-b';
@@ -131,11 +131,54 @@ void main() {
       expect((l2.priceKES, l2.leads, l2.calls, l2.whatsapps, l2.agentName), (50002, 2, 4, 0, 'Agent A'));
     });
 
+    test('the editor reads a listing (own only for agents) and the areas with their centres', () async {
+      await db.collection('listings').doc('l2').update({
+        'purpose': 'rent',
+        'type': 'apartment',
+        'beds': 2,
+        'baths': 1,
+        'depositMonths': 2,
+        'geo': {'lat': -1.29, 'lng': 36.78, 'geohash': 'kzf0'},
+        'amenities': ['Borehole'],
+      });
+      final d = (await repo.listingDraft(manager, 'l2'))!;
+      expect((d.listingId, d.title, d.beds, d.depositMonths, d.lat, d.lng, d.agentId), ('l2', 'Listing 2', 2, 2, -1.29, 36.78, 'agent-a'));
+      expect(d.amenities, ['Borehole']);
+      expect(await repo.listingDraft(agent, 'l1'), isNull, reason: "another agent's listing");
+      expect(await repo.listingDraft(manager, 'missing'), isNull);
+
+      await db.collection('areas').doc('westlands').set({'name': 'Westlands', 'centre': {'lat': -1.27, 'lng': 36.81}});
+      await db.collection('areas').doc('kilimani').set({'name': 'Kilimani', 'centre': {'lat': -1.29, 'lng': 36.79}});
+      expect([for (final a in await repo.areas()) (a.slug, a.lat)], [('kilimani', -1.29), ('westlands', -1.27)]);
+    });
+
     test('managers see which listings have a photo flagged; agents do not', () async {
       await db.collection('photoFlags').doc('l2_abc').set({'listingId': 'l2', 'mediaId': 'abc', 'matches': []});
       final rows = (await repo.listings(manager)).rows;
       expect(rows.where((r) => r.photoMatch).map((r) => r.id), ['l2']);
       expect((await repo.listings(agent)).rows.any((r) => r.photoMatch), isFalse);
+    });
+
+    test('viewings: open ones from a date, earliest first and scoped; history by status, latest first', () async {
+      DateTime at(int h) => t0.add(Duration(hours: h));
+      Future<void> v(String id, String agentId, String status, DateTime slot) => db.collection('viewings').doc(id).set({
+            'listingId': 'l0',
+            'agentId': agentId,
+            'slot': Timestamp.fromDate(slot),
+            'status': status,
+            'client': {'name': 'Client $id', 'phone': '+2547000009${id.substring(1)}'},
+          });
+      await v('v1', 'agent-a', 'confirmed', at(-30)); // yesterday-ish, still open
+      await v('v2', 'agent-a', 'requested', at(20));
+      await v('v3', 'agent-b', 'requested', at(10));
+      await v('v4', 'agent-a', 'done', at(-50));
+      await v('v5', 'agent-a', 'requested', at(-24 * 30)); // too old for the open list
+      final from = t0.subtract(const Duration(days: 14));
+      expect((await repo.viewings(manager, from: from)).rows.map((r) => r.id), ['v1', 'v3', 'v2']);
+      final mine = (await repo.viewings(agent, from: from)).rows;
+      expect(mine.map((r) => r.id), ['v1', 'v2']);
+      expect((mine.first.listingTitle, mine.first.clientName, mine.first.agentName), ('Listing 0', 'Client v1', 'Agent A'));
+      expect((await repo.viewings(manager, status: 'done', from: from)).rows.map((r) => r.id), ['v4']);
     });
 
     test('the team: managers only, by email, with agent names; unknown roles skipped', () async {
@@ -145,7 +188,8 @@ void main() {
       expect(() => repo.team(agent), throwsA(isA<StaffAccessException>()));
       final team = await repo.team(manager);
       expect(team.map((m) => m.email), ['a@example.com', 'b@example.com']);
-      expect((team.last.role, team.last.agentName), (StaffRole.agent, 'Agent A'));
+      expect((team.last.role, team.last.agentName, team.last.agentReplyMins), (StaffRole.agent, 'Agent A', 25));
+      expect(team.first.agentReplyMins, isNull);
       expect((await repo.agents(manager)).map((a) => a.name), ['Agent A', 'Agent B']);
     });
 
@@ -237,6 +281,64 @@ void main() {
       final delete = await actions.dataRequest(manager, kind: DataRequestKind.delete, email: ' a@example.com ');
       expect(calls.last.$2, {'kind': 'delete', 'email': 'a@example.com'});
       expect([delete.leads, delete.viewings, delete.exportJson], [2, 1, null]);
+    });
+
+    test('featureListing and importListings send what the Functions take and read their answers', () async {
+      final calls = <(String, Map<String, Object?>)>[];
+      final actions = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return name == 'featureListing'
+            ? {'featuredUntil': data['days'] == 0 ? null : '2026-11-27T09:00:00.000Z'}
+            : {
+                'created': [
+                  {'row': 1, 'listingId': 'x', 'slug': 'x'}
+                ],
+                'failed': [
+                  {'row': 2, 'error': 'agentId: no agent "ghost"'}
+                ],
+              };
+      });
+      expect(await actions.featureListing(manager, listingId: 'l1', days: 30), DateTime.utc(2026, 11, 27, 9));
+      expect(await actions.featureListing(manager, listingId: 'l1', days: 0), isNull);
+      expect(calls.first.$2, {'listingId': 'l1', 'days': 30});
+      final r = await actions.importListings(manager, [
+        {'title': 'a'},
+        {'title': 'b'}
+      ]);
+      expect(calls.last.$1, 'importListings');
+      expect(r.created, [1]);
+      expect((r.failed.single.row, r.failed.single.error), (2, 'agentId: no agent "ghost"'));
+    });
+
+    test('submitListing sends the draft and returns the listing id', () async {
+      final calls = <(String, Map<String, Object?>)>[];
+      final actions = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return {'listingId': 'new-1', 'slug': 'x'};
+      });
+      const draft = ListingDraft(title: 'Studio, Kilimani', type: 'studio', beds: 0, priceKES: 25000, lat: -1.29, lng: 36.78, area: 'kilimani', agentId: 'agent-a');
+      expect(await actions.submitListing(manager, draft), 'new-1');
+      expect(calls.single.$1, 'submitListing');
+      expect(calls.single.$2['priceKES'], 25000);
+      expect(calls.single.$2.containsKey('media'), isFalse, reason: 'media stays as it is');
+    });
+
+    test('updateViewing calls updateViewingStatus', () async {
+      final calls = <(String, Map<String, Object?>)>[];
+      final actions = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return {'status': data['status']};
+      });
+      await actions.updateViewing(agent, viewingId: 'agent-a_1', status: 'confirmed');
+      expect(calls.single.$1, 'updateViewingStatus');
+      expect(calls.single.$2, {'viewingId': 'agent-a_1', 'status': 'confirmed'});
+      final moved = CallableAdminActions((name, data) async {
+        calls.add((name, data));
+        return {'viewingId': 'agent-a_2'};
+      });
+      expect(await moved.rescheduleViewing(agent, viewingId: 'agent-a_1', slot: '2026-10-29T15:00:00+03:00'), 'agent-a_2');
+      expect(calls.last.$1, 'rescheduleViewing');
+      expect(calls.last.$2, {'viewingId': 'agent-a_1', 'slot': '2026-10-29T15:00:00+03:00'});
     });
 
     test('a refusal becomes an AdminActionException with the callable code', () async {

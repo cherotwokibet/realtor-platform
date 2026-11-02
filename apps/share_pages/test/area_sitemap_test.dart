@@ -45,6 +45,14 @@ void main() {
     expect((((ld['subjectOf'] as Map)['itemListElement'] as List).single as Map)['url'], 'https://realtimeestates.co.ke/listing/2-bedroom-apartment-kilimani');
   });
 
+  test("a rental below its area's typical rent says so; without a median it says nothing", () async {
+    final html = await (await get('/listing/${flat.slug}')).readAsString();
+    expect(html, contains('13% below the typical rent in Kilimani (KES 75,000 a month)'));
+    final bare = shareHandler(tenant, InMemoryListingSource(const [flat]));
+    final plain = await (await bare(shelf.Request('GET', Uri.parse('https://x/listing/${flat.slug}')))).readAsString();
+    expect(plain, isNot(contains('typical rent')));
+  });
+
   test('listing pages link back to their area', () async {
     final html = await (await get('/listing/2-bedroom-apartment-kilimani')).readAsString();
     expect(html, contains('href="/area/kilimani"'));
@@ -70,6 +78,36 @@ void main() {
   });
 
   test('robots.txt points at the sitemap', () async {
-    expect(await (await get('/robots.txt')).readAsString(), contains('Sitemap: https://realtimeestates.co.ke/sitemap.xml'));
+    final r = await get('/robots.txt');
+    expect(await r.readAsString(), contains('Sitemap: https://realtimeestates.co.ke/sitemap.xml'));
+    expect(r.headers['x-robots-tag'], isNull);
+  });
+
+  test('outside prod, crawlers are turned away from every page', () async {
+    final h = shareHandler(tenant, InMemoryListingSource(const [flat], areas: const [kilimani]), indexable: false);
+    Future<shelf.Response> dev(String path) => Future.value(h(shelf.Request('GET', Uri.parse('https://x$path'))));
+    expect(await (await dev('/robots.txt')).readAsString(), 'User-agent: *\nDisallow: /\n');
+    for (final path in ['/', '/listing/${flat.slug}', '/area/kilimani', '/sitemap.xml', '/missing']) {
+      expect((await dev(path)).headers['x-robots-tag'], 'noindex', reason: path);
+    }
+  });
+
+  test('published site pages render as plain text and show in every footer; drafts and others are 404', () async {
+    final src = InMemoryListingSource(const [flat], areas: const [kilimani])
+      ..sitePages = {
+        'privacy': (title: 'Privacy notice', body: '# Who we are\nRealtime Estates <b>Ltd</b>.\nNairobi.\n\n- your rights\n- our duties'),
+      };
+    final h = shareHandler(tenant, src);
+    Future<shelf.Response> go(String path) => Future.value(h(shelf.Request('GET', Uri.parse('https://x$path'))));
+    final html = await (await go('/privacy')).readAsString();
+    expect(html, contains('<h1>Privacy notice</h1>'));
+    expect(html, contains('<h2>Who we are</h2>'));
+    expect(html, contains('<p>Realtime Estates &lt;b&gt;Ltd&lt;/b&gt;. Nairobi.</p>'));
+    expect(html, contains('<li>your rights</li>'));
+    expect(await (await go('/')).readAsString(), contains('href="/privacy"'));
+    expect((await go('/about')).statusCode, 404);
+    expect((await go('/secret')).statusCode, 404);
+    expect((await go('/robots.txt')).statusCode, 200);
+    expect((await go('/sitemap.xml')).statusCode, 200);
   });
 }

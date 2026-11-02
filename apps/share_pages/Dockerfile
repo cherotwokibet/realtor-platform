@@ -18,7 +18,8 @@ COPY --from=build /runtime/ /
 COPY --from=build /out/server /app/server
 COPY tenants/${TENANT}.json /app/tenant.json
 COPY --from=build /src/fonts /app/fonts
-ENV TENANT_FILE=/app/tenant.json FONTS_DIR=/app/fonts
+COPY brand/${TENANT}/*.svg /app/brand/
+ENV TENANT_FILE=/app/tenant.json FONTS_DIR=/app/fonts BRAND_DIR=/app/brand
 EXPOSE 8080
 USER 65532
 ENTRYPOINT ["/app/server"]

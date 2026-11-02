@@ -15,6 +15,13 @@
     "let": ["live"],
     "sold": []
   },
+  "viewingStatus": {
+    "requested": ["confirmed", "cancelled"],
+    "confirmed": ["done", "no-show", "cancelled"],
+    "done": [],
+    "no-show": [],
+    "cancelled": []
+  },
   "moderation": {
     "approve": "live",
     "reject": "draft",

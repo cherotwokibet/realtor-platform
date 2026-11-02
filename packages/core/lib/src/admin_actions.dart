@@ -1,3 +1,8 @@
+import 'admin_repository.dart' show SitePageRow;
+import 'agent_profile.dart';
+import 'area_guide.dart';
+import 'listing_draft.dart';
+import 'monthly_report.dart';
 import 'staff.dart';
 
 /// Lead stage moves, listing status moves and moderation actions. A copy of
@@ -22,6 +27,21 @@ const listingStatusMoves = {
   'sold': <String>[],
 };
 
+const viewingStatusMoves = {
+  'requested': ['confirmed', 'cancelled'],
+  'confirmed': ['done', 'no-show', 'cancelled'],
+  'done': <String>[],
+  'no-show': <String>[],
+  'cancelled': <String>[],
+};
+
+/// The moves a viewing at [status] can take at [now]: done and no-show
+/// only once its time has passed (the Functions refuse them earlier).
+List<String> nextViewingStatuses(String status, DateTime slot, DateTime now) => [
+      for (final s in viewingStatusMoves[status] ?? const <String>[])
+        if ((s != 'done' && s != 'no-show') || !slot.isAfter(now)) s
+    ];
+
 /// `moderateListing` action → the status it sets.
 const moderationTargets = {'approve': 'live', 'reject': 'draft', 'expire': 'expired', 'let': 'let', 'sold': 'sold'};
 
@@ -30,10 +50,24 @@ List<String> nextLeadStages(String stage) => leadStageMoves[stage] ?? const [];
 
 /// What [who] may do to a listing from its status menu: managers moderate,
 /// and the listing's agent (or a manager) confirms a live or expired one.
-List<String> listingActionsFor(StaffUser who, {required String status, required String agentId}) => [
+List<String> listingActionsFor(StaffUser who, {required String status, required String agentId, bool featured = false}) => [
       if (who.isManager) ...moderationsFor(status),
       if ((status == 'live' || status == 'expired') && (who.isManager || who.agentId == agentId)) 'confirm',
+      if (who.isManager && status == 'live') featured ? 'unfeature' : 'feature',
     ];
+
+/// How long "Feature" features a listing, in days.
+const featureDays = 30;
+
+/// Rows per `importListings` call (the Function's limit).
+const importChunk = 100;
+
+/// What an import did, by row of the batch sent (1-based).
+class ImportOutcome {
+  const ImportOutcome({required this.created, required this.failed});
+  final List<int> created;
+  final List<({int row, String error})> failed;
+}
 
 /// The moderation actions a listing at [status] can take, in table order.
 List<String> moderationsFor(String status) {
@@ -70,6 +104,54 @@ abstract interface class AdminActions {
   /// another 30 days; completes with the new expiry.
   Future<DateTime> confirmListing(StaffUser who, {required String listingId});
 
+  /// `updateViewingStatus` (P5-s05): the viewing's agent, or a manager.
+  Future<void> updateViewing(StaffUser who, {required String viewingId, required String status});
+
+  /// `rescheduleViewing` (P5-s05): moves an open viewing to [slot] (as
+  /// [viewingSlot] makes it), confirmed; the old one is cancelled.
+  /// Completes with the new viewing's id.
+  Future<String> rescheduleViewing(StaffUser who, {required String viewingId, required String slot});
+
+  /// `addAgentBlock` (P5-s05): blocks out [start] to [end] (ISO 8601 with
+  /// offset) so no viewing is booked then. Managers name the agent; an agent
+  /// always blocks for themself. Completes with the block's id.
+  Future<String> addTimeOff(StaffUser who, {String? agentId, required String start, required String end, String? note});
+
+  /// `monthlyReport` (P5-s08), managers: [month] is `YYYY-MM`.
+  Future<MonthlyReport> monthlyReport(StaffUser who, String month);
+
+  /// `moderateReview` (P6-s03), managers: `approve` shows a review, `hide`
+  /// takes it down. Completes with the agent's new rating (null with none).
+  Future<({double? rating, int count})> moderateReview(StaffUser who, {required String reviewId, required String action});
+
+  /// `savePage` (P5-s07), managers: a site page's title, text and whether
+  /// the share site shows it.
+  Future<void> savePage(StaffUser who, SitePageRow page);
+
+  /// `saveArea` (P3-s05), managers: adds or edits an area guide. Completes
+  /// with its slug.
+  Future<String> saveArea(StaffUser who, AreaGuide area);
+
+  /// `saveAgent` (P5-s04), managers: adds or edits an agent's profile.
+  /// Completes with the agent's id.
+  Future<String> saveAgent(StaffUser who, AgentProfile profile);
+
+  /// `removeAgentBlock`: the agent's own, or any for managers.
+  Future<void> removeTimeOff(StaffUser who, {required String blockId});
+
+  /// `featureListing` (P5-s02), managers: a live listing ranks first in
+  /// search for [days]; 0 stops it. Completes with the new end, or null.
+  Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days});
+
+  /// `submitListing` (P5-s02): creates or edits a listing and sends it for
+  /// review (pending). Agents submit their own; managers for any agent.
+  /// Completes with the listing id.
+  Future<String> submitListing(StaffUser who, ListingDraft draft);
+
+  /// `importListings` (P5-s02), managers: each row (see [ListingCsv]) becomes
+  /// a pending listing; at most [importChunk] rows per call.
+  Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows);
+
   /// `setStaffRole`, owners only: give an account that has signed in once a
   /// role (an agent needs [agentId]), or take it away with a null [role].
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId});
@@ -83,10 +165,12 @@ enum DataRequestKind { export, delete }
 
 /// What a data request found (export) or removed (delete).
 class DataRequestResult {
-  const DataRequestResult({required this.kind, required this.leads, required this.viewings, this.exportJson});
+  const DataRequestResult({required this.kind, required this.leads, required this.viewings, this.reviews = 0, this.exportJson});
 
   final DataRequestKind kind;
-  final int leads, viewings;
+
+  /// Reviews left after the person's viewings (P6-s03).
+  final int leads, viewings, reviews;
 
   /// The person's records as indented JSON, for an export; null for a delete.
   final String? exportJson;

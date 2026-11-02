@@ -116,4 +116,18 @@ void main() {
     expect(csp, contains("font-src 'self'"));
     expect(csp, contains("default-src 'none'"));
   });
+
+  test('every tenant\'s header logo is served from its brand folder, and the pages load it from there', () async {
+    for (final t in tenants) {
+      final h = shareHandler(t, InMemoryListingSource(const []), brandDir: '../../brand/${t.id}');
+      final r = await h(shelf.Request('GET', Uri.parse('https://x$logoPath')));
+      expect(r.statusCode, 200, reason: t.id);
+      expect(r.headers['content-type'], 'image/svg+xml');
+      expect(await r.readAsString(), startsWith('<svg'), reason: t.id);
+      final home = await (await h(shelf.Request('GET', Uri.parse('https://x/')))).readAsString();
+      expect(home, contains('src="$logoPath"'), reason: t.id);
+    }
+    final none = await get(tenants.first, logoPath);
+    expect(none.statusCode, 404, reason: 'no brandDir, no logo route');
+  });
 }

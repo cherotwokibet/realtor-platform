@@ -24,6 +24,12 @@ abstract interface class LeadApi {
 
   /// `bookViewing`: [slot] is ISO 8601 with the Nairobi offset.
   Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message});
+
+  /// `openSlots` (P4-s04): the free times on [day]; null when unknown.
+  Future<List<String>?> openTimes({required String listingId, required String day});
+
+  /// `submitReview` (P6-s03): the review link's [token] is the permission.
+  Future<void> submitReview({required String token, required int rating, String? comment, String? name});
 }
 
 class LeadApiException implements Exception {
@@ -37,18 +43,28 @@ class LeadApiException implements Exception {
   String toString() => 'LeadApiException($status: $message)';
 }
 
+/// An OIDC ID token for calling [audience] (Cloud Run IAM).
+typedef IdTokenSource = Future<String> Function(Uri audience);
+
 /// Calls the Functions over the callable HTTP protocol (POST {"data": ...}).
+/// With [idToken] it calls their App Check-free twins instead (D16:
+/// `shareCreateLead`, ...), which only the share pages' service account may
+/// invoke, signing each request with a token for that URL.
 class CallableLeadApi implements LeadApi {
-  CallableLeadApi(this.base, {http.Client? client}) : _client = client ?? http.Client();
+  CallableLeadApi(this.base, {http.Client? client, this.idToken}) : _client = client ?? http.Client();
   final Uri base;
+  final IdTokenSource? idToken;
   final http.Client _client;
 
-  Future<void> _call(String name, Map<String, Object?> data) async {
+  Future<Object?> _call(String name, Map<String, Object?> data, {bool twin = true}) async {
+    final fn = idToken == null || !twin ? name : 'share${name[0].toUpperCase()}${name.substring(1)}';
+    final url = Uri.parse('${base.toString().replaceFirst(RegExp(r'/$'), '')}/$fn');
     final res = await _client
-        .post(Uri.parse('${base.toString().replaceFirst(RegExp(r'/$'), '')}/$name'),
-            headers: {'content-type': 'application/json'}, body: jsonEncode({'data': data}))
+        .post(url,
+            headers: {'content-type': 'application/json', if (idToken != null && twin) 'authorization': 'Bearer ${await idToken!(url)}'},
+            body: jsonEncode({'data': data}))
         .timeout(const Duration(seconds: 8));
-    if (res.statusCode == 200) return;
+    if (res.statusCode == 200) return (_tryDecode(res.body) as Map?)?['result'];
     final error = switch (_tryDecode(res.body)) {
       {'error': {'status': final String s, 'message': final String m}} => LeadApiException(s, m),
       _ => LeadApiException('HTTP_${res.statusCode}', 'callable $name failed'),
@@ -72,6 +88,21 @@ class CallableLeadApi implements LeadApi {
         'message': ?message,
         'consent': true,
       });
+
+  /// Read-only and public, so it needs no twin.
+  @override
+  Future<List<String>?> openTimes({required String listingId, required String day}) async {
+    try {
+      final r = await _call('openSlots', {'listingId': listingId, 'day': day}, twin: false) as Map?;
+      return [for (final t in (r?['times'] as List?) ?? const []) '$t'];
+    } on Object {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> submitReview({required String token, required int rating, String? comment, String? name}) =>
+      _call('submitReview', {'token': token, 'rating': rating, 'comment': ?comment, 'name': ?name});
 
   @override
   Future<void> logTap({required String listingId, required String channel}) =>
@@ -136,5 +167,28 @@ class ViewingRequest {
       request: errors.isEmpty ? ViewingRequest._(viewingSlot(day, time), name, phone!, message.isEmpty ? null : message) : null,
       errors: errors,
     );
+  }
+}
+
+/// ID tokens from the Cloud Run metadata server for the service's own
+/// account, kept for 50 minutes (they last an hour).
+class MetadataIdTokens {
+  MetadataIdTokens({http.Client? client, DateTime Function()? now}) : _client = client ?? http.Client(), _now = now ?? DateTime.now;
+  final http.Client _client;
+  final DateTime Function() _now;
+  final _cache = <Uri, ({String token, DateTime until})>{};
+
+  Future<String> call(Uri audience) async {
+    final hit = _cache[audience];
+    if (hit != null && _now().isBefore(hit.until)) return hit.token;
+    final res = await _client
+        .get(
+          Uri.http('metadata.google.internal', '/computeMetadata/v1/instance/service-accounts/default/identity', {'audience': '$audience'}),
+          headers: {'Metadata-Flavor': 'Google'},
+        )
+        .timeout(const Duration(seconds: 3));
+    if (res.statusCode != 200) throw LeadApiException('HTTP_${res.statusCode}', 'no identity token');
+    _cache[audience] = (token: res.body.trim(), until: _now().add(const Duration(minutes: 50)));
+    return res.body.trim();
   }
 }

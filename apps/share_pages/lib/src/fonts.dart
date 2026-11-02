@@ -54,3 +54,21 @@ shelf.Response serveFont(TenantConfig tenant, String dir, String file) {
   }
   return shelf.Response.notFound('not found');
 }
+
+/// Path the pages load the tenant's header logo from.
+const logoPath = '/logo.svg';
+
+/// Serves [logoPath] from [dir] (`brand/<id>/` copied into the image): the
+/// tenant's horizontal logo, or its primary one. Only that one file.
+shelf.Response serveLogo(TenantConfig tenant, String dir) {
+  final f = File('$dir/${(tenant.brand.logoHorizontal ?? tenant.brand.logo).split('/').last}');
+  if (!f.existsSync()) return shelf.Response.notFound('logo not bundled');
+  return shelf.Response.ok(
+    f.openRead(),
+    headers: {
+      'content-type': 'image/svg+xml',
+      'content-length': '${f.lengthSync()}',
+      'cache-control': 'public, max-age=86400',
+    },
+  );
+}

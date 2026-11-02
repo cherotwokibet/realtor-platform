@@ -85,6 +85,8 @@ export const agent = z.object({
   whatsapp: kenyanPhone,
   languages: z.array(z.enum(['en', 'sw'])).min(1),
   rating: z.number().min(0).max(5).nullable(),
+  /** How many approved reviews the rating is from (P6-s03). */
+  ratingCount: z.number().int().min(0).optional(),
   responseMins: z.number().int().min(0).nullable(),
   active: z.boolean(),
 });
@@ -104,6 +106,9 @@ export const lead = z
     consentAt: timestamp,
     retainUntil: timestamp,
     createdAt: timestamp,
+    /** When the agent first moved it on from new, and how many minutes that took (P5-s03). */
+    firstResponseAt: timestamp.optional(),
+    responseMins: z.number().int().min(0).optional(),
   })
   .refine((l) => l.contact.phone || l.contact.email, { message: 'a lead needs a phone or an email', path: ['contact'] })
   .refine((l) => l.retainUntil > l.consentAt, { message: 'retainUntil must be after consentAt', path: ['retainUntil'] });
@@ -142,7 +147,8 @@ export const savedSearch = z.object({
     minBeds: z.number().int().min(0).optional(),
     maxPriceKES: kes.optional(),
   }),
-  channels: z.array(z.enum(['push', 'email', 'whatsapp'])).min(1),
+  /** inbox: alerts in the app (D18); email and push once their senders are set up. */
+  channels: z.array(z.enum(['inbox', 'push', 'email', 'whatsapp'])).min(1),
   lastNotifiedAt: timestamp.nullable(),
   createdAt: timestamp,
 });

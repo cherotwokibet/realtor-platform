@@ -1,3 +1,5 @@
+import 'agent_profile.dart';
+import 'area_guide.dart';
 import 'listing_search.dart';
 
 /// The agent shown on a listing: their business lines, which the app shows
@@ -33,6 +35,15 @@ class ListingDetail {
 abstract interface class ListingRepository {
   /// A live listing, or null.
   Future<ListingDetail?> bySlug(String slug);
+
+  /// An area's guide, or null.
+  Future<AreaGuide?> area(String slug);
+
+  /// An active agent's public profile, or null.
+  Future<AgentProfile?> agent(String id);
+
+  /// Live listings in an area or by an agent, newest first.
+  Future<List<ListingSummary>> live({String? area, String? agentId, int limit = 30});
 }
 
 /// A lead call the Functions refused or could not take.
@@ -54,6 +65,10 @@ abstract interface class LeadRepository {
 
   /// `logContactTap`: counts a call or WhatsApp tap, no personal data (D13).
   Future<void> logTap({required String listingId, required String channel});
+
+  /// `openSlots`: the times still free on [day] (`2026-10-30`), as in
+  /// `viewingTimes`; null when they can't be had (show every time then).
+  Future<List<String>?> openTimes({required String listingId, required String day});
 
   /// `bookViewing`; [slot] as `viewingSlot` builds it.
   Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone});

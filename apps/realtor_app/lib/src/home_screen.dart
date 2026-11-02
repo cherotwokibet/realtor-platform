@@ -7,9 +7,10 @@ import 'package:go_router/go_router.dart';
 
 import 'providers.dart';
 import 'search/purpose.dart';
+import 'search/results_screen.dart';
 
-/// First screen: proves brand, features and Kenyan property types all come from data.
-/// Real listings arrive with the P2 data layer.
+/// First screen: search, property types and the newest live homes, with brand
+/// and features from the tenant's data.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -33,6 +34,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final text = Theme.of(context).textTheme;
     final purposes = [for (final p in Purpose.values) if (tenant.features.isOn(p.feature)) p];
     if (!purposes.contains(_purpose) && purposes.isNotEmpty) _purpose = purposes.first;
+    final whatsapp = tenant.whatsappLink('Hello ${tenant.name}, I am looking for a home.');
 
     return Scaffold(
       appBar: AppBar(
@@ -91,47 +93,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
           SizedBox(height: b.spacing.xl),
-          Text('Sample listing', style: text.titleLarge),
-          SizedBox(height: b.spacing.sm),
-          Card(
-            child: Padding(
-              padding: EdgeInsets.all(b.spacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  VerifiedBadge(verifiedAt: DateTime.now()),
-                  SizedBox(height: b.spacing.sm),
-                  Text('2 bedroom apartment, Kilimani', style: text.titleMedium),
-                  SizedBox(height: b.spacing.xs),
-                  const PriceText(65000, period: 'month'),
-                  SizedBox(height: b.spacing.xs),
-                  Text('Deposit 2 months · Water and Wi-Fi included', style: text.bodySmall),
-                  FeatureGate(
-                    feature: Feature.mpesa,
-                    child: Padding(
-                      padding: EdgeInsets.only(top: b.spacing.sm),
-                      child: Text('Book a viewing · pay with M-Pesa', style: text.labelLarge),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _Newest(purpose: _purpose, onSeeAll: () => _search()),
         ],
       ),
       // In-app chat lives in its own section when on; otherwise WhatsApp handoff.
-      bottomNavigationBar: !tenant.features.chat && tenant.hasContactNumbers
+      bottomNavigationBar: !tenant.features.chat && whatsapp != null
           ? SafeArea(
               child: Padding(
                 padding: EdgeInsets.all(b.spacing.md),
                 child: FilledButton.icon(
-                  onPressed: () {}, // url_launcher with tenant.whatsappLink(...) in P4
+                  onPressed: () => ref.read(urlOpenerProvider)(whatsapp),
                   icon: const Icon(Icons.chat),
                   label: const Text('Enquire on WhatsApp'),
                 ),
               ),
             )
           : null,
+    );
+  }
+}
+
+/// The newest few homes for [purpose]; nothing at all while loading, on an
+/// error or when there are none, so the search above stays the focus.
+class _Newest extends ConsumerWidget {
+  const _Newest({required this.purpose, required this.onSeeAll});
+  final Purpose purpose;
+  final VoidCallback onSeeAll;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hits = ref.watch(searchResultsProvider(ListingFilters(purpose: purpose))).value?.hits ?? const [];
+    if (hits.isEmpty) return const SizedBox.shrink();
+    final b = context.brand;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(children: [
+          Expanded(child: Text('Newest ${purpose.heading}', style: Theme.of(context).textTheme.titleLarge)),
+          TextButton(onPressed: onSeeAll, child: const Text('See all')),
+        ]),
+        SizedBox(height: b.spacing.sm),
+        for (final l in hits.take(3)) ...[ListingCard(listing: l), SizedBox(height: b.spacing.md)],
+      ],
     );
   }
 }

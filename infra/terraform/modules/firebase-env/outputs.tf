@@ -15,6 +15,10 @@ output "app_ids" {
   }
 }
 
+output "app_url" {
+  value = google_firebase_hosting_site.app.default_url
+}
+
 output "admin_url" {
   value = google_firebase_hosting_site.admin.default_url
 }
