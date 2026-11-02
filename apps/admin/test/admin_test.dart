@@ -17,8 +17,8 @@ import 'package:realtor_admin/src/reports.dart';
 import 'package:realtor_admin/src/session.dart';
 import 'package:realtor_core/realtor_core.dart';
 
-TenantConfig tenant() => TenantConfig.fromJson(
-    jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>);
+TenantConfig tenant([String id = 'realtime-estates']) => TenantConfig.fromJson(
+    jsonDecode(File('../../tenants/$id.json').readAsStringSync()) as Map<String, Object?>);
 
 final owner = demoStaff.firstWhere((s) => s.role == StaffRole.owner);
 final manager = demoStaff.firstWhere((s) => s.role == StaffRole.manager);
@@ -95,6 +95,9 @@ class SlowActions implements AdminActions {
   Future<void> savePage(StaffUser who, SitePageRow page) => inner.savePage(who, page);
 
   @override
+  Future<String> saveProject(StaffUser who, OffPlanProject project) => inner.saveProject(who, project);
+
+  @override
   Future<({double? rating, int count})> moderateReview(StaffUser who, {required String reviewId, required String action}) =>
       inner.moderateReview(who, reviewId: reviewId, action: action);
 
@@ -159,14 +162,14 @@ class _FakePicker implements FilePicker {
 }
 
 Future<void> open(WidgetTester tester,
-    {StaffUser? as, double width = 1280, bool slowActions = false, List<Override> overrides = const []}) async {
+    {StaffUser? as, double width = 1280, bool slowActions = false, List<Override> overrides = const [], String tenantId = 'realtime-estates'}) async {
   tester.view.physicalSize = Size(width, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final demo = DemoAdminRepository();
   slow = SlowActions(demo);
   container = ProviderContainer(overrides: [
-    tenantProvider.overrideWithValue(tenant()),
+    tenantProvider.overrideWithValue(tenant(tenantId)),
     demoAdminProvider.overrideWithValue(demo),
     if (slowActions) adminActionsProvider.overrideWithValue(slow),
     ...overrides,
@@ -991,6 +994,47 @@ void main() {
     expect(find.text('Muthaiga North'), findsOneWidget);
     final options = await container.read(adminRepositoryProvider).areas();
     expect(options.map((a) => a.slug), contains('muthaiga-north'));
+  });
+
+  // demo-homes has offPlan on, realtime-estates has it off (P5-s06).
+  testWidgets('a manager adds an off-plan project; the payment plan must make 100%', (tester) async {
+    await open(tester, as: manager, tenantId: 'demo-homes');
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Off-plan projects…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sample Gardens'), findsOneWidget);
+    await tester.tap(find.text('Add project'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Project name'), 'Riverside Towers');
+    await tester.enterText(find.widgetWithText(TextField, 'Developer'), 'Demo Developers Ltd');
+    await tester.enterText(find.widgetWithText(TextField, 'Handover month'), '2029-03');
+    await tester.enterText(find.widgetWithText(TextField, 'From KES'), '6,500,000');
+    await tester.enterText(find.widgetWithText(TextField, 'Left'), '30');
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Westlands').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '%').last, '80');
+    await tapVisible(tester, find.text('Save'));
+    expect(find.text('The stages add up to 90%; they must make 100%.'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, '%').last, '90');
+    await tapVisible(tester, find.text('Save'));
+    expect(find.text('Riverside Towers'), findsOneWidget);
+    final saved = await container.read(adminRepositoryProvider).projects(manager);
+    final p = saved.firstWhere((p) => p.slug == 'riverside-towers');
+    expect(p.fromKES, 6500000);
+    expect(p.planTotal, 100);
+    expect(p.area, 'westlands');
+    expect(p.published, isFalse);
+  });
+
+  testWidgets('no project editor when the tenant has offPlan off, or for agents', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Off-plan projects…'), findsNothing);
+    await expectLater(container.read(adminRepositoryProvider).projects(wanjiku), throwsA(isA<StaffAccessException>()));
   });
 
   testWidgets('agents get no area editor', (tester) async {

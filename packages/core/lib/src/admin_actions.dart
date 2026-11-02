@@ -1,6 +1,7 @@
 import 'admin_repository.dart' show SitePageRow;
 import 'agent_profile.dart';
 import 'area_guide.dart';
+import 'off_plan_project.dart';
 import 'listing_draft.dart';
 import 'monthly_report.dart';
 import 'staff.dart';
@@ -131,6 +132,10 @@ abstract interface class AdminActions {
   /// `saveArea` (P3-s05), managers: adds or edits an area guide. Completes
   /// with its slug.
   Future<String> saveArea(StaffUser who, AreaGuide area);
+
+  /// `saveProject` (P5-s06), managers: adds or edits an off-plan project.
+  /// Completes with its slug.
+  Future<String> saveProject(StaffUser who, OffPlanProject project);
 
   /// `saveAgent` (P5-s04), managers: adds or edits an agent's profile.
   /// Completes with the agent's id.

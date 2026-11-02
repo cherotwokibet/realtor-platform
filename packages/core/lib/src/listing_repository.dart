@@ -1,6 +1,7 @@
 import 'agent_profile.dart';
 import 'area_guide.dart';
 import 'listing_search.dart';
+import 'off_plan_project.dart';
 
 /// The agent shown on a listing: their business lines, which the app shows
 /// on every listing.
@@ -44,6 +45,12 @@ abstract interface class ListingRepository {
 
   /// Live listings in an area or by an agent, newest first.
   Future<List<ListingSummary>> live({String? area, String? agentId, int limit = 30});
+
+  /// Published off-plan projects (P5-s06), cheapest first.
+  Future<List<OffPlanProject>> projects();
+
+  /// A published off-plan project, or null.
+  Future<OffPlanProject?> project(String slug);
 }
 
 /// A lead call the Functions refused or could not take.

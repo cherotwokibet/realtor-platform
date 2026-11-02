@@ -1,5 +1,6 @@
 import 'agent_profile.dart';
 import 'area_guide.dart';
+import 'off_plan_project.dart';
 import 'listing_draft.dart';
 import 'staff.dart';
 import 'viewing_week.dart';
@@ -265,6 +266,9 @@ abstract interface class AdminRepository {
 
   /// Every area's guide, by name (the guides are public).
   Future<List<AreaGuide>> areaGuides();
+
+  /// Off-plan projects (P5-s06), drafts too, by name. Managers only.
+  Future<List<OffPlanProject>> projects(StaffUser who);
 
   /// Every agent's profile, by name. Throws [StaffAccessException] for agents.
   Future<List<AgentProfile>> agentProfiles(StaffUser who);
