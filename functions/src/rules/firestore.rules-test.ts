@@ -13,7 +13,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { seedDocs } from '../seed/data';
 
 let env: RulesTestEnvironment;
@@ -38,6 +38,13 @@ beforeEach(async () => {
     await setDoc(doc(db, 'audit', 'a-1'), { at: new Date(), action: 'lead.stage', actor: { uid: 'boss', role: 'manager', agentId: null } });
     await setDoc(doc(db, 'payments', 'pay-1'), { purpose: 'viewing-fee', amountKES: 500, status: 'paid' });
     await setDoc(doc(db, 'viewings', 'view-1'), { listingId: 'listing-001', agentId: 'agent-wanjiku', status: 'requested' });
+    await setDoc(doc(db, 'agentBlocks', 'block-1'), { agentId: 'agent-wanjiku', note: 'Leave' });
+    await setDoc(doc(db, 'reviews', 'rev-ok'), { agentId: 'agent-wanjiku', rating: 5, status: 'approved' });
+    await setDoc(doc(db, 'reviews', 'rev-new'), { agentId: 'agent-wanjiku', rating: 2, status: 'pending' });
+    await setDoc(doc(db, 'reviewInvites', 'tok'), { agentId: 'agent-wanjiku' });
+    await setDoc(doc(db, 'users', 'alice', 'alerts', 'a1'), { listingId: 'listing-001', readAt: null });
+    await setDoc(doc(db, 'pages', 'about'), { title: 'About', body: 'x', published: true });
+    await setDoc(doc(db, 'pages', 'faq'), { title: 'FAQ', body: 'draft', published: false });
     await setDoc(doc(db, 'config', 'tenant'), { id: 'demo' });
     await setDoc(doc(db, 'savedSearches', 'ss-1'), { userId: 'alice', filters: { purpose: 'rent' }, channels: ['push'], lastNotifiedAt: null, createdAt: new Date() });
   });
@@ -103,12 +110,71 @@ describe('leads (personal data)', () => {
   });
 });
 
+describe('site pages', () => {
+  test('published pages are public; drafts only for managers; nobody writes', async () => {
+    await assertSucceeds(getDoc(doc(visitor(), 'pages', 'about')));
+    await assertFails(getDoc(doc(visitor(), 'pages', 'faq')));
+    await assertFails(getDoc(doc(agent('agent-wanjiku'), 'pages', 'faq')));
+    await assertSucceeds(getDoc(doc(manager(), 'pages', 'faq')));
+    await assertFails(setDoc(doc(manager(), 'pages', 'about'), { title: 'x', body: 'y', published: true }));
+  });
+});
+
+describe('saved-search alerts', () => {
+  test('only the owner reads, marks read and clears their alerts; nobody creates them', async () => {
+    await assertSucceeds(getDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a1')));
+    await assertFails(getDoc(doc(user('bob'), 'users', 'alice', 'alerts', 'a1')));
+    await assertFails(getDoc(doc(manager(), 'users', 'alice', 'alerts', 'a1')));
+    await assertSucceeds(updateDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a1'), { readAt: new Date() }));
+    await assertFails(updateDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a1'), { listingId: 'other' }));
+    await assertFails(setDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a2'), { listingId: 'x', readAt: null }));
+    await assertSucceeds(deleteDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a1')));
+  });
+
+  test('a saved search may ask for the in-app inbox', async () => {
+    await assertSucceeds(setDoc(doc(user('alice'), 'savedSearches', 'ss-inbox'), {
+      userId: 'alice', filters: { purpose: 'rent', areas: ['kilimani'] }, channels: ['inbox'], lastNotifiedAt: null, createdAt: serverTimestamp(),
+    }));
+  });
+});
+
+describe('reviews', () => {
+  test('approved reviews are public; pending ones only for managers; links for nobody', async () => {
+    await assertSucceeds(getDoc(doc(visitor(), 'reviews', 'rev-ok')));
+    await assertFails(getDoc(doc(visitor(), 'reviews', 'rev-new')));
+    await assertFails(getDoc(doc(agent('agent-wanjiku'), 'reviews', 'rev-new')));
+    await assertSucceeds(getDoc(doc(manager(), 'reviews', 'rev-new')));
+    await assertFails(getDoc(doc(manager(), 'reviewInvites', 'tok')));
+    await assertFails(setDoc(doc(visitor(), 'reviews', 'rev-x'), { rating: 5, status: 'approved' }));
+  });
+});
+
+describe('agent time off', () => {
+  test("staff read their own (managers all); nobody else, and nobody writes", async () => {
+    await assertFails(getDoc(doc(visitor(), 'agentBlocks', 'block-1')));
+    await assertFails(getDoc(doc(user(), 'agentBlocks', 'block-1')));
+    await assertSucceeds(getDoc(doc(agent('agent-wanjiku'), 'agentBlocks', 'block-1')));
+    await assertFails(getDoc(doc(agent('agent-otieno'), 'agentBlocks', 'block-1')));
+    await assertSucceeds(getDoc(doc(manager(), 'agentBlocks', 'block-1')));
+    await assertFails(setDoc(doc(agent('agent-wanjiku'), 'agentBlocks', 'block-2'), { agentId: 'agent-wanjiku' }));
+    await assertFails(deleteDoc(doc(manager(), 'agentBlocks', 'block-1')));
+  });
+});
+
 describe('viewings and payments', () => {
   test('viewings follow the lead rules', async () => {
     await assertFails(getDoc(doc(visitor(), 'viewings', 'view-1')));
     await assertSucceeds(getDoc(doc(agent('agent-wanjiku'), 'viewings', 'view-1')));
     await assertFails(getDoc(doc(agent('agent-otieno'), 'viewings', 'view-1')));
     await assertFails(updateDoc(doc(agent('agent-wanjiku'), 'viewings', 'view-1'), { status: 'confirmed' }));
+    // The admin's Viewings queries (P5-s05): an agent's own, a manager's all.
+    const open = (db: ReturnType<typeof manager>, agentId?: string) =>
+      getDocs(query(collection(db, 'viewings'), ...(agentId ? [where('agentId', '==', agentId)] : []),
+        where('status', 'in', ['requested', 'confirmed']), orderBy('slot')));
+    await assertSucceeds(open(agent('agent-wanjiku'), 'agent-wanjiku'));
+    await assertFails(open(agent('agent-wanjiku')));
+    await assertFails(open(agent('agent-wanjiku'), 'agent-otieno'));
+    await assertSucceeds(open(manager()));
   });
   test('payments: managers read, nobody writes', async () => {
     await assertFails(getDoc(doc(agent(), 'payments', 'pay-1')));

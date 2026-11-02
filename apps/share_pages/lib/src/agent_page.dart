@@ -10,10 +10,13 @@ const _languageNames = {'en': 'English', 'sw': 'Kiswahili'};
 
 /// `/agent/<id>`: an active agent's profile, contacts and live homes.
 class AgentPage extends StatelessComponent {
-  const AgentPage({required this.tenant, required this.agent, required this.listings, super.key});
+  const AgentPage({required this.tenant, required this.agent, required this.listings, this.reviews = const [], super.key});
   final TenantConfig tenant;
   final ShareAgent agent;
   final List<ShareListing> listings;
+
+  /// Approved reviews, newest first (P6-s03).
+  final List<ShareReview> reviews;
 
   @override
   Component build(BuildContext context) {
@@ -62,6 +65,17 @@ class AgentPage extends StatelessComponent {
         if (listings.isNotEmpty) ...[
           const h2([Component.text('Homes from this agent')]),
           listingCards(listings),
+        ],
+        if (reviews.isNotEmpty) ...[
+          const h2([Component.text('What clients say')]),
+          ul(classes: 'reviews', [
+            for (final r in reviews)
+              li([
+                span(classes: 'stars', attributes: {'aria-label': '${r.rating} of 5 stars'}, [Component.text('${'★' * r.rating}${'☆' * (5 - r.rating)}')]),
+                if (r.comment != null) p([Component.text(r.comment!)]),
+                if (r.name != null) p(classes: 'facts', [Component.text(r.name!)]),
+              ]),
+          ]),
         ],
       ],
     );

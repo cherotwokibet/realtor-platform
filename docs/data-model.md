@@ -20,8 +20,8 @@ One Firestore database per tenant project (D1), so documents carry no tenant id.
 |---|---|---|
 | `listings/{id}` | title, slug, purpose (rent / sale / short-stay), type (bedsitter … commercial), beds, baths, priceKES, depositMonths (required for rent), serviceChargeKES, geo, area (→ areas slug), estate, amenities[], utilities {water, electricity, wifi}, media[] {kind, variants, blurhash}, agentId | Agents propose via Functions (`submitListing`, P2-s03) |
 | ″ | status (draft → pending → live → expired / let / sold, moves in `listing-rules.ts`), verifiedAt, expiresAt, featuredUntil, stats {views, leads, calls, whatsapps}, createdAt, updatedAt | *Functions* |
-| `agents/{id}` | name, photo, earbNo, phone, whatsapp, languages (en / sw), rating, responseMins, active | Admin via Functions; rating and responseMins *Functions* |
-| `leads/{id}` | listingId, agentId, channel (call / whatsapp / form / viewing), contact {name, phone, email}, message, stage (new → … → won / lost), **consentAt**, **retainUntil**, createdAt | Created by `createLead`; stage moves by agents via Functions |
+| `agents/{id}` | name, photo, earbNo, phone, whatsapp, languages (en / sw), rating, responseMins, active | Admin via Functions; rating and responseMins *Functions* (responseMins: nightly `agentResponseTimes`, the median first reply over 90 days, null under 3 replies) |
+| `leads/{id}` | listingId, agentId, channel (call / whatsapp / form / viewing), contact {name, phone, email}, message, stage (new → … → won / lost), **consentAt**, **retainUntil**, createdAt; firstResponseAt + responseMins (set by the first move out of new, P5-s03) | Created by `createLead`; stage moves by agents via Functions |
 | `viewings/{id}` | listingId, agentId, slot, client {name, phone}, status (requested / confirmed / done / no-show / cancelled), feeKES, paymentId, createdAt | Requested by clients via `bookViewing`; status *Functions* |
 | `payments/{id}` | purpose (viewing-fee / deposit / featured-ad), amountKES, phone, listingId, checkoutRequestId, status (pending / paid / failed / cancelled), receipt | *Functions only* (Daraja, P6) |
 | `savedSearches/{id}` | userId, filters {purpose, types, areas, minBeds, maxPriceKES}, channels (push / email / whatsapp), lastNotifiedAt | The signed-in user; lastNotifiedAt *Functions* |
@@ -44,10 +44,13 @@ Inputs are validated with zod in `functions/src/api/`, and the stored document i
 | `createLead` | anyone, with the consent tick | Lead on a **live** listing, assigned to that listing's agent; sets `consentAt` and `retainUntil` (24 months, D12) and adds 1 to the listing's `stats.leads` |
 | `logContactTap` | anyone | Adds 1 to a **live** listing's `stats.calls` or `stats.whatsapps` (D13). Stores no personal data and no lead. Counter-only writes do not re-sync search |
 | `bookViewing` | anyone, with the consent tick | Requests a viewing of a **live** listing with its agent: a half-hour slot, Mon–Sat, 08:00–17:30 Nairobi time, at least 2 hours and at most 30 days ahead. One active booking per agent per slot (id `<agentId>_<slot ms>`; a cancelled slot frees up). The client's name and phone are also stored as a lead (channel `viewing`, consent and 24-month retention) and counted in `stats.leads`. Fee is 0 until M-Pesa (P6) |
+| `updateViewingStatus` | the viewing's agent, or a manager | P5-s05: requested → confirmed / cancelled; confirmed → done / no-show (only after the time) / cancelled (`transitions.json` `viewingStatus`, mirrored in the admin). A cancelled slot can be booked again. Audited `viewing.status`, labelled by listing and time, never the client. Admin: *Viewings* (open ones from 14 days back, earliest first; history by status) |
 | `updateLeadStage` | the lead's agent, or a manager | new → contacted → viewing → offer → won, any stage → lost, and lost → contacted |
 | `submitListing` | agents (as themselves), managers (for any agent) | Create or edit → `pending`; sets slug (unique), geohash, stats and timestamps; the area must exist. `media` may only reorder or drop the listing's own pipeline-made entries (the stored copies are kept); left out, the media stay as they are |
 | `moderateListing` | managers | approve (live, verified for 30 days), reject (needs a reason), expire, let, sold; status moves from `listing-rules.ts` |
 | `confirmListing` | the listing's agent, or a manager | P6-s02: a live or expired listing is still available → live, `verifiedAt` now, `expiresAt` +30 days; audited `listing.confirm`. The nightly `expireListings` job moves live listings past `expiresAt` to expired (audited as *Nightly expiry*) |
+| `featureListing` | managers | P5-s02: a live listing ranks first in search for `days` (≤ 90); 0 stops it; audited `listing.feature`. The nightly job clears lapsed `featuredUntil` so search re-syncs |
+| `importListings` | managers | P5-s02 CSV import: up to 100 rows per call, each a new listing submitted exactly as `submitListing` (pending, audited) for the agent it names; bad rows are reported by row, the rest go in. The admin's *Import CSV…* parses and checks the sheet first (`ListingCsv` in packages/core) |
 | `dataRequest` | owners and managers | DPA 2019 subject request: finds a person's leads and viewings by phone or email and returns them as JSON (`export`) or deletes them (`delete`); audited as `privacy.export` / `privacy.delete` with counts only. Admin: *Privacy* |
 
 Still to come: rate limits on the public callables (P6 fraud controls), confirming and cancelling viewings from admin (P5 bookings), and agent availability instead of fixed hours.
@@ -63,7 +66,7 @@ Agents upload raw photos to `uploads/agents/<agentId>/listings/<listingId>/` (ma
 - adds `{kind: 'photo', variants, blurhash, width, height}` to `media`
 - deletes the raw upload
 
-Variants under `media/` are public and cached for a year. Video (ffmpeg → HLS) comes next.
+Variants under `media/` are public and cached for a year. Videos become an HLS ladder (720p/360p) and a poster under `media/listings/<id>/<mediaId>/`, made by the Cloud Run job `transcode-video` (D15).
 
 ## Search (P2-s05, D4)
 

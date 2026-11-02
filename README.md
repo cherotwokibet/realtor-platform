@@ -71,6 +71,8 @@ Each tenant becomes a flavor (`realtime-estates` → `realtimeEstates`) with its
 
 `flutter build web --release --wasm` builds the app for Firebase Hosting (`firebase.json` → `hosting`: path URLs with an SPA rewrite, and cache headers). The app uses path URLs (`/listing/<slug>`, no `#/`). On screens 840 px and wider, it switches from the bottom bar to a side rail and caps content at 1200 px. After `flutter create`, the icon and splash tools, run `node tools/tenant-cli/src/cli.ts web <id>`. It writes the tenant's title, description, theme colour and Open Graph tags into `web/index.html` and `manifest.json`.
 
+On Android and iOS the app starts Firebase from a generated `firebase.json` asset: after `prepare <id>` (or `flavors`), run `node tools/tenant-cli/src/cli.ts firebase-config <id> <dev|stage|prod>` (add `--flavor` for flavor builds) in Cloud Shell, signed in to the firebase CLI. Without it the app runs on demo data. On the web it reads Hosting's `/__/firebase/init.json` instead.
+
 ## Feature flags
 
 `features` in the tenant file switches parts of the product on or off. In code, every feature-specific widget sits inside `FeatureGate(feature: Feature.x, ...)` (packages/ui), and every top-level section is an `AppSection` in `apps/realtor_app/lib/src/sections.dart`. A section whose feature is off has no route or menu entry, and deep links to it go home. To add a feature, add the key to the schema, `Feature` and `Features` in packages/core, then gate its UI. Tests in `apps/realtor_app/test/feature_flags_test.dart` switch each one off and check it disappears.

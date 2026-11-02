@@ -71,6 +71,21 @@ PROJECT=<project-id> OWNER_EMAIL=<that email> npm --prefix functions run staff:o
 
 Press *Check again* (or sign out and in) to pick up the owner role. From then on the owner adds staff with `setStaffRole`.
 
+### Customer web app
+
+Terraform makes a Hosting site `<project-id>-app` linked to the customer web app, so the app reads its Firebase config from `/__/firebase/init.json` (none is committed). There it shows live listings from Firestore and sends enquiries, viewing requests and taps to the Functions; anywhere else it runs on demo data. In Cloud Shell, from `~/realtor-platform`:
+
+```sh
+node tools/tenant-cli/src/cli.ts prepare <id>
+(cd apps/realtor_app && flutter create . --platforms=web --project-name realtor_app)
+node tools/tenant-cli/src/cli.ts web <id>
+(cd apps/realtor_app && flutter build web --release --wasm)
+firebase target:apply hosting app <project-id>-app --project <project-id>   # once per project
+firebase deploy --only hosting:app --project <project-id>
+```
+
+Open `app_url`. Search reads every live listing of the chosen purpose and filters in the browser, which is fine for a few hundred homes; Typesense (D4) replaces it when set up.
+
 ### Share pages (D2)
 
 Terraform makes an Artifact Registry repo (`share-pages`, output `share_pages_repo`; it keeps the newest 5 images) and a Hosting site (`<project-id>-share`, output `share_url`) whose every path is rewritten to the `share-pages` Cloud Run service. The service exists only once `share_pages_image` is set, so it takes two applies. In Cloud Shell, from `~/realtor-platform`:
@@ -92,6 +107,28 @@ firebase target:apply hosting share <project-id>-share --project <project-id>   
 firebase deploy --only hosting:share --project <project-id>
 ```
 
+The share pages send enquiries, viewing requests and taps to the Functions' twins (`shareCreateLead`, `shareBookViewing`, `shareLogContactTap`, `shareSubmitReview`, D16), which only the `share-pages` service account may call. Deploy the Functions before a share pages image that expects them.
+
+App Check (D16) starts in watch mode: each public callable logs `{"appCheck":"verified"|"missing"}`. To enforce, put `ENFORCE_APP_CHECK=createLead,bookViewing,logContactTap,submitReview` (or `all`) in `functions/.env.<project-id>` and deploy the Functions; delete the line to switch back.
+
 Open `share_url`: `/` lists live homes, `/robots.txt` and `/sitemap.xml` answer. Re-deploying is the same build, push and second apply with a new tag; the Hosting deploy is needed only when the `share` block of `firebase.json` changes. Use a new tag every time (the commit), never `latest`, so the Cloud Run revision always changes.
+
+### Video transcoder (D15)
+
+Video uploads are turned into HLS by the Cloud Run job `transcode-video`; until its image is deployed they are refused with a note on the listing ("videos are not switched on for this site yet"). The image goes in the same Artifact Registry repo. In Cloud Shell, from `~/realtor-platform`:
+
+```sh
+cd infra/terraform/tenant
+REPO=$(terraform output -raw share_pages_repo)
+cd ../../..
+TAG=$(git rev-parse --short HEAD)
+docker build -f functions/transcode.Dockerfile -t "$REPO/transcode-video:$TAG" functions
+docker push "$REPO/transcode-video:$TAG"
+cd infra/terraform/tenant
+terraform apply -var tenant_id=<id> -var env=dev -var billing_account=XXXXXX-XXXXXX-XXXXXX \
+  -var share_pages_image=<current share pages image> -var transcode_image="$REPO/transcode-video:$TAG"
+```
+
+Every later apply must pass both images, or the plan removes the service and the job: read the plan for destroys first. The job has 2 CPU, 2 GiB and 30 minutes, runs only when a video arrives and costs nothing idle.
 
 Not yet covered: the Typesense collection (P2 search), and custom domains on Hosting (needs DNS access, P8).

@@ -7,6 +7,7 @@ import 'package:realtor_tokens/realtor_tokens.dart';
 
 import 'fonts.dart';
 import 'listing.dart';
+import 'site_page.dart';
 
 /// Layout only; every colour, font and radius comes from the tenant's CSS
 /// variables (packages/tokens), so a re-brand needs no change here.
@@ -20,6 +21,15 @@ h1{font-family:var(--font-display);font-size:var(--text-headline);color:var(--co
 h2{font-family:var(--font-display);font-size:var(--text-title);color:var(--color-ink);margin:24px 0 8px}
 .price{font-size:var(--text-title);color:var(--color-primary);font-weight:600;margin:0 0 8px}
 .facts{color:var(--color-text-muted);margin:0 0 16px}
+.insight{color:var(--color-success);font-weight:600;margin:-8px 0 16px}
+footer{max-width:720px;margin:0 auto;padding:24px 16px;border-top:1px solid var(--color-border)}
+footer nav{display:flex;flex-wrap:wrap;gap:16px}
+footer a{color:var(--color-text-muted)}
+fieldset.stars{border:1px solid var(--color-border);border-radius:var(--radius-sm);margin:0 0 16px}
+fieldset.stars label{display:block;padding:4px 0}
+.reviews{list-style:none;padding:0}
+.reviews li{border-top:1px solid var(--color-border);padding:12px 0}
+.reviews .stars{color:var(--color-accent-text);letter-spacing:2px}
 .badge{display:inline-block;background:var(--color-accent);color:var(--color-on-accent);border-radius:var(--radius-sm);padding:2px 8px;font-size:var(--text-caption)}
 .photos{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));margin:16px 0}
 .photos img{width:100%;height:auto;border-radius:var(--radius-md);background:var(--color-surface-alt)}
@@ -81,11 +91,15 @@ Component sharePage({
     ],
     body: Component.fragment([
       header([
-        a(href: 'https://${tenant.shareDomain}/', [
-          img(src: 'https://${tenant.appDomain}/assets/assets/tenant/logo-horizontal.png', alt: tenant.name, height: 36),
+        a(href: '/', [
+          img(src: logoPath, alt: tenant.name, height: 36),
         ]),
       ]),
       main_(body),
+      if (footerPages.isNotEmpty)
+        footer([
+          nav([for (final pg in footerPages) a(href: '/${pg.slug}', [Component.text(pg.title)])]),
+        ]),
     ]),
   );
 }

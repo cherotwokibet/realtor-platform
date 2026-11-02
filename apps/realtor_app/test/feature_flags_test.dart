@@ -34,10 +34,12 @@ String currentPath(WidgetTester tester) {
 Finder navLabel(String label) =>
     find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
 
+// M-Pesa has no customer UI yet (payments come later, in the Functions); its
+// only gate was on the old placeholder card, so it is not checked here.
 void main() {
   testWidgets('with every feature on, each one shows', (tester) async {
     await pumpApp(tester, tenantWith({}));
-    for (final f in [Feature.ads, Feature.aiSearch, Feature.mpesa]) {
+    for (final f in [Feature.ads, Feature.aiSearch]) {
       expect(find.byKey(FeatureGate.keyFor(f)), findsOneWidget, reason: f.name);
     }
     for (final label in ['Rent', 'Buy', 'Short stay']) {
@@ -47,7 +49,7 @@ void main() {
     expect(navLabel('Chat'), findsOneWidget);
   });
 
-  for (final f in [Feature.ads, Feature.aiSearch, Feature.mpesa]) {
+  for (final f in [Feature.ads, Feature.aiSearch]) {
     testWidgets('turning off ${f.name} removes its UI', (tester) async {
       await pumpApp(tester, tenantWith({f: false}));
       expect(find.byKey(FeatureGate.keyFor(f)), findsNothing);

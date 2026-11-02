@@ -102,6 +102,51 @@ class FirestoreListingSource implements ListingSource {
   }
 
   @override
+  Future<({String title, String body, DateTime? updatedAt})?> page(String slug) async {
+    final doc = await _get('pages/${Uri.encodeComponent(slug)}');
+    if (doc == null) return null;
+    final f = _decodeFields(_map(doc['fields']));
+    if (f['published'] != true) return null;
+    return (title: f['title']! as String, body: (f['body'] as String?) ?? '', updatedAt: f['updatedAt'] is DateTime ? f['updatedAt'] as DateTime : null);
+  }
+
+  @override
+  Future<List<({String slug, String title})>> publishedPages() async {
+    final docs = await _query({
+      'from': [{'collectionId': 'pages'}],
+      'where': {'fieldFilter': {'field': {'fieldPath': 'published'}, 'op': 'EQUAL', 'value': {'booleanValue': true}}},
+      'limit': 20,
+    });
+    return [
+      for (final d in docs) (slug: (d['name']! as String).split('/').last, title: _decodeFields(_map(d['fields']))['title']! as String),
+    ];
+  }
+
+  @override
+  Future<List<ShareReview>> reviews(String agentId, {int limit = 5}) async {
+    final docs = await _query({
+      'from': [{'collectionId': 'reviews'}],
+      'where': {
+        'compositeFilter': {'op': 'AND', 'filters': [_eq('agentId', agentId), _eq('status', 'approved')]},
+      },
+      'limit': 100,
+    });
+    final rows = [
+      for (final d in docs)
+        () {
+          final f = _decodeFields(_map(d['fields']));
+          return (
+            rating: (f['rating']! as num).toInt(),
+            comment: f['comment'] as String?,
+            name: f['name'] as String?,
+            at: f['createdAt'] is DateTime ? f['createdAt'] as DateTime : null,
+          );
+        }(),
+    ]..sort((a, b) => (b.at ?? DateTime(0)).compareTo(a.at ?? DateTime(0)));
+    return rows.take(limit).toList();
+  }
+
+  @override
   Future<List<ShareListing>> latestLive({int limit = 12}) async {
     // Uses the (status, updatedAt desc) index in firestore.indexes.json.
     final docs = await _query({

@@ -32,6 +32,80 @@ class CallableAdminActions implements AdminActions {
   }
 
   @override
+  Future<void> updateViewing(StaffUser who, {required String viewingId, required String status}) =>
+      _run('updateViewingStatus', {'viewingId': viewingId, 'status': status});
+
+  @override
+  Future<String> rescheduleViewing(StaffUser who, {required String viewingId, required String slot}) async {
+    final r = await _run('rescheduleViewing', {'viewingId': viewingId, 'slot': slot}) as Map<Object?, Object?>;
+    return r['viewingId'] as String;
+  }
+
+  @override
+  Future<String> addTimeOff(StaffUser who, {String? agentId, required String start, required String end, String? note}) async {
+    final r = await _run('addAgentBlock', {
+      if (agentId != null) 'agentId': agentId,
+      'start': start,
+      'end': end,
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+    }) as Map<Object?, Object?>;
+    return r['blockId'] as String;
+  }
+
+  @override
+  Future<MonthlyReport> monthlyReport(StaffUser who, String month) async =>
+      MonthlyReport.fromJson(await _run('monthlyReport', {'month': month}) as Map<Object?, Object?>);
+
+  @override
+  Future<({double? rating, int count})> moderateReview(StaffUser who, {required String reviewId, required String action}) async {
+    final r = await _run('moderateReview', {'reviewId': reviewId, 'action': action}) as Map<Object?, Object?>;
+    return (rating: (r['rating'] as num?)?.toDouble(), count: (r['ratingCount'] as num?)?.toInt() ?? 0);
+  }
+
+  @override
+  Future<void> savePage(StaffUser who, SitePageRow page) =>
+      _run('savePage', {'slug': page.slug, 'title': page.title.trim(), 'body': page.body, 'published': page.published});
+
+  @override
+  Future<String> saveArea(StaffUser who, AreaGuide area) async {
+    final r = await _run('saveArea', area.toCallable()) as Map<Object?, Object?>;
+    return r['slug'] as String;
+  }
+
+  @override
+  Future<String> saveAgent(StaffUser who, AgentProfile profile) async {
+    final r = await _run('saveAgent', profile.toCallable()) as Map<Object?, Object?>;
+    return r['agentId'] as String;
+  }
+
+  @override
+  Future<void> removeTimeOff(StaffUser who, {required String blockId}) => _run('removeAgentBlock', {'blockId': blockId});
+
+  @override
+  Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days}) async {
+    final r = await _run('featureListing', {'listingId': listingId, 'days': days}) as Map<Object?, Object?>;
+    final until = r['featuredUntil'] as String?;
+    return until == null ? null : DateTime.parse(until);
+  }
+
+  @override
+  Future<String> submitListing(StaffUser who, ListingDraft draft) async {
+    final r = await _run('submitListing', draft.toCallable()) as Map<Object?, Object?>;
+    return r['listingId'] as String;
+  }
+
+  @override
+  Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows) async {
+    final r = await _run('importListings', {'rows': rows}) as Map<Object?, Object?>;
+    return ImportOutcome(
+      created: [for (final c in r['created'] as List) ((c as Map)['row'] as num).toInt()],
+      failed: [
+        for (final f in r['failed'] as List) (row: ((f as Map)['row'] as num).toInt(), error: f['error'] as String),
+      ],
+    );
+  }
+
+  @override
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) =>
       _run('setStaffRole', {
         'email': email.trim(),
@@ -52,11 +126,17 @@ class CallableAdminActions implements AdminActions {
         kind: kind,
         leads: (data['leads'] as List).length,
         viewings: (data['viewings'] as List).length,
+        reviews: (data['reviews'] as List?)?.length ?? 0,
         exportJson: const JsonEncoder.withIndent('  ').convert(data),
       );
     }
     final deleted = r['deleted'] as Map<Object?, Object?>;
-    return DataRequestResult(kind: kind, leads: deleted['leads'] as int, viewings: deleted['viewings'] as int);
+    return DataRequestResult(
+      kind: kind,
+      leads: deleted['leads'] as int,
+      viewings: deleted['viewings'] as int,
+      reviews: (deleted['reviews'] as num?)?.toInt() ?? 0,
+    );
   }
 
   Future<Object?> _run(String name, Map<String, Object?> data) async {

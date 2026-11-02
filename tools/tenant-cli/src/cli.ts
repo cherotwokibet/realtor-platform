@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { execSync } from 'node:child_process';
+import { join, basename, relative } from 'node:path';
 import { validateTenants, repoRoot } from './validate.ts';
 import { tenantCss } from './css.ts';
 import { generateIcons } from './icons.ts';
 import { flutterConfigs } from './flutter-config.ts';
 import { createTenant } from './create.ts';
+import { rebrandTenant } from './rebrand.ts';
 import { patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
 import { tenantFontFiles } from './fonts.ts';
+import { fromGoogleServices, fromServiceInfoPlist, type MobileFirebase, pickApps } from './firebase-config.ts';
 import {
   flavorName,
   appName,
@@ -34,6 +37,12 @@ function usage(): never {
                      (title, description, theme colour, Open Graph); run after flutter create
   create <id> <name>  Scaffold tenants/<id>.json and placeholder brand/<id>/ art for a new realtor
                      (provisioning: infra/terraform/README.md)
+  rebrand <id> <name> --from <demo-id> --primary <hex> [--accent <hex>]
+                     Sales demo (P8-s05): the demo tenant under a prospect's name and colours,
+                     with a readable palette and placeholder art; see docs/sales-demo.md
+  firebase-config <id> <dev|stage|prod> [--flavor]
+                     After prepare (or flavors): fetch the Android/iOS Firebase settings with the
+                     firebase CLI into the app's firebase.json asset (generated, not committed)
 
 Coming later: deploy <id> <env>, build <id> <platform>, iOS flavors`);
   process.exit(cmd ? 1 : 0);
@@ -125,6 +134,30 @@ next:
   3. provision (Boniface, with billing): see infra/terraform/README.md`);
     break;
   }
+  case 'rebrand': {
+    const flag = (n: string) => {
+      const i = args.indexOf(`--${n}`);
+      return i >= 0 ? args.splice(i, 2)[1] : undefined;
+    };
+    const primary = flag('primary');
+    const accent = flag('accent');
+    const from = flag('from');
+    const [id, ...nameParts] = args;
+    if (!id || !nameParts.length || !primary || !from) usage();
+    try {
+      const { notes } = rebrandTenant(repoRoot(), id, nameParts.join(' '), { primary, accent, from });
+      loadValid(id);
+      for (const n of notes) console.log(`  adjusted: ${n}`);
+    } catch (e) {
+      console.error(`✗ ${(e as Error).message}`);
+      process.exit(1);
+    }
+    console.log(`demo tenant ${id} ready (do not commit tenants/${id}.json or brand/${id}/)
+next:
+  node tools/tenant-cli/src/cli.ts prepare ${id}
+  cd apps/realtor_app && flutter run -d chrome     (and apps/admin for the staff side)`);
+    break;
+  }
   case 'web': {
     const id = args[0];
     if (!id) usage();
@@ -194,6 +227,31 @@ next, in apps/realtor_app:
   dart run flutter_launcher_icons
   dart run flutter_native_splash:create --flavors ${flavors.join(',')}
   flutter build apk --flavor ${flavors[0]}`);
+    break;
+  }
+  case 'firebase-config': {
+    // In Cloud Shell, after `prepare <id>` (or `flavors`), signed in with
+    // the firebase CLI: firebase-config <id> <dev|stage|prod> [--flavor]
+    const [id, env] = args.filter((a) => !a.startsWith('--'));
+    const flags = new Set(args.filter((a) => a.startsWith('--')));
+    if (!id || !env) usage();
+    const t = loadValid(id);
+    const project = t.firebase.projects[env];
+    if (!project) throw new Error(`tenant ${id} has no ${env} project`);
+    const run = (cmd: string) => JSON.parse(execSync(`firebase ${cmd} --project ${project} --json`, { encoding: 'utf8' })).result;
+    const ids = pickApps(run('apps:list'), t.apps.androidId, t.apps.iosId);
+    if (!ids.android && !ids.ios) throw new Error(`no Android or iOS app for ${t.apps.androidId} / ${t.apps.iosId} in ${project}`);
+    const out: MobileFirebase = { projectId: project, messagingSenderId: '' };
+    if (ids.android) Object.assign(out, fromGoogleServices(run(`apps:sdkconfig ANDROID ${ids.android}`).fileContents, t.apps.androidId));
+    if (ids.ios) {
+      const ios = fromServiceInfoPlist(run(`apps:sdkconfig IOS ${ids.ios}`).fileContents);
+      out.ios = { appId: ios.appId, apiKey: ios.apiKey, bundleId: ios.bundleId };
+      out.messagingSenderId ||= ios.messagingSenderId;
+    }
+    const dir = flags.has('--flavor') ? flavorAssetDir(flavorName(t.id)) : 'assets/tenant';
+    const file = join(repoRoot(), 'apps', 'realtor_app', dir, 'firebase.json');
+    writeFileSync(file, JSON.stringify(out, null, 2));
+    console.log(`wrote ${relative(repoRoot(), file)} (${env}: ${project}${ids.android ? ', android' : ''}${ids.ios ? ', ios' : ''})`);
     break;
   }
   default:

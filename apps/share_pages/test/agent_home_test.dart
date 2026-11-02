@@ -36,7 +36,9 @@ const byWanjiku = ShareListing(
 );
 
 Future<String> page(String path, {int status = 200}) async {
-  final source = InMemoryListingSource(const [byWanjiku, flat], areas: const [kilimani], agents: const [wanjiku]);
+  final source = InMemoryListingSource(const [byWanjiku, flat], areas: const [kilimani], agents: const [wanjiku], agentReviews: {
+    'agent-wanjiku': [(rating: 4, comment: 'On time & honest <3', name: 'Akinyi', at: DateTime(2026, 10, 27))],
+  });
   final r = await shareHandler(tenant, source)(shelf.Request('GET', Uri.parse('https://x$path')));
   expect(r.statusCode, status, reason: path);
   return r.readAsString();
@@ -85,5 +87,13 @@ void main() {
 
   test('sitemap lists active agents', () async {
     expect(await page('/sitemap.xml'), contains('<loc>https://realtimeestates.co.ke/agent/agent-wanjiku</loc>'));
+  });
+
+  test("approved reviews show on the agent's page, escaped", () async {
+    final html = await page('/agent/agent-wanjiku');
+    expect(html, contains('What clients say'));
+    expect(html, contains('★★★★☆'));
+    expect(html, contains('On time &amp; honest &lt;3'));
+    expect(html, contains('Akinyi'));
   });
 }

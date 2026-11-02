@@ -5,9 +5,12 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'package:realtor_core/realtor_core.dart';
 
+import 'account/account_screen.dart';
 import 'home_screen.dart';
 import 'listing/listing_screen.dart';
+import 'places/place_screens.dart';
 import 'providers.dart';
+import 'saved/saved_screen.dart';
 import 'search/purpose.dart';
 import 'search/results_screen.dart';
 import 'sections.dart';
@@ -24,7 +27,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           for (final s in sections)
             GoRoute(
               path: s.path,
-              builder: (context, state) => s.path == '/' ? const HomeScreen() : PlaceholderScreen(title: s.label),
+              builder: (context, state) => switch (s.path) {
+                '/' => const HomeScreen(),
+                '/saved' => const SavedScreen(),
+                '/account' => const AccountScreen(),
+                _ => PlaceholderScreen(title: s.label),
+              },
             ),
           // Search results: /rent, /buy/apartments, /rent/apartments/kilimani?beds=2 ...
           for (final p in Purpose.values)
@@ -48,11 +56,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/area/:slug',
-        builder: (context, state) => PlaceholderScreen(title: 'Area ${state.pathParameters['slug']}'),
+        builder: (context, state) => AreaScreen(slug: state.pathParameters['slug']!),
       ),
       GoRoute(
         path: '/agent/:id',
-        builder: (context, state) => PlaceholderScreen(title: 'Agent ${state.pathParameters['id']}'),
+        builder: (context, state) => AgentScreen(id: state.pathParameters['id']!),
       ),
     ],
   );
