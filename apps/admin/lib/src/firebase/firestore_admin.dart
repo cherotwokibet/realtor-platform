@@ -98,23 +98,23 @@ class FirestoreAdminRepository implements AdminRepository {
     return _page('viewings', q, after, limit, (docs) async {
       final names = await _agents();
       final titles = await _listingTitles({for (final d in docs) _str(d, 'listingId')});
-      return [
-        for (final d in docs)
-          ViewingRow(
-            id: d.id,
-            listingId: _str(d, 'listingId'),
-            listingTitle: titles[_str(d, 'listingId')] ?? _str(d, 'listingId'),
-            agentId: _str(d, 'agentId'),
-            agentName: names[_str(d, 'agentId')] ?? _str(d, 'agentId'),
-            slot: _date(d.data()['slot']),
-            status: _str(d, 'status'),
-            clientName: _map(d, 'client')['name'] as String?,
-            clientPhone: _map(d, 'client')['phone'] as String?,
-            reviewToken: d.data()['reviewToken'] as String?,
-          ),
-      ];
+      return [for (final d in docs) _viewing(d, names, titles)];
     });
   }
+
+  ViewingRow _viewing(_Doc d, Map<String, String> names, Map<String, String> titles) =>
+      ViewingRow(
+        id: d.id,
+        listingId: _str(d, 'listingId'),
+        listingTitle: titles[_str(d, 'listingId')] ?? _str(d, 'listingId'),
+        agentId: _str(d, 'agentId'),
+        agentName: names[_str(d, 'agentId')] ?? _str(d, 'agentId'),
+        slot: _date(d.data()['slot']),
+        status: _str(d, 'status'),
+        clientName: _map(d, 'client')['name'] as String?,
+        clientPhone: _map(d, 'client')['phone'] as String?,
+        reviewToken: d.data()['reviewToken'] as String?,
+      );
 
   @override
   Future<RowPage<AuditRow>> audit(StaffUser who, {String? after, int limit = 25}) async {
@@ -235,6 +235,24 @@ class FirestoreAdminRepository implements AdminRepository {
     if (!who.isManager) throw StaffAccessException('agent profiles are for owners and managers');
     final snap = await _db.collection('agents').get();
     return [for (final d in snap.docs) AgentProfile.fromDoc(d.id, d.data())]..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  @override
+  Future<List<ViewingRow>> viewingsBetween(StaffUser who, DateTime from, DateTime to) async {
+    // `in` on status counts as equality, so the (agentId, status, slot) and
+    // (status, slot) indexes serve this range; no new index.
+    Query<Map<String, Object?>> q = _db.collection('viewings');
+    if (who.agentScope != null) q = q.where('agentId', isEqualTo: who.agentScope);
+    final snap = await q
+        .where('status', whereIn: calendarViewingStatuses)
+        .where('slot', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+        .where('slot', isLessThan: Timestamp.fromDate(to))
+        .orderBy('slot')
+        .limit(500)
+        .get();
+    final names = await _agents();
+    final titles = await _listingTitles({for (final d in snap.docs) _str(d, 'listingId')});
+    return [for (final d in snap.docs) _viewing(d, names, titles)];
   }
 
   @override

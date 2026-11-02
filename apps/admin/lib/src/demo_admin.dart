@@ -437,6 +437,13 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   }
 
   @override
+  Future<List<ViewingRow>> viewingsBetween(StaffUser who, DateTime from, DateTime to) async =>
+      scopedTo(who, _viewings, (v) => v.agentId)
+          .where((v) => calendarViewingStatuses.contains(v.status) && !v.slot.isBefore(from) && v.slot.isBefore(to))
+          .toList()
+        ..sort((a, b) => a.slot.compareTo(b.slot));
+
+  @override
   Future<List<AgentBlock>> timeOff(StaffUser who, DateTime now) async =>
       scopedTo(who, _blocks, (b) => b.agentId).where((b) => b.end.isAfter(now)).toList()..sort((a, b) => a.start.compareTo(b.start));
 

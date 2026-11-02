@@ -33,7 +33,7 @@ class _TablePage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Row(children: [Expanded(child: Text(title, style: t.headlineSmall)), if (action != null) action!]),
+        _Header(title, action: action),
         if (subtitle != null)
           Padding(padding: const EdgeInsets.only(top: 4), child: Text(subtitle!, style: t.bodyMedium)),
         if (filters != null) Padding(padding: const EdgeInsets.only(top: 12), child: filters),
@@ -42,6 +42,22 @@ class _TablePage extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A page title with its buttons on the right, or under it on a phone.
+class _Header extends StatelessWidget {
+  const _Header(this.title, {this.action});
+  final String title;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 16,
+        runSpacing: 8,
+        children: [Text(title, style: Theme.of(context).textTheme.headlineSmall), if (action != null) action!],
+      );
 }
 
 /// Runs a change through the Functions and says how it went.
@@ -259,6 +275,9 @@ class ViewingsScreen extends ConsumerStatefulWidget {
 
 class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
   String? _status;
+
+  /// The week calendar instead of the list.
+  var _week = false;
   var _reload = 0;
   final _saving = <String, String>{}, _saved = <String, String>{};
 
@@ -309,13 +328,25 @@ class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
   Widget build(BuildContext context) {
     final who = ref.watch(staffProvider)!;
     final repo = ref.watch(adminRepositoryProvider);
-    return _TablePage(
-      title: 'Viewings',
-      action: OutlinedButton.icon(
+    final actions = Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+      SegmentedButton<bool>(
+        segments: const [
+          ButtonSegment(value: false, label: Text('List'), icon: Icon(Icons.view_list_outlined)),
+          ButtonSegment(value: true, label: Text('Week'), icon: Icon(Icons.calendar_view_week_outlined)),
+        ],
+        selected: {_week},
+        onSelectionChanged: (s) => setState(() => _week = s.first),
+      ),
+      OutlinedButton.icon(
         onPressed: () => showDialog<void>(context: context, builder: (_) => const _TimeOffDialog()),
         icon: const Icon(Icons.event_busy_outlined),
         label: const Text('Time off…'),
       ),
+    ]);
+    if (_week) return _WeekCalendar(who: who, actions: actions);
+    return _TablePage(
+      title: 'Viewings',
+      action: actions,
       subtitle: _status == null
           ? 'Viewings to confirm or close, earliest first: past ones still need marking done or no-show.'
           : 'Latest first.',
@@ -1251,6 +1282,108 @@ class _TimeOffDialogState extends ConsumerState<_TimeOffDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
         FilledButton(onPressed: _busy || !ready ? null : _add, child: const Text('Add time off')),
+      ],
+    );
+  }
+}
+
+/// Viewings as a week (P5-s05): each day in Nairobi time with the viewings
+/// booked from the app, the share pages and the admin, and the agents' time
+/// off. Read-only; the list view changes them.
+class _WeekCalendar extends ConsumerStatefulWidget {
+  const _WeekCalendar({required this.who, required this.actions});
+  final StaffUser who;
+  final Widget actions;
+  @override
+  ConsumerState<_WeekCalendar> createState() => _WeekCalendarState();
+}
+
+class _WeekCalendarState extends ConsumerState<_WeekCalendar> {
+  late DateTime _start = weekStart(DateTime.now());
+  late Future<List<CalendarDay>> _days = _load();
+
+  Future<List<CalendarDay>> _load() async {
+    final repo = ref.read(adminRepositoryProvider);
+    final end = _start.add(const Duration(days: 7));
+    final (viewings, blocks) = await (repo.viewingsBetween(widget.who, _start, end), repo.timeOff(widget.who, _start)).wait;
+    return calendarWeek(_start, viewings, blocks);
+  }
+
+  void _go(DateTime start) => setState(() {
+        _start = start;
+        _days = _load();
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final thisWeek = weekStart(DateTime.now());
+    final manager = widget.who.isManager;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _Header('Viewings', action: widget.actions),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text('Every booking from the app, the website and here, with time off. Nairobi time.', style: t.bodyMedium),
+        ),
+        const SizedBox(height: 12),
+        Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 4, children: [
+          IconButton(
+            tooltip: 'Previous week',
+            onPressed: () => _go(_start.subtract(const Duration(days: 7))),
+            icon: const Icon(Icons.chevron_left),
+          ),
+          Text('Week of ${nairobiDayLabel(_start)}', style: t.titleMedium),
+          IconButton(
+            tooltip: 'Next week',
+            onPressed: () => _go(_start.add(const Duration(days: 7))),
+            icon: const Icon(Icons.chevron_right),
+          ),
+          if (_start != thisWeek) TextButton(onPressed: () => _go(thisWeek), child: const Text('This week')),
+        ]),
+        FutureBuilder<List<CalendarDay>>(
+          future: _days,
+          builder: (context, snap) {
+            if (snap.hasError) return Padding(padding: const EdgeInsets.all(16), child: Text("Couldn't load the week: ${snap.error}"));
+            if (!snap.hasData) return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              for (final day in snap.data!)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: Text(day.label, style: t.titleSmall),
+                      ),
+                      if (day.entries.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          child: Text('Nothing booked', style: t.bodySmall),
+                        ),
+                      for (final e in day.entries)
+                        if (e.viewing case final v?)
+                          ListTile(
+                            dense: true,
+                            leading: SizedBox(width: 96, child: Text(e.time, style: t.bodyMedium)),
+                            title: Text(v.listingTitle),
+                            subtitle: Text([v.clientName ?? '—', label(v.status), if (manager) v.agentName].join(' · ')),
+                          )
+                        else if (e.block case final b?)
+                          ListTile(
+                            dense: true,
+                            leading: SizedBox(width: 96, child: Text(e.time, style: t.bodyMedium)),
+                            title: Text(manager ? 'Time off · ${b.agentName}' : 'Time off'),
+                            subtitle: b.note == null ? null : Text(b.note!),
+                            trailing: const Icon(Icons.event_busy_outlined),
+                          ),
+                    ]),
+                  ),
+                ),
+            ]);
+          },
+        ),
       ],
     );
   }
