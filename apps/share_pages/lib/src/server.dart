@@ -30,8 +30,9 @@ final _docId = RegExp(r'^[A-Za-z0-9_-]{1,128}$');
 /// With [brandDir] the header logo is served at [logoPath].
 /// Unless [indexable] (dev and stage), robots.txt turns every crawler away and
 /// each response says noindex, so test copies never show up in search.
-shelf.Handler shareHandler(TenantConfig tenant, ListingSource source,
+shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
     {LeadApi? leads, DateTime Function()? now, String? fontsDir, String? brandDir, bool indexable = true}) {
+  final source = FeatureFilteredSource(inner, tenant.features);
   final clock = now ?? DateTime.now;
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
       {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {

@@ -73,7 +73,7 @@ void main() {
   });
 
   test('sitemap lastmod is W3C datetime and URLs are XML-escaped', () {
-    final xml = sitemapXml(tenant, [(path: '/listing/a&b', lastModified: DateTime.utc(2026, 10, 24, 9, 30, 15, 123))]);
+    final xml = sitemapXml(tenant, [(path: '/listing/a&b', lastModified: DateTime.utc(2026, 10, 24, 9, 30, 15, 123), purpose: null)]);
     expect(xml, contains('<loc>https://realtimeestates.co.ke/listing/a&amp;b</loc><lastmod>2026-10-24T09:30:15Z</lastmod>'));
   });
 
