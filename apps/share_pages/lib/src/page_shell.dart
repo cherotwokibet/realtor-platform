@@ -110,11 +110,12 @@ List<Component> priceText(ShareListing l) => [
       if (l.purpose != Purpose.sale) Component.text(l.purpose == Purpose.rent ? ' /month' : ' /night'),
     ];
 
-/// A list of listing cards linking to their share pages.
-Component listingCards(List<ShareListing> listings) => ul(classes: 'cards', [
+/// A list of listing cards linking to their share pages, or wherever
+/// [hrefOf] says (e.g. through a counting redirect).
+Component listingCards(List<ShareListing> listings, {String Function(ShareListing)? hrefOf}) => ul(classes: 'cards', [
       for (final l in listings)
         li([
-          a(href: '/listing/${l.slug}', [
+          a(href: hrefOf?.call(l) ?? '/listing/${l.slug}', [
             Component.text(l.title),
             p(classes: 'price', priceText(l)),
           ]),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -186,6 +187,30 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
       }
       return shelf.Response.found(wa.toString(), headers: {'cache-control': 'no-store', 'x-robots-tag': 'noindex'});
     })
+    // Similar-homes click-through (P7-s04), counts only. Shown: the 1x1
+    // image under the section; opened: the card's link, then the listing.
+    ..get('/go/similar-shown/<file>', (shelf.Request req, String file) async {
+      final id = file.endsWith('.gif') ? file.substring(0, file.length - 4) : '';
+      final api = leads;
+      if (api != null && _docId.hasMatch(id)) {
+        unawaited(api.logRecommendation(listingId: id, event: 'shown').catchError((Object e) {
+          stderr.writeln('logRecommendation failed: ${e.runtimeType}');
+        }));
+      }
+      return shelf.Response.ok(_pixel, headers: {'content-type': 'image/gif', 'cache-control': 'no-store', 'x-robots-tag': 'noindex'});
+    })
+    ..get('/go/similar/<from>/<slug>', (shelf.Request req, String from, String slug) async {
+      if (!_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);
+      if (_docId.hasMatch(from)) {
+        // Counting the open must never stop the visitor reaching the home.
+        try {
+          await leads?.logRecommendation(listingId: from, event: 'opened');
+        } on Exception catch (e) {
+          stderr.writeln('logRecommendation failed: ${e.runtimeType}');
+        }
+      }
+      return shelf.Response.found('/listing/$slug', headers: {'cache-control': 'no-store', 'x-robots-tag': 'noindex'});
+    })
     ..get('/agent/<id>', (shelf.Request req, String id) async {
       if (!_docId.hasMatch(id)) return _notFound(tenant);
       final (agent, listings, reviews) = await (source.agent(id), source.liveByAgent(id), source.reviews(id)).wait;
@@ -319,3 +344,6 @@ shelf.Response _notFound(TenantConfig tenant) => shelf.Response.notFound(
     );
 
 SimilarKey _similarKey(ShareListing l) => (id: l.id, purpose: l.purpose, area: l.area, type: l.type, beds: l.beds, priceKES: l.priceKES);
+
+/// A transparent 1x1 GIF.
+final _pixel = base64Decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');

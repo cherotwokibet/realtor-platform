@@ -21,6 +21,15 @@ final tenant = () {
 class FakeLeads implements LeadApi {
   final leads = <Map<String, String?>>[];
   final taps = <String>[];
+
+  /// `listingId/event`, as logged.
+  final recommendations = <String>[];
+
+  @override
+  Future<void> logRecommendation({required String listingId, required String event}) async {
+    if (fail != null) throw fail!;
+    recommendations.add('$listingId/$event');
+  }
   final viewings = <Map<String, String?>>[];
   LeadApiException? fail;
 
@@ -73,6 +82,41 @@ const enquire = '/listing/2-bedroom-apartment-kilimani/enquire';
 void main() {
   setUpAll(Jaspr.initializeApp);
   setUp(() => fake = FakeLeads());
+
+  test('similar homes count on the web: a 1x1 image when shown, a redirect when opened; counts only', () async {
+    const near = ShareListing(
+        id: 'listing-near', slug: 'near-flat', title: 'Near flat', purpose: Purpose.rent, type: 'apartment',
+        beds: 2, baths: 1, priceKES: 62000, area: 'kilimani', lat: 0, lng: 0);
+    Future<shelf.Response> get(String path, {bool withLeads = true}) =>
+        Future.value(shareHandler(tenant, InMemoryListingSource(const [flat, near]), leads: withLeads ? fake : null, now: () => now)(
+            shelf.Request('GET', Uri.parse('https://x$path'))));
+
+    final html = await (await get('/listing/${flat.slug}')).readAsString();
+    expect(html, contains('href="/go/similar/${flat.id}/near-flat"'));
+    expect(html, contains('src="/go/similar-shown/${flat.id}.gif"'));
+    expect(fake.recommendations, isEmpty, reason: 'rendering the page counts nothing; the image does');
+
+    final pixel = await get('/go/similar-shown/${flat.id}.gif');
+    expect((pixel.statusCode, pixel.headers['content-type'], pixel.headers['cache-control']), (200, 'image/gif', 'no-store'));
+    expect((await pixel.read().expand((b) => b).toList()).take(6), 'GIF89a'.codeUnits);
+
+    final open = await get('/go/similar/${flat.id}/near-flat');
+    expect((open.statusCode, open.headers['location'], open.headers['x-robots-tag']), (302, '/listing/near-flat', 'noindex'));
+    await Future<void>.delayed(Duration.zero);
+    expect(fake.recommendations, ['${flat.id}/shown', '${flat.id}/opened']);
+
+    // A failed count still takes the visitor to the home; bad ids count nothing.
+    fake.fail = LeadApiException('UNAVAILABLE', 'down');
+    expect((await get('/go/similar/${flat.id}/near-flat')).statusCode, 302);
+    fake.fail = null;
+    await get('/go/similar-shown/..%2Fx.gif');
+    expect(fake.recommendations.length, 2);
+
+    // Without the Functions: plain links, no image.
+    final plain = await (await get('/listing/${flat.slug}', withLeads: false)).readAsString();
+    expect(plain, contains('href="/listing/near-flat"'));
+    expect(plain, isNot(contains('similar-shown')));
+  });
 
   test('listing page has the enquiry form with the consent tick, and WhatsApp goes through /go', () async {
     final html = await (await send('GET', '/listing/2-bedroom-apartment-kilimani')).readAsString();

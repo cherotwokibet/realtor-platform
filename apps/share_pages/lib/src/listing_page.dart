@@ -115,7 +115,19 @@ class ListingPage extends StatelessComponent {
         if (enquiry != null) _enquiryForm(enquiry!),
         if (viewing != null) _viewingForm(viewing!),
         if (agent != null) p([const Component.text('Listed by '), a(href: '/agent/${agent!.id}', [Component.text(agent!.name)])]),
-        if (similar.isNotEmpty) section(classes: 'similar', [const h2([Component.text('Similar homes')]), listingCards(similar)]),
+        if (similar.isNotEmpty)
+          section(classes: 'similar', [
+            const h2([Component.text('Similar homes')]),
+            // With the Functions to count to (P7-s04): opens go through a
+            // counting redirect, and a 1x1 image counts the section shown,
+            // even when this page itself comes from a cache. No script.
+            if (enquiry == null)
+              listingCards(similar)
+            else ...[
+              listingCards(similar, hrefOf: (home) => '/go/similar/${l.id}/${home.slug}'),
+              img(src: '/go/similar-shown/${l.id}.gif', alt: '', width: 1, height: 1, attributes: const {'aria-hidden': 'true', 'loading': 'lazy'}),
+            ],
+          ]),
         p([a(href: '/area/${l.area}', [Component.text('More homes in ${ListingSeo.placeName(l.area)}')])]),
       ],
     );
