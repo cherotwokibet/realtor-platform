@@ -12,6 +12,19 @@
 
 CI only runs `fmt` and `validate`. Nothing here is ever applied automatically.
 
+## Deploying an environment in one command
+
+Once a tenant's project is provisioned (below), `tenant deploy` does every later deploy from Cloud Shell, at the commit you have checked out:
+
+```sh
+cd ~/realtor-platform && git pull
+node tools/tenant-cli/src/cli.ts deploy <id> dev --dry-run   # print the commands
+node tools/tenant-cli/src/cli.ts deploy <id> dev             # Functions, images, Terraform, Hosting
+node tools/tenant-cli/src/cli.ts deploy <id> dev --only=web  # just the admin and app
+```
+
+Parts run in order: `functions`, `images` (share pages and the video transcoder, tagged with the commit), `infra` (Terraform, with the quota-project variables set) and `web` (admin, app and share Hosting sites). Names come from `tenants/<id>.json`; the billing account comes from `gcloud billing projects describe` (or `--billing=`). Before applying, it refuses a plan that would change or remove the billing account, delete anything outright, or point Cloud Run at an image outside the project's repo, then asks for a yes. If a step fails, it prints the command to carry on from there.
+
 ## Provisioning a tenant (Boniface, with the realtor's billing account)
 
 ```sh
