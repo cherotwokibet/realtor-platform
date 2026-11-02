@@ -401,6 +401,27 @@
           }
         }
       }
+    },
+    "map": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Map search tiles (P3-s04). Leave out for OpenStreetMap's standard tiles.",
+      "properties": {
+        "tiles": {
+          "type": "string",
+          "pattern": "^https://.*\\{z\\}.*\\{x\\}.*\\{y\\}",
+          "description": "Raster tile URL template, e.g. https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        },
+        "attribution": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "tiles",
+        "attribution"
+      ]
     }
   },
   "if": {

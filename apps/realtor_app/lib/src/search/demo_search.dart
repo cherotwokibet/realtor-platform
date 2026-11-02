@@ -58,6 +58,7 @@ class DemoListingSearch implements ListingSearch {
         f.amenities.every((a) => l.amenities.any((x) => x.toLowerCase() == a.toLowerCase())) &&
         (!f.verifiedOnly || l.verified) &&
         (f.near == null || _km(f.near!, l) <= f.near!.km) &&
+        (f.polygon.isEmpty || pointInPolygon(GeoPoint(l.lat, l.lng), f.polygon)) &&
         words.every(text.contains);
   }
 

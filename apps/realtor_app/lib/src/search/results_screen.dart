@@ -9,6 +9,7 @@ import '../account/account_screen.dart';
 import '../saved/favourites.dart';
 import 'purpose.dart';
 import '../nav.dart';
+import 'results_map.dart';
 
 /// Results for a filter URL. Every change of filter is a new URL, so the
 /// browser back button, shared links and app deep links all work.
@@ -25,6 +26,7 @@ class ResultsScreen extends ConsumerWidget {
     final b = context.brand;
     final text = Theme.of(context).textTheme;
     final result = ref.watch(searchResultsProvider(filters));
+    final onMap = ref.watch(resultsOnMapProvider);
     final where = filters.areas.length == 1 ? ' in ${areaName(filters.areas.single)}' : '';
     final what = filters.types.length == 1 ? '${typeName(filters.types.single)}s' : 'Homes';
 
@@ -33,6 +35,11 @@ class ResultsScreen extends ConsumerWidget {
         leading: const AppBack(),
         title: Text('$what ${filters.purpose.heading}$where'),
         actions: [
+          IconButton(
+            tooltip: onMap ? 'List' : 'Map',
+            icon: Icon(onMap ? Icons.view_list_outlined : Icons.map_outlined),
+            onPressed: () => ref.read(resultsOnMapProvider.notifier).set(!onMap),
+          ),
           PopupMenuButton<ListingSort>(
             tooltip: 'Sort',
             icon: const Icon(Icons.sort),
@@ -49,7 +56,16 @@ class ResultsScreen extends ConsumerWidget {
       body: result.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Search is not available right now.', style: text.bodyMedium)),
-        data: (r) => ListView(
+        data: (r) => onMap
+            ? Column(children: [
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: b.spacing.gutter),
+                  child: _ActiveFilters(filters: filters, onChange: (f) => _go(context, f)),
+                ),
+                SizedBox(height: b.spacing.sm),
+                Expanded(child: ResultsMap(hits: r.hits, filters: filters, onChange: (f) => _go(context, f))),
+              ])
+            : ListView(
           padding: EdgeInsets.all(b.spacing.gutter),
           children: [
             Wrap(
@@ -149,6 +165,7 @@ class _ActiveFilters extends StatelessWidget {
     List<String>? amenities,
     bool? verifiedOnly,
     bool clearQ = false,
+    bool clearPolygon = false,
   }) {
     final f = filters;
     return ListingFilters(
@@ -162,6 +179,7 @@ class _ActiveFilters extends StatelessWidget {
       amenities: amenities ?? f.amenities,
       verifiedOnly: verifiedOnly ?? f.verifiedOnly,
       near: f.near,
+      polygon: clearPolygon ? const [] : f.polygon,
       sort: f.sort,
     );
   }
@@ -177,6 +195,7 @@ class _ActiveFilters extends StatelessWidget {
       for (final a in f.amenities) (a.replaceAll('-', ' '), _with(amenities: [...f.amenities]..remove(a))),
       if (f.verifiedOnly) ('verified only', _with(verifiedOnly: false)),
       if (f.q != null) ('"${f.q}"', _with(clearQ: true)),
+      if (f.polygon.isNotEmpty) ('Drawn area', _with(clearPolygon: true)),
     ];
     if (chips.isEmpty) return const SizedBox.shrink();
     final b = context.brand;
