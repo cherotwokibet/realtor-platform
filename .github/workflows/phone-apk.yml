@@ -1,0 +1,95 @@
+name: Phone test APKs
+
+# Run by hand (Actions → Phone test APKs → Run workflow) when a change needs
+# a real phone: flavors side by side (P1-s03), download size and cold start
+# (P4-s06), App Links (P4-s01). Builds one release APK per tenant flavor for
+# arm64 phones (most Tecno/Infinix/Samsung A), signed with the template's
+# debug key, and attaches them to a pre-release named after the commit so
+# the download link opens on a phone. Nothing here uses a secret.
+#
+# The APKs run on the app's demo data: the live Firebase settings are made
+# by `tenant firebase-config` with a signed-in Firebase CLI, which CI does
+# not have (and must not). Older phone-test pre-releases are deleted.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phone-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Release APK per flavor (arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/tenant-cli/package-lock.json
+      - run: npm ci
+        working-directory: tools/tenant-cli
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Android folder + one flavor per tenant
+        working-directory: apps/realtor_app
+        run: |
+          flutter create . --platforms=android --project-name realtor_app >/dev/null
+          node ../../tools/tenant-cli/src/cli.ts flavors
+          flutter pub get
+          dart run flutter_launcher_icons
+          dart run flutter_native_splash:create --flavors "$(ls assets/flavors | paste -sd, -)"
+          # See ci.yml: keep Gradle and Kotlin within the runner's memory.
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/' android/gradle.properties
+          echo 'kotlin.daemon.jvmargs=-Xmx2g' >> android/gradle.properties
+      - name: Build a release APK per flavor
+        working-directory: apps/realtor_app
+        run: |
+          mkdir -p ../../out
+          for f in $(ls assets/flavors); do
+            flutter build apk --release --flavor "$f" --split-per-abi --target-platform android-arm64
+            cp build/app/outputs/flutter-apk/app-arm64-v8a-"$f"-release.apk ../../out/"$f"-arm64.apk 2>/dev/null \
+              || cp "$(ls build/app/outputs/flutter-apk/*"$f"*release.apk | head -1)" ../../out/"$f"-arm64.apk
+            rm -rf build/app/intermediates build/app/tmp
+          done
+          ls -l ../../out
+      - name: Sizes (P4-s06 budget is 25 MB)
+        run: |
+          {
+            echo "| APK | Size |"
+            echo "|---|---|"
+            for a in out/*.apk; do echo "| $(basename "$a") | $(du -m "$a" | cut -f1) MB |"; done
+          } | tee -a "$GITHUB_STEP_SUMMARY" > out/sizes.md
+      - name: Publish as a pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="phone-test-${GITHUB_SHA::7}"
+          for old in $(gh release list --limit 50 --json tagName -q '.[].tagName' | grep '^phone-test-' | grep -v "^$tag$"); do
+            gh release delete "$old" --yes --cleanup-tag
+          done
+          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+          {
+            echo "Phone test build of ${GITHUB_SHA::7}: one APK per tenant, arm64, demo data, debug-signed (not for the stores)."
+            echo
+            echo "On the phone: open this page, tap an APK, allow installs from the browser, install. Both can sit side by side."
+            echo
+            cat out/sizes.md
+          } > notes.md
+          gh release create "$tag" out/*.apk --prerelease --target "$GITHUB_SHA" --title "Phone test ${GITHUB_SHA::7}" --notes-file notes.md
+          echo "Release: $(gh release view "$tag" --json url -q .url)" | tee -a "$GITHUB_STEP_SUMMARY"
