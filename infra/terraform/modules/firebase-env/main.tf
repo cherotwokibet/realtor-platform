@@ -64,7 +64,18 @@ resource "google_storage_bucket" "media" {
   location                    = local.region
   uniform_bucket_level_access = true
   labels                      = local.labels
-  depends_on                  = [google_project_service.apis]
+
+  # The Flutter web app and admin download photos in code, which browsers
+  # allow only with CORS (an <img> on the share pages needs none). Media is
+  # public-read in storage.rules, so any origin may GET it; nothing else.
+  cors {
+    origin          = ["*"]
+    method          = ["GET", "HEAD"]
+    response_header = ["Content-Type", "Cache-Control"]
+    max_age_seconds = 3600
+  }
+
+  depends_on = [google_project_service.apis]
 }
 
 resource "google_firebase_storage_bucket" "media" {
