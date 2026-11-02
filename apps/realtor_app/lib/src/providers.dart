@@ -27,6 +27,16 @@ final areaProvider = FutureProvider.family<AreaGuide?, String>((ref, slug) => re
 
 final agentProvider = FutureProvider.family<AgentProfile?, String>((ref, id) => ref.watch(listingRepositoryProvider).agent(id));
 
+/// Area slug -> name, for reading area names out of typed searches. Empty
+/// until loaded or when it fails: words then stay free text, which still matches.
+final areaNamesProvider = FutureProvider<Map<String, String>>((ref) async {
+  try {
+    return {for (final a in await ref.watch(listingRepositoryProvider).areas()) if (a.slug != null) a.slug!: a.name};
+  } on Exception {
+    return const {};
+  }
+});
+
 /// Published off-plan projects, cheapest first (P5-s06).
 final projectsProvider = FutureProvider<List<OffPlanProject>>((ref) => ref.watch(listingRepositoryProvider).projects());
 

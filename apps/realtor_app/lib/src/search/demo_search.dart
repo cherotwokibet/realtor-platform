@@ -54,7 +54,8 @@ class DemoListingSearch implements ListingSearch {
         (f.minBeds == null || l.beds >= f.minBeds!) &&
         (f.minPriceKES == null || l.priceKES >= f.minPriceKES!) &&
         (f.maxPriceKES == null || l.priceKES <= f.maxPriceKES!) &&
-        f.amenities.every(l.amenities.contains) &&
+        // Amenities are typed freely in admin ("Parking"); match any case.
+        f.amenities.every((a) => l.amenities.any((x) => x.toLowerCase() == a.toLowerCase())) &&
         (!f.verifiedOnly || l.verified) &&
         (f.near == null || _km(f.near!, l) <= f.near!.km) &&
         words.every(text.contains);

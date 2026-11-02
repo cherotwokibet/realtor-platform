@@ -131,6 +131,12 @@ class FirestoreListingRepository implements ListingRepository {
     return [for (final r in rows.take(limit)) r.$1];
   }
 
+  @override
+  Future<List<AreaGuide>> areas() async {
+    final snap = await _db.collection('areas').limit(500).get();
+    return [for (final d in snap.docs) AreaGuide.fromDoc(d.id, d.data())];
+  }
+
   // The rules let the public read published projects only, so every read
   // asks for published ones.
   @override

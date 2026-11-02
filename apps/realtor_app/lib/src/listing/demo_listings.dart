@@ -56,6 +56,11 @@ class DemoListingRepository implements ListingRepository {
           if ((area == null || l.area == area) && (agentId == null || _agents[i % _agents.length].id == agentId)) l,
       ].take(limit).toList();
 
+  @override
+  Future<List<AreaGuide>> areas() async => [
+        for (final slug in {for (final l in demoListings) l.area}) AreaGuide(slug: slug, name: areaName(slug), county: 'Nairobi'),
+      ];
+
   late final _projects = [
     OffPlanProject(
       slug: 'sample-gardens',

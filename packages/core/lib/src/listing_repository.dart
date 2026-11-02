@@ -46,6 +46,9 @@ abstract interface class ListingRepository {
   /// Live listings in an area or by an agent, newest first.
   Future<List<ListingSummary>> live({String? area, String? agentId, int limit = 30});
 
+  /// Every area guide, for recognising area names in typed searches (P7-s01).
+  Future<List<AreaGuide>> areas();
+
   /// Published off-plan projects (P5-s06), cheapest first.
   Future<List<OffPlanProject>> projects();
 
