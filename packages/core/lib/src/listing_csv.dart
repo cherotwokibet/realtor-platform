@@ -21,6 +21,7 @@ const listingCsvColumns = [
   'lng',
   'area',
   'estate',
+  'description',
   'amenities',
   'agentId',
 ];

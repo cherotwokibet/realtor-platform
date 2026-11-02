@@ -23,6 +23,16 @@ test('live listings map to search docs; anything else is removed from search', (
   assert.equal(toSearchDoc('x', undefined, now), null);
 });
 
+test('the description is searchable, weighted below title, area and estate (P7-s02)', () => {
+  const l = seedListing('listing-001');
+  assert.equal(toSearchDoc('x', { ...l, description: 'Near Yaya Centre.' }, now)!.description, 'Near Yaya Centre.');
+  assert.equal('description' in toSearchDoc('x', { ...l, description: undefined }, now)!, false);
+  assert.ok(listingsSchema('t').fields!.some((f) => f.name === 'description' && f.optional));
+  const p = toSearchParams({ purpose: 'rent', q: 'yaya' } as any);
+  assert.equal(p.query_by, 'title,estate,area,amenities,description');
+  assert.equal(String(p.query_by_weights).split(',').length, 5);
+});
+
 test('verification lapses after expiresAt', () => {
   const l = seedListing('listing-001');
   assert.equal(toSearchDoc('x', { ...l, expiresAt: new Date(now.getTime() - 1) }, now)!.verified, false);

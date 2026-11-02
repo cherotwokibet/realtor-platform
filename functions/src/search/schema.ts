@@ -22,6 +22,7 @@ export function listingsSchema(tenantId: string): CollectionCreateSchema {
       { name: 'priceKES', type: 'int64', facet: true },
       { name: 'area', type: 'string', facet: true },
       { name: 'estate', type: 'string', optional: true },
+      { name: 'description', type: 'string', optional: true },
       { name: 'amenities', type: 'string[]', facet: true },
       { name: 'location', type: 'geopoint' },
       { name: 'verified', type: 'bool', facet: true },
@@ -45,6 +46,7 @@ export interface SearchDoc {
   priceKES: number;
   area: string;
   estate?: string;
+  description?: string;
   amenities: string[];
   location: [number, number];
   verified: boolean;
@@ -74,6 +76,7 @@ export function toSearchDoc(id: string, l: Record<string, any> | undefined, now 
     priceKES: l.priceKES,
     area: l.area,
     ...(l.estate ? { estate: l.estate } : {}),
+    ...(l.description ? { description: l.description } : {}),
     amenities: l.amenities ?? [],
     location: [l.geo.lat, l.geo.lng],
     verified: millis(l.verifiedAt) !== null && expires !== null && expires > now.getTime(),
@@ -123,7 +126,9 @@ export function toSearchParams(f: ListingFilters): SearchParams<SearchDoc> {
 
   return {
     q: f.q?.trim() || '*',
-    query_by: 'title,estate,area,amenities',
+    // The description counts least: words in a title or area matter more.
+    query_by: 'title,estate,area,amenities,description',
+    query_by_weights: '4,3,3,2,1',
     filter_by: by.join(' && '),
     facet_by: 'type,beds,area,amenities,verified,priceKES',
     facet_stats_fields: 'priceKES',
