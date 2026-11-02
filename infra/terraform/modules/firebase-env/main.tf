@@ -107,6 +107,19 @@ resource "google_firestore_index" "composite" {
   }
 }
 
+# D17: the tenant's feature switches as the public config/tenant doc, read
+# by Functions. Only id and features; the rest of the tenant file stays out.
+resource "google_firestore_document" "tenant_config" {
+  project     = google_project.this.project_id
+  database    = google_firestore_database.default.name
+  collection  = "config"
+  document_id = "tenant"
+  fields = jsonencode({
+    id       = { stringValue = var.tenant.id }
+    features = { mapValue = { fields = { for k, v in var.tenant.features : k => { booleanValue = v } } } }
+  })
+}
+
 resource "google_firebaserules_ruleset" "firestore" {
   project = google_project.this.project_id
   source {
