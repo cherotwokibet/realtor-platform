@@ -28,9 +28,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ListingFilters(purpose: _purpose, q: q, types: [if (type != null) type]).toUri().toString(),
       );
 
+  /// Conversational search (P7-s01): "2br Kilimani under 60k with parking"
+  /// becomes filters; the results screen shows each one as a chip to remove.
+  void _ask(String text) {
+    final features = ref.read(tenantProvider).features;
+    final parsed = parseSearch(
+      text,
+      purpose: _purpose,
+      areas: ref.read(areaNamesProvider).value ?? const {},
+      allowed: {for (final p in Purpose.values) if (features.isOn(p.feature)) p},
+    );
+    context.go(parsed.filters.toUri().toString());
+  }
+
   @override
   Widget build(BuildContext context) {
     final tenant = ref.watch(tenantProvider);
+    // Area names for typed searches, loaded before anyone presses search.
+    if (tenant.features.aiSearch) ref.watch(areaNamesProvider);
     final b = context.brand;
     final text = Theme.of(context).textTheme;
     final purposes = [for (final p in Purpose.values) if (tenant.features.isOn(p.feature)) p];
@@ -66,7 +81,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             child: TextField(
               textInputAction: TextInputAction.search,
-              onSubmitted: (q) => _search(q: q),
+              onSubmitted: _ask,
               decoration: const InputDecoration(
                 hintText: 'Try "2br Kilimani under 60k with parking"',
                 prefixIcon: Icon(Icons.auto_awesome),

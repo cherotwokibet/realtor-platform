@@ -63,6 +63,7 @@ class ResultsScreen extends ConsumerWidget {
                   ),
               ],
             ),
+            _ActiveFilters(filters: filters, onChange: (f) => _go(context, f)),
             SizedBox(height: b.spacing.md),
             Wrap(
               alignment: WrapAlignment.spaceBetween,
@@ -124,6 +125,63 @@ class ListingCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// What the search is filtering by, beyond the type chips above: each one a
+/// chip whose x removes it, so a typed search shows what was understood
+/// (P7-s01) and can be adjusted.
+class _ActiveFilters extends StatelessWidget {
+  const _ActiveFilters({required this.filters, required this.onChange});
+  final ListingFilters filters;
+  final ValueChanged<ListingFilters> onChange;
+
+  ListingFilters _with({
+    List<String>? areas,
+    bool clearBeds = false,
+    bool clearMin = false,
+    bool clearMax = false,
+    List<String>? amenities,
+    bool? verifiedOnly,
+    bool clearQ = false,
+  }) {
+    final f = filters;
+    return ListingFilters(
+      purpose: f.purpose,
+      q: clearQ ? null : f.q,
+      types: f.types,
+      areas: areas ?? f.areas,
+      minBeds: clearBeds ? null : f.minBeds,
+      minPriceKES: clearMin ? null : f.minPriceKES,
+      maxPriceKES: clearMax ? null : f.maxPriceKES,
+      amenities: amenities ?? f.amenities,
+      verifiedOnly: verifiedOnly ?? f.verifiedOnly,
+      near: f.near,
+      sort: f.sort,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = filters;
+    final chips = <(String, ListingFilters)>[
+      for (final a in f.areas) (areaName(a), _with(areas: [...f.areas]..remove(a))),
+      if (f.minBeds != null) ('${f.minBeds}+ bed', _with(clearBeds: true)),
+      if (f.minPriceKES != null) ('from ${formatKes(f.minPriceKES!)}', _with(clearMin: true)),
+      if (f.maxPriceKES != null) ('up to ${formatKes(f.maxPriceKES!)}', _with(clearMax: true)),
+      for (final a in f.amenities) (a.replaceAll('-', ' '), _with(amenities: [...f.amenities]..remove(a))),
+      if (f.verifiedOnly) ('verified only', _with(verifiedOnly: false)),
+      if (f.q != null) ('"${f.q}"', _with(clearQ: true)),
+    ];
+    if (chips.isEmpty) return const SizedBox.shrink();
+    final b = context.brand;
+    return Padding(
+      padding: EdgeInsets.only(top: b.spacing.sm),
+      child: Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [
+        for (final (label, without) in chips)
+          InputChip(label: Text(label), onDeleted: () => onChange(without), deleteButtonTooltipMessage: 'Remove $label'),
+      ]),
     );
   }
 }
