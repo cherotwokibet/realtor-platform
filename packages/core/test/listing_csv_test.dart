@@ -41,6 +41,13 @@ void main() {
       expect(r.rows.last.row.containsKey('depositMonths'), isFalse, reason: 'empty optional cells are left out');
     });
 
+    test('a description column comes through as text, commas and all (P7-s02)', () {
+      final csv = ListingCsv.parse('title,purpose,type,beds,baths,priceKES,lat,lng,area,agentId,Description\n'
+          'Flat in Ruaka,rent,apartment,1,1,25000,-1.2,36.7,ruaka,agent-1,"Quiet, near the market."\n');
+      expect(csv.ok, isTrue);
+      expect(csv.rows.single.row['description'], 'Quiet, near the market.');
+    });
+
     test('bad rows are reported by line; good rows still come through', () {
       final r = ListingCsv.parse('$header\n'
           'Ok,rent,studio,0,1,20000,1,-1.3,36.8,kilimani,,agent-a,\n'
