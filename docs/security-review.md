@@ -2,6 +2,12 @@
 
 A running record of what was checked, what was found and what is still open. Review again before stage and before prod.
 
+## 2 Nov 2026: dependencies again
+
+- **`npm audit` in `functions` found 7 (1 high, 6 moderate), all transitive under `firebase-admin`.** Fixed the high one: `follow-redirects` 1.16.1 → 1.16.2 (custom credentials could follow a redirect to another host). It is only in the lockfile; no code change.
+- **Accepted for now, 6 moderate:** `minimatch` < 11 (pattern ReDoS) and `glob` 10 (abort-signal traversal), pulled in by `rimraf` 5 inside `google-gax`. Neither ever sees a pattern or path from a request: `google-gax` uses `rimraf` only to clean its own temp files. `npm audit fix` cannot lift them without a `google-gax` release; Dependabot will offer it. Re-check before stage.
+- `tools/tenant-cli`: 0.
+
 ## 28 Oct 2026: rules, callables, dependencies
 
 ### Checked and holding
