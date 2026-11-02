@@ -14,6 +14,7 @@ export 'src/money.dart';
 export 'src/monthly_report.dart';
 export 'src/phone.dart';
 export 'src/price_insight.dart';
+export 'src/similar.dart';
 export 'src/staff.dart';
 export 'src/tenant_config.dart';
 export 'src/viewing_slots.dart';

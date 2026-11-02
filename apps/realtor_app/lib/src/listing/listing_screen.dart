@@ -7,6 +7,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 import '../providers.dart';
 import '../saved/favourites.dart';
 import '../search/purpose.dart';
+import '../search/results_screen.dart';
 import 'lead_sheets.dart';
 
 /// `/listing/<slug>`: the same page share links open on the web (P3-s03),
@@ -139,9 +140,37 @@ class _ListingView extends ConsumerWidget {
                     ),
                   ],
                 ),
+                _Similar(listing: l),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Up to three live homes like this one (P7-s04), from the same area and
+/// the newest of the same purpose; nothing while loading or when none are close.
+class _Similar extends ConsumerWidget {
+  const _Similar({required this.listing});
+  final ListingSummary listing;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final inArea = ref.watch(liveListingsProvider((area: listing.area, agent: null))).value ?? const [];
+    final newest = ref.watch(searchResultsProvider(ListingFilters(purpose: listing.purpose))).value?.hits ?? const [];
+    final similar = similarListings(listing, [...inArea, ...newest], similarKey);
+    if (similar.isEmpty) return const SizedBox.shrink();
+    final b = context.brand;
+    return Padding(
+      padding: EdgeInsets.only(top: b.spacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Similar homes', style: Theme.of(context).textTheme.titleLarge),
+          SizedBox(height: b.spacing.sm),
+          for (final s in similar) ...[ListingCard(listing: s), SizedBox(height: b.spacing.md)],
         ],
       ),
     );

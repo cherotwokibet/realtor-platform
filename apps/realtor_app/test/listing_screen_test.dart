@@ -158,4 +158,18 @@ void main() {
     expect(find.text('That time is taken. Please pick another.'), findsOneWidget);
     expect(find.text('Request viewing'), findsOneWidget);
   });
+
+  testWidgets('similar homes: close ones from the same area show; none close, no section', (tester) async {
+    await open(tester, '/listing/bedsitter-near-kasarani-stadium');
+    await tester.scrollUntilVisible(find.text('Similar homes'), 300);
+    expect(find.text('Student hostel bed, Kasarani'), findsOneWidget);
+    await tester.tap(find.text('Student hostel bed, Kasarani'));
+    await tester.pumpAndSettle();
+    expect(find.text('Student hostel bed, Kasarani'), findsWidgets);
+    final router = ProviderScope.containerOf(tester.element(find.byType(RealtorApp))).read(routerProvider);
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/listing/student-hostel-bed-kasarani');
+
+    await open(tester, kilimani);
+    expect(find.text('Similar homes'), findsNothing, reason: 'no other rental near KES 65,000 shares its area or type');
+  });
 }

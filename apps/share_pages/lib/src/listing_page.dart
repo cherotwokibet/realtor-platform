@@ -33,6 +33,7 @@ class ListingPage extends StatelessComponent {
     this.viewingDays = const [],
     this.areaMedianRentKES,
     this.freeTimes,
+    this.similar = const [],
     super.key,
   });
   final TenantConfig tenant;
@@ -56,6 +57,9 @@ class ListingPage extends StatelessComponent {
 
   /// After "Show free times" (`?day=`): that day and its free times only.
   final ({String day, List<String> times})? freeTimes;
+
+  /// Up to three live homes like this one (`similarListings`, P7-s04).
+  final List<ShareListing> similar;
 
   @override
   Component build(BuildContext context) {
@@ -111,6 +115,7 @@ class ListingPage extends StatelessComponent {
         if (enquiry != null) _enquiryForm(enquiry!),
         if (viewing != null) _viewingForm(viewing!),
         if (agent != null) p([const Component.text('Listed by '), a(href: '/agent/${agent!.id}', [Component.text(agent!.name)])]),
+        if (similar.isNotEmpty) section(classes: 'similar', [const h2([Component.text('Similar homes')]), listingCards(similar)]),
         p([a(href: '/area/${l.area}', [Component.text('More homes in ${ListingSeo.placeName(l.area)}')])]),
       ],
     );
