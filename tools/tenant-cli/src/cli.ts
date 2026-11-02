@@ -11,7 +11,7 @@ import { createTenant } from './create.ts';
 import { rebrandTenant } from './rebrand.ts';
 import { patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
 import { tenantFontFiles } from './fonts.ts';
-import { ENVS, type Env, deploySteps, imageRepo, parseBilling, parseParts, planProblems, planSummary } from './deploy.ts';
+import { ENVS, type Env, blockingChanges, deploySteps, imageRepo, parseBilling, parseParts, planProblems, planSummary, shellLine } from './deploy.ts';
 import { fromGoogleServices, fromServiceInfoPlist, type MobileFirebase, pickApps } from './firebase-config.ts';
 import {
   flavorName,
@@ -276,8 +276,9 @@ next, in apps/realtor_app:
     const tag = git('rev-parse --short HEAD');
     const dryRun = flag('dry-run');
     // Images are tagged with the commit, so they must be built from exactly it.
-    if (parts.includes('images') && !dryRun && git('status --porcelain')) {
-      console.error('✗ uncommitted changes: commit or stash them first (images are tagged with the commit)');
+    const dirty = blockingChanges(git('status --porcelain'));
+    if (parts.includes('images') && !dryRun && dirty.length) {
+      console.error(`✗ uncommitted changes in ${dirty.join(', ')}: commit or stash them first (images are tagged with the commit)`);
       process.exit(1);
     }
     let billing: string | undefined;
@@ -292,8 +293,7 @@ next, in apps/realtor_app:
       }
     }
     const steps = deploySteps({ id, env: env as Env, project, region: t.firebase.region, tag, billing, parts });
-    const shown = (s: (typeof steps)[number]) =>
-      `${s.cwd === '.' ? '' : `(cd ${s.cwd} && `}${Object.entries(s.env ?? {}).map(([k, v]) => `${k}=${v} `).join('')}${s.argv.join(' ')}${s.cwd === '.' ? '' : ')'}`;
+    const shown = shellLine;
     console.log(`deploy ${id} → ${project} (${env}), commit ${tag}: ${parts.join(', ')}`);
     if (dryRun) {
       for (const s of steps) console.log(`\n# ${s.title}${s.skipIfExists ? ` (skipped if ${s.skipIfExists} exists)` : ''}\n${shown(s)}`);

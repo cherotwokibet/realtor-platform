@@ -42,7 +42,7 @@ export interface Step {
 /** Cloud Shell's IPv6 route times out on uploads to Firebase; IPv4 first avoids it. */
 const NODE_IPV4 = { NODE_OPTIONS: '--dns-result-order=ipv4first' };
 const TF_DIR = 'infra/terraform/tenant';
-export const PLAN_FILE = 'deploy.plan';
+export const PLAN_FILE = 'deploy.tfplan'; // *.tfplan is gitignored
 
 export const imageRepo = (project: string, region: string) => `${region}-docker.pkg.dev/${project}/share-pages`;
 
@@ -50,6 +50,27 @@ export const imageRepo = (project: string, region: string) => `${region}-docker.
 export function parseBilling(s: string): string | null {
   const id = s.trim().replace(/^billingAccounts\//, '');
   return /^[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}$/.test(id) ? id : null;
+}
+
+/**
+ * Tracked files changed in `git status --porcelain` output that would make
+ * the images differ from the commit they are tagged with. `.firebaserc` is
+ * left out: `firebase target:apply` (the web part) writes Hosting targets
+ * there on every deploy, and the images never contain it.
+ */
+export function blockingChanges(porcelain: string): string[] {
+  return porcelain
+    .split('\n')
+    .filter((l) => l.trim() && !l.startsWith('??'))
+    .map((l) => l.slice(3))
+    .filter((path) => path !== '.firebaserc');
+}
+
+/** A step as a shell line, quoting arguments with spaces (for --dry-run and progress). */
+export function shellLine(s: Step): string {
+  const q = (a: string) => (/[\s'"$]/.test(a) ? `'${a.replace(/'/g, `'\\''`)}'` : a);
+  const cmd = `${Object.entries(s.env ?? {}).map(([k, v]) => `${k}=${v} `).join('')}${s.argv.map(q).join(' ')}`;
+  return s.cwd === '.' ? cmd : `(cd ${s.cwd} && ${cmd})`;
 }
 
 /** The parts to run, in order: an empty list means all of them. */

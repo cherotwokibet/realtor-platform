@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deploySteps, imageRepo, parseBilling, parseParts, planProblems, planSummary } from '../src/deploy.ts';
+import { blockingChanges, deploySteps, imageRepo, parseBilling, shellLine, parseParts, planProblems, planSummary } from '../src/deploy.ts';
 
 const base = { id: 'acme', env: 'dev' as const, project: 'acme-dev', region: 'europe-west1', tag: 'abc1234', billing: 'ABCDEF-123456-0A1B2C' };
 const repo = imageRepo('acme-dev', 'europe-west1');
@@ -31,7 +31,7 @@ test('images and Terraform use the same full image names', () => {
   }
   assert.equal(plan.env?.GOOGLE_BILLING_PROJECT, 'acme-dev');
   // Apply runs the checked plan, never a fresh one.
-  assert.deepEqual(steps.at(-1)!.argv, ['terraform', 'apply', 'deploy.plan']);
+  assert.deepEqual(steps.at(-1)!.argv, ['terraform', 'apply', 'deploy.tfplan']);
   assert.ok(steps.at(-2)!.checkPlan);
   // Images were just pushed, so no existence check.
   assert.ok(!steps.some((s) => s.argv.includes('describe')));
@@ -95,4 +95,20 @@ test('an outright delete is refused', () => {
     resource_changes: [{ address: 'module.env.google_storage_bucket.media', type: 'google_storage_bucket', change: { actions: ['delete'], before: {}, after: null } }],
   };
   assert.deepEqual(planProblems(plan, repo), ['module.env.google_storage_bucket.media would be deleted']);
+});
+
+test('uncommitted changes that block images: tracked files only, never .firebaserc', () => {
+  const porcelain = [' M .firebaserc', ' D apps/realtor_app/test/widget_test.dart', '?? infra/terraform/tenant/deploy.tfplan', 'M  functions/src/index.ts', ''].join('\n');
+  assert.deepEqual(blockingChanges(porcelain), ['apps/realtor_app/test/widget_test.dart', 'functions/src/index.ts']);
+  assert.deepEqual(blockingChanges(' M .firebaserc\n'), []);
+  assert.deepEqual(blockingChanges(''), []);
+});
+
+test('steps print as shell lines a person could paste', () => {
+  const steps = deploySteps({ ...base, parts: ['web'] });
+  assert.equal(
+    shellLine(steps.find((s) => s.cwd === 'apps/admin' && s.skipIfExists)!),
+    "(cd apps/admin && sh -c 'flutter create . --platforms=web --project-name realtor_admin && rm -f test/widget_test.dart')",
+  );
+  assert.equal(shellLine(steps.at(-1)!), 'NODE_OPTIONS=--dns-result-order=ipv4first firebase deploy --only hosting:admin,hosting:app,hosting:share --project acme-dev');
 });
