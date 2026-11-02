@@ -30,4 +30,21 @@ void main() {
     expect(find.widgetWithText(InputChip, '"2br kilimani"'), findsNothing);
     expect(find.widgetWithText(InputChip, '"2br Kilimani"'), findsOneWidget);
   });
+
+  testWidgets('with aiSearch off, an exact area name is still that area', (tester) async {
+    await pumpApp(tester, tenantWith({Feature.aiSearch: false}));
+    await tester.enterText(find.byType(TextField).first, 'Ruaka');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(currentPath(tester), '/rent/ruaka');
+    expect(find.widgetWithText(InputChip, 'Ruaka'), findsOneWidget);
+  });
+
+  testWidgets('Chat, still being built, says so plainly', (tester) async {
+    await pumpApp(tester, tenantWith({}));
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Chat')));
+    await tester.pumpAndSettle();
+    expect(find.text('Chat is coming soon.'), findsOneWidget);
+    expect(find.textContaining('Phase'), findsNothing);
+  });
 }

@@ -129,4 +129,12 @@ void main() {
     expect(find.text('Rent · Apartment · Kilimani'), findsOneWidget, reason: 'listed under Saved searches');
     expect(c.read(pendingAlertProvider), isNull);
   });
+
+  testWidgets('Account says what an alert will match when the search had typed words', (tester) async {
+    await open(tester, '/rent?q=near+the+mall');
+    await tester.tap(find.text('Get alerts for new matches'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sign in to get alerts for: Rent'), findsOneWidget);
+    expect(find.text('Alerts match the filters, not the words "near the mall".'), findsOneWidget);
+  });
 }
