@@ -39,6 +39,28 @@ ParsedSearch parseSearch(
     }
   }
 
+  // Bedrooms.
+  const numbers = {
+    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6,
+    'moja': 1, 'kimoja': 1, 'mbili': 2, 'viwili': 2, 'tatu': 3, 'vitatu': 3, 'nne': 4, 'vinne': 4, 'tano': 5, 'vitano': 5,
+  };
+  final numWord = '(\\d|${numbers.keys.join('|')})';
+  int? beds;
+  int n(String w) => int.tryParse(w) ?? numbers[w]!;
+  // Before prices, so "up to 2 bedrooms" or "at least 3 bedrooms" is
+  // bedrooms, not a KES 2 budget; the qualifier goes with it.
+  const q = r'(?:(?:at least|min|minimum|up to|upto|max|maximum|from|over|under|within|zaidi ya|hadi) )?';
+  take(RegExp(' $q$numWord ?(?:br|bdr|bd|b/r|bed|beds|bedroom|bedrooms|bedroomed|bedroomed|-bedroom|bed-roomed) '), (m) {
+    beds = n(m.group(1)!);
+    return '';
+  });
+  if (beds == null) {
+    take(RegExp(' (?:vyumba|chumba) (?:vya kulala )?$numWord '), (m) {
+      beds = n(m.group(1)!);
+      return '';
+    });
+  }
+
   // Price. Amounts: 60k, 60,000, 1.5m, 1.5 million, ksh 60000, 60 elfu.
   const amount = r'(?:ksh\.?|kes|sh\.?)?\s*(\d+(?:[.,]\d+)?)\s*(k|elfu|m|mn|million|milioni)?\b';
   int? kes(Match m, int g) {
@@ -46,7 +68,8 @@ ParsedSearch parseSearch(
     if (n == null) return null;
     final unit = m.group(g + 1);
     final v = switch (unit) { 'k' || 'elfu' => n * 1000, 'm' || 'mn' || 'million' || 'milioni' => n * 1000000, _ => n };
-    return v.round();
+    // No rent or price is under KES 1,000: "under 3" is not a budget.
+    return v < 1000 ? null : v.round();
   }
 
   int? minP, maxP;
@@ -72,7 +95,8 @@ ParsedSearch parseSearch(
     take(RegExp(r' (?:(?:ksh\.?|kes|sh\.?)\s*(\d+(?:[.,]\d+)?)\s*(k|m|mn|million)?|(\d+(?:\.\d+)?)\s*(k|m|mn|million)) '), (m) {
       final n = double.parse((m.group(1) ?? m.group(3))!.replaceAll(',', ''));
       final unit = m.group(2) ?? m.group(4);
-      maxP = (n * switch (unit) { 'k' => 1000, 'm' || 'mn' || 'million' => 1000000, _ => 1 }).round();
+      final v = (n * switch (unit) { 'k' => 1000, 'm' || 'mn' || 'million' => 1000000, _ => 1 }).round();
+      maxP = v < 1000 ? null : v;
       return '';
     });
   }
@@ -88,31 +112,12 @@ ParsedSearch parseSearch(
   if (minP != null) understood.add('from KES ${_money(minP!)}');
   if (maxP != null) understood.add('up to KES ${_money(maxP!)}');
 
-  // Bedrooms.
-  const numbers = {
-    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6,
-    'moja': 1, 'kimoja': 1, 'mbili': 2, 'viwili': 2, 'tatu': 3, 'vitatu': 3, 'nne': 4, 'vinne': 4, 'tano': 5, 'vitano': 5,
-  };
-  final numWord = '(\\d|${numbers.keys.join('|')})';
-  int? beds;
-  int n(String w) => int.tryParse(w) ?? numbers[w]!;
-  take(RegExp(' $numWord ?(?:br|bdr|bd|b/r|bed|beds|bedroom|bedrooms|bedroomed|bedroomed|-bedroom|bed-roomed) '), (m) {
-    beds = n(m.group(1)!);
-    return '';
-  });
-  if (beds == null) {
-    take(RegExp(' (?:vyumba|chumba) (?:vya kulala )?$numWord '), (m) {
-      beds = n(m.group(1)!);
-      return '';
-    });
-  }
-
   // Property types.
   const typeWords = {
     'bedsitter': r'bed-?sitters?|bedsits?|bedsitta',
     'single-room': r'single rooms?|single|chumba kimoja',
     'studio': r'studios?',
-    'apartment': r'apartments?|flats?|apartmenti',
+    'apartment': r'apartments?|apart|apts?|flats?|apartmenti',
     'maisonette': r'maisonettes?|maisonnettes?',
     'townhouse': r'town ?houses?',
     'bungalow': r'bungalows?',
@@ -171,7 +176,7 @@ ParsedSearch parseSearch(
     'a', 'an', 'the', 'in', 'at', 'on', 'with', 'and', 'or', 'for', 'of', 'to', 'near', 'around', 'i', 'im', "i'm", 'me', 'my',
     'want', 'need', 'looking', 'find', 'show', 'please', 'any', 'some', 'house', 'houses', 'home', 'homes', 'place', 'property',
     'na', 'ya', 'wa', 'za', 'kwa', 'katika', 'huko', 'nataka', 'natafuta', 'tafuta', 'nyumba', 'karibu', 'yenye', 'iliyo',
-    'kes', 'ksh', 'shillings', 'bob', 'month', 'monthly', 'pm', 'p.m', '-', '+',
+    'bedroom', 'bedrooms', 'beds', 'up', 'least', 'kes', 'ksh', 'shillings', 'bob', 'month', 'monthly', 'pm', 'p.m', '-', '+',
   };
   final rest = s.split(' ').where((w) => w.isNotEmpty && !filler.contains(w)).join(' ');
 
