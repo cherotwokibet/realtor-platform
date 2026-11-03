@@ -14,7 +14,7 @@ This is a fresh system. The old vendor app was a reference only, and no data mov
 | **See a home** | Photos and video, price, key facts, description, a "Verified" badge with its date, the agent, and similar homes. Share pages load in 0.9 s on 4G. | Built |
 | **Contact** | WhatsApp with the listing pre-filled, call, an enquiry form with data protection consent, and booking a viewing in a free slot. Every contact is logged as a lead. | Built |
 | **Area guides** | 16 Nairobi areas, each with its description, typical rent and live listings. | Built |
-| **Accounts and alerts** | Save homes on the phone. Sign in by email link. Get an in-app alert within 5 minutes when a new home matches a saved search. | Built (deploy pending) |
+| **Accounts and alerts** | Save homes on the phone. Sign in by email link. Get an in-app alert (and a push on Android) within 5 minutes when a new home matches a saved search. | Built (deploy pending) |
 | **Apps** | An Android app and a web app (app.realtimeestates.co.ke): back navigation, under 25 MB, listings in 2.3 s on a Samsung A25 over 4G. | Built; store release at go-live |
 | **Admin** | Roles (owner, manager, agent). Listings: create, edit, upload, approve or reject, feature, CSV import, "Confirm still available". Leads board with reply-time tracking. Viewings calendar: confirm, reschedule, no-show, agent time off. Agent profiles, reviews moderation, site pages (About, Privacy, Terms, FAQ, Contact), monthly reports with CSV. | Built |
 | **Trust and safety** | Listings expire after 30 days unless re-confirmed. Duplicate-photo flags. Rate limits on forms. Security rules tested on every collection. | Built |
@@ -25,8 +25,8 @@ This is a fresh system. The old vendor app was a reference only, and no data mov
 
 | Item | Why it waits | Depends on |
 |---|---|---|
-| Push and email alerts | The in-app alert works now. Push needs a VAPID key and email needs a sender. | External set-up |
-| M-Pesa viewing fees | The backend is built and tested (`docs/mpesa.md`). It needs a fee field on listings, a "Pay with M-Pesa" button, and Safaricom keys. | Daraja sandbox, then go-live (P0-s08) |
+| Push alerts on the web, and email alerts | Push on Android is built: saving a search asks once, then the sweep sends one notification per person and a tap opens the home. Web push needs a VAPID key and email needs a sender. | External set-up |
+| M-Pesa viewing fees | Built: a fee field on listings, "Pay with M-Pesa" in the app and on share pages, sent only to the phone that booked (`docs/mpesa.md`). It needs Safaricom keys. | Daraja sandbox, then go-live (P0-s08) |
 | iOS app | Same code base, built from the same flavors. | Apple Developer organisation account |
 | Viewing reminders by SMS or WhatsApp | A message sender is needed. | WhatsApp Business verification |
 

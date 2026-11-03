@@ -29,6 +29,7 @@ for (const id of ['realtime-estates', 'demo-homes']) {
     assert.deepEqual((await size('play-icon-512.png')).slice(0, 2), [512, 512]);
     assert.deepEqual((await size('android-foreground-432.png')).slice(0, 2), [432, 432]);
     assert.deepEqual((await size('splash-1152.png')).slice(0, 2), [1152, 1152]);
+    assert.deepEqual((await size('android-notification-96.png')).slice(0, 2), [96, 96]);
     assert.deepEqual((await size('splash-branding-800x320.png')).slice(0, 2), [800, 320]);
     assert.deepEqual((await size('og-default-1200x630.png')).slice(0, 2), [1200, 630]);
     assert.ok(files.includes('favicon-16.png'));

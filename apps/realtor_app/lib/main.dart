@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,9 +12,11 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'src/app.dart';
 import 'src/account/account_data.dart';
+import 'src/account/push.dart';
 import 'src/firebase/deferred_backends.dart';
 import 'src/firebase/firebase_account.dart';
 import 'src/firebase/firebase_data.dart';
+import 'src/firebase/firebase_push.dart';
 import 'src/providers.dart';
 
 Future<void> main() async {
@@ -49,6 +52,13 @@ Future<void> main() async {
       ),
       customerAccountProvider.overrideWithValue(DeferredCustomerAccount(once(() => FirebaseCustomerAccount(FirebaseAuth.instance)))),
       alertsRepositoryProvider.overrideWithValue(DeferredAlertsRepository(once(() => FirestoreAlerts(FirebaseFirestore.instance)))),
+      // Push alerts on phones (P4-s03); web push needs a VAPID key first.
+      if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS))
+        pushAlertsProvider.overrideWithValue(DeferredPushAlerts(once(() => DevicePushAlerts(
+              FcmPushClient(FirebaseMessaging.instance),
+              FirebaseFirestore.instance,
+              platform: defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
+            )))),
       leadRepositoryProvider.overrideWithValue(
         DeferredLeadRepository(once(() => CallableLeadRepository.firebase(FirebaseFunctions.instanceFor(region: tenant.firebaseRegion)))),
       ),

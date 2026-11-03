@@ -1,6 +1,7 @@
 import 'package:realtor_core/realtor_core.dart';
 
 import '../account/account_data.dart';
+import '../account/push.dart';
 
 /// Backends that are still starting. On the web, starting Firebase downloads
 /// and runs its SDK, seconds on a mid-range phone; the app draws its first
@@ -93,4 +94,18 @@ class DeferredAlertsRepository implements AlertsRepository {
   Future<void> markRead(String uid, String alertId) async => (await _inner).markRead(uid, alertId);
   @override
   Future<void> clear(String uid, String alertId) async => (await _inner).clear(uid, alertId);
+}
+
+class DeferredPushAlerts implements PushAlerts {
+  DeferredPushAlerts(this._inner);
+  final Future<PushAlerts> _inner;
+
+  @override
+  Future<bool> enable(String uid) async => (await _inner).enable(uid);
+  @override
+  Future<void> resume(String uid) async => (await _inner).resume(uid);
+  @override
+  Future<void> disable(String uid) async => (await _inner).disable(uid);
+  @override
+  Stream<String> get opened => Stream.fromFuture(_inner).asyncExpand((p) => p.opened);
 }

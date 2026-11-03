@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +7,9 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'package:realtor_core/realtor_core.dart';
 
+import 'account/account_data.dart';
 import 'account/account_screen.dart';
+import 'account/push.dart';
 import 'home_screen.dart';
 import 'listing/listing_screen.dart';
 import 'nav.dart';
@@ -93,9 +97,43 @@ class RealtorApp extends ConsumerWidget {
         debugShowCheckedModeBanner: false,
         theme: buildBrandTheme(tenant),
         routerConfig: ref.watch(routerProvider),
+        builder: (context, child) => _PushRouting(child: child ?? const SizedBox.shrink()),
       ),
     );
   }
+}
+
+/// A tapped push alert opens its home (or Account); a signed-in phone that
+/// already allowed notifications registers again on start (P4-s03).
+class _PushRouting extends ConsumerStatefulWidget {
+  const _PushRouting({required this.child});
+  final Widget child;
+
+  @override
+  ConsumerState<_PushRouting> createState() => _PushRoutingState();
+}
+
+class _PushRoutingState extends ConsumerState<_PushRouting> {
+  StreamSubscription<String>? _taps;
+
+  @override
+  void initState() {
+    super.initState();
+    _taps = ref.read(pushAlertsProvider).opened.listen((path) => ref.read(routerProvider).push(path), onError: (Object _) {});
+    ref.listenManual(customerProvider, (previous, next) {
+      final uid = next.value?.uid;
+      if (uid != null && uid != previous?.value?.uid) ref.read(pushAlertsProvider).resume(uid).ignore();
+    }, fireImmediately: true);
+  }
+
+  @override
+  void dispose() {
+    _taps?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Navigation built from the tenant's enabled sections: a bottom bar on

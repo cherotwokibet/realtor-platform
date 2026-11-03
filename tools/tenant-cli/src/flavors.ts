@@ -103,9 +103,24 @@ ${appLinkPaths.map((p) => `                <data android:pathPrefix="${p}" />`).
             </intent-filter>
 `;
 
+/** Each flavor's status-bar icon for push alerts (P4-s03), copied by
+ * `tenant flavors` from the tenant's generated icons. */
+export const NOTIFICATION_ICON = { from: 'android-notification-96.png', to: 'res/drawable-xxxhdpi/ic_notification.png' };
+
+const PUSH_PERMISSION = `    <!-- Push alerts (written by \`tenant flavors\`): Android 13+ asks first. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+`;
+
+const PUSH_ICON = `        <!-- Push alerts use the tenant's white glyph (written by \`tenant flavors\`). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+`;
+
 /** The launcher label comes from each flavor's appName placeholder
- * (resValue is off by default from AGP 9), and the main activity handles
- * the flavor's share-domain links. */
+ * (resValue is off by default from AGP 9), the main activity handles
+ * the flavor's share-domain links, and push alerts get their permission
+ * and status-bar icon. */
 export function patchManifest(src: string): string {
   let out = src.replace(/android:label="[^"]*"/, 'android:label="${appName}"');
   const at = out.indexOf('</activity>');
@@ -113,5 +128,11 @@ export function patchManifest(src: string): string {
     const lineStart = out.lastIndexOf('\n', at) + 1;
     out = out.slice(0, lineStart) + APP_LINKS + out.slice(lineStart);
   }
+  if (!out.includes('android.permission.POST_NOTIFICATIONS')) {
+    const app = out.indexOf('    <application');
+    if (app >= 0) out = out.slice(0, app) + PUSH_PERMISSION + out.slice(app);
+  }
+  const end = out.indexOf('    </application>');
+  if (end >= 0 && !out.includes('default_notification_icon')) out = out.slice(0, end) + PUSH_ICON + out.slice(end);
   return out;
 }

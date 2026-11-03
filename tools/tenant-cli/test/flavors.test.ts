@@ -87,6 +87,13 @@ test('the main activity opens share-domain links (App Links), once', () => {
   assert.equal(patchManifest(once), once);
 });
 
+test('push alerts: the notification permission and the status-bar icon, once', () => {
+  const once = patchManifest(flutterManifest);
+  assert.match(once, /<uses-permission android:name="android.permission.POST_NOTIFICATIONS" \/>\n    <application/);
+  assert.match(once, /default_notification_icon"\n\s+android:resource="@drawable\/ic_notification" \/>\n    <\/application>/);
+  assert.equal(patchManifest(once), once);
+});
+
 test('each flavor sets its own share host', () => {
   const g = androidFlavorsGradle([tenant('realtime-estates'), tenant('demo-homes')]);
   assert.match(g, /create\("realtimeEstates"\)[\s\S]*?manifestPlaceholders\["shareHost"\] = "realtimeestates\.co\.ke"/);

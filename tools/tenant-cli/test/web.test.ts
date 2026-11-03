@@ -30,6 +30,7 @@ test('index.html carries the tenant, not the Flutter defaults', () => {
   assert.match(out, new RegExp(`<meta name="theme-color" content="${t.brand.colors.primary}">`));
   assert.match(out, /<meta property="og:image" content="og.png">/);
   assert.equal(patchIndexHtml(out, t), out, 'idempotent');
+  assert.match(out, /window.flutterfire_ignore_scripts=\['messaging'\]/, 'no messaging SDK download on the web');
 });
 
 test('the app shell starts the engine, fonts and settings downloads with the HTML', () => {
