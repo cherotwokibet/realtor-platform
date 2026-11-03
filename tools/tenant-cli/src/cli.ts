@@ -10,7 +10,7 @@ import { generateIcons } from './icons.ts';
 import { flutterConfigs } from './flutter-config.ts';
 import { createTenant } from './create.ts';
 import { rebrandTenant } from './rebrand.ts';
-import { ADMIN_ROBOTS, patchAdminIndexHtml, patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
+import { ADMIN_ROBOTS, APP_ROBOTS, patchAdminIndexHtml, patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
 import { tenantFontFiles } from './fonts.ts';
 import { ENVS, type Env, blockingChanges, deploySteps, failedFunctions, functionBatches, imageRepo, parseBilling, parseParts, planProblems, planSummary, shellLine } from './deploy.ts';
 import { RELEASE_SECRETS, TRACKS, type Track, BUNDLE_DIR, pickBundle, listingProblems, publishToPlay, playToken, releaseSteps, signingEnv, storeListing, versionCode } from './release.ts';
@@ -199,6 +199,7 @@ next:
       process.exit(1);
     }
     writeFileSync(join(web, 'index.html'), patchIndexHtml(readFileSync(join(web, 'index.html'), 'utf8'), t));
+    writeFileSync(join(web, 'robots.txt'), APP_ROBOTS);
     // The admin's shell too, when it exists: title, noindex, robots.txt, loading screen.
     const adminWeb = join(root, 'apps', 'admin', 'web');
     if (existsSync(join(adminWeb, 'index.html'))) {

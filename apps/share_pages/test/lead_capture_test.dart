@@ -217,14 +217,14 @@ void main() {
       expect(html, isNot(contains('<option value="10:00">10:00</option>')));
     });
 
-    test('a full day says so; without a day, or when openSlots fails, every time is offered', () async {
+    test('a full day says so; when openSlots fails, every time is offered; without a day, pick one first', () async {
       fake.free['2026-10-28'] = [];
       expect(await (await send('GET', '$page?day=2026-10-28')).readAsString(), contains('No free times that day.'));
       final plain = await (await send('GET', page)).readAsString();
       expect(plain, contains('Show free times'));
-      expect(plain, contains('<option value="10:00">10:00</option>'));
+      expect(plain, isNot(contains('name="time"')), reason: 'times show once a day is picked');
       expect(await (await send('GET', '$page?day=2026-10-29')).readAsString(), contains('<option value="10:00">10:00</option>'));
-      expect(await (await send('GET', '$page?day=junk')).readAsString(), contains('<option value="10:00">10:00</option>'));
+      expect(await (await send('GET', '$page?day=junk')).readAsString(), isNot(contains('name="time"')), reason: 'not a day: pick again');
     });
   });
 
@@ -276,13 +276,18 @@ void main() {
 
     test('the form offers the next 12 viewing days (no Sundays) and half-hour slots 08:00-17:30', () async {
       final html = await (await send('GET', '/listing/2-bedroom-apartment-kilimani')).readAsString();
-      expect(html, contains('action="/listing/2-bedroom-apartment-kilimani/viewing#viewing"'));
       expect(html, contains('<option value="2026-10-26">Mon 26 Oct</option>'));
       expect(html, isNot(contains('value="2026-11-01"')), reason: 'Sunday');
       expect(html, contains('<option value="2026-11-07">Sat 7 Nov</option>'), reason: '12th viewing day');
-      expect(html, contains('<option value="08:00">08:00</option>'));
-      expect(html, contains('<option value="17:30">17:30</option>'));
-      expect(html, isNot(contains('value="18:00"')));
+      expect(html, isNot(contains('action="/listing/2-bedroom-apartment-kilimani/viewing#viewing"')), reason: 'the day comes first, once');
+      final day = await (await send('GET', '/listing/2-bedroom-apartment-kilimani?day=2026-10-27')).readAsString();
+      expect(day, contains('action="/listing/2-bedroom-apartment-kilimani/viewing#viewing"'));
+      expect('id="f-day"'.allMatches(day).length + 'id="v-day"'.allMatches(day).length, 1, reason: 'one day picker');
+      expect(day, contains('<option value="2026-10-27" selected>Tue 27 Oct</option>'));
+      expect(day, contains('Change day'));
+      expect(day, contains('<option value="08:00">08:00</option>'));
+      expect(day, contains('<option value="17:30">17:30</option>'));
+      expect(day, isNot(contains('value="18:00"')));
     });
 
     test('a valid request books the slot in Nairobi time and redirects to a confirmation', () async {
