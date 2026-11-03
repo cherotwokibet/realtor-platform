@@ -19,7 +19,11 @@ function setMeta(html: string, attr: 'name' | 'property', key: string, content: 
 // path before Flutter starts, so go_router sees /listing/x (P3-s07).
 const HASH_REDIRECT = `<script>if(location.hash.indexOf('#/')===0)history.replaceState(null,'',location.hash.slice(1));</script>`;
 
-export function patchIndexHtml(html: string, t: any): string {
+/**
+ * [fonts] are the tenant's bundled font assets (`fonts.json`), fetched by
+ * the app before its first frame and so preloaded with the engine.
+ */
+export function patchIndexHtml(html: string, t: any, fonts: string[] = []): string {
   let out = html
     .replace(/<html[^>]*>/, `<html lang="${t.locale.default.split('-')[0]}">`)
     .replace(/<title>[^<]*<\/title>/, `<title>${esc(t.name)}</title>`);
@@ -30,7 +34,7 @@ export function patchIndexHtml(html: string, t: any): string {
   out = setMeta(out, 'property', 'og:description', webDescription(t));
   out = setMeta(out, 'property', 'og:image', 'og.png');
   if (!out.includes(HASH_REDIRECT)) out = out.replace('</head>', `  ${HASH_REDIRECT}\n</head>`);
-  return withLoadingScreen(out, t, t.tagline ?? '');
+  return withStartupPreloads(withLoadingScreen(out, t, t.tagline ?? ''), fonts);
 }
 
 /**
@@ -69,6 +73,30 @@ function withLoadingScreen(html: string, t: any, line: string): string {
   // Gone on Flutter's first frame; after 10 s at the latest, so it can never cover the app.
   const remove = `<script>(function(){function go(){var e=document.getElementById('loading');if(e)e.remove();}window.addEventListener('flutter-first-frame',go);setTimeout(go,10000);})();</script>`;
   return html.replace(/<head>/, `<head>\n  ${style}`).replace(/<body>/, `<body>\n  ${div}\n  ${remove}`);
+}
+
+/**
+ * The app's first frame waits on a chain: flutter_bootstrap.js, then the
+ * engine and app code, then the tenant file, fonts and Hosting's Firebase
+ * settings, then the Firebase SDK. Requesting them all with the HTML puts
+ * them on the wire at once (P3-s01). The WebAssembly files are preloaded
+ * only where the browser will use them (WasmGC, as flutter.js checks), so
+ * older browsers on the JavaScript build download nothing twice.
+ */
+export function withStartupPreloads(html: string, fonts: string[]): string {
+  if (html.includes('id="startup-preload"')) return html;
+  const fetchLink = (href: string) => `<link rel="preload" href="${esc(href)}" as="fetch" crossorigin="anonymous">`;
+  const links = [
+    // Flutter serves asset <key> at assets/<key>.
+    ...['assets/tenant/tenant.json', 'assets/tenant/fonts.json', ...fonts].map((key) => fetchLink(`assets/${key}`)),
+    fetchLink('/__/firebase/init.json'),
+    // The engine and Firebase SDK come from gstatic, the fallback font from fonts.gstatic.
+    '<link rel="preconnect" href="https://www.gstatic.com" crossorigin>',
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+  ];
+  const wasm = `<script id="startup-preload">(function(){try{if(!WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,95,1,120,0])))return;[['modulepreload','main.dart.mjs'],['preload','main.dart.wasm']].forEach(function(x){var l=document.createElement('link');l.rel=x[0];l.href=x[1];if(x[0]==='preload'){l.as='fetch';l.crossOrigin='anonymous';}document.head.appendChild(l);});}catch(e){}})();</script>`;
+  return html.replace(/<meta charset="UTF-8">/, (m) => `${m}
+  ${[...links, wasm].join('\n  ')}`);
 }
 
 export function patchManifest(json: string, t: any, shortName: string): string {

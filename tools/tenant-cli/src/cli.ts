@@ -198,7 +198,10 @@ next:
       console.error('✗ no apps/realtor_app/web: run `flutter create . --platforms=web` first');
       process.exit(1);
     }
-    writeFileSync(join(web, 'index.html'), patchIndexHtml(readFileSync(join(web, 'index.html'), 'utf8'), t));
+    // The fonts `tenant prepare` bundled, preloaded with the engine.
+    const fontsJson = join(root, 'apps', 'realtor_app', 'assets', 'tenant', 'fonts.json');
+    const fonts = existsSync(fontsJson) ? (JSON.parse(readFileSync(fontsJson, 'utf8')) as { asset: string }[]).map((f) => f.asset) : [];
+    writeFileSync(join(web, 'index.html'), patchIndexHtml(readFileSync(join(web, 'index.html'), 'utf8'), t, fonts));
     writeFileSync(join(web, 'robots.txt'), APP_ROBOTS);
     // The admin's shell too, when it exists: title, noindex, robots.txt, loading screen.
     const adminWeb = join(root, 'apps', 'admin', 'web');
