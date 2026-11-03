@@ -25,11 +25,11 @@ permissions:
 
 jobs:
   deploy:
-    if: vars.STAGE_WIF_PROVIDER != '' && vars.STAGE_DEPLOY_SA != ''
+    if: vars.STAGE_WIF_PROVIDER != '' && vars.STAGE_DEPLOY_SA != '' && vars.STAGE_TENANT != ''
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      TENANT: ${{ vars.STAGE_TENANT || 'realtime-estates' }}
+      TENANT: ${{ vars.STAGE_TENANT }}
     steps:
       - uses: actions/checkout@v7
         with:

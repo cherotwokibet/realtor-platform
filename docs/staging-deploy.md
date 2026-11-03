@@ -8,7 +8,7 @@ tenant deploy realtime-estates stage --yes
 
 That covers functions, images, infra and web. The Terraform plan check still refuses billing changes, deletes and foreign images. You can also start a run by hand: **Actions → Deploy staging → Run workflow**, ticking "force" to deploy without new commits.
 
-The workflow is **off** until the two repository variables below are set. It signs in to Google Cloud with **Workload Identity Federation**: GitHub proves which repository and branch is asking, so no key file exists anywhere.
+The workflow is **off** until the three repository variables below are set. It signs in to Google Cloud with **Workload Identity Federation**: GitHub proves which repository and branch is asking, so no key file exists anywhere.
 
 **GitHub Actions minutes:** a run takes about 15 to 20 minutes, only on days main changed. That is about 400 to 600 minutes a month at most, against GitHub's 2,000 free minutes for a private repository.
 
@@ -58,7 +58,7 @@ On GitHub: **Settings → Secrets and variables → Actions → Variables**. The
 |---|---|
 | `STAGE_WIF_PROVIDER` | `projects/<N>/locations/global/workloadIdentityPools/github/providers/main-branch` |
 | `STAGE_DEPLOY_SA` | `stage-deployer@rte-realtor-stage.iam.gserviceaccount.com` |
-| `STAGE_TENANT` | optional; defaults to `realtime-estates` |
+| `STAGE_TENANT` | the tenant id, e.g. `realtime-estates` |
 
 ### 4. Check it
 
