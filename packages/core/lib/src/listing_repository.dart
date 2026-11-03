@@ -19,6 +19,7 @@ class ListingDetail {
     this.depositMonths,
     this.viewingFeeKES,
     this.photos = const [],
+    this.videos = const [],
     this.agent,
     this.description = '',
   });
@@ -35,8 +36,19 @@ class ListingDetail {
   /// Media-pipeline `card` variant URLs, in order.
   final List<String> photos;
 
+  /// Walk-through videos (P2-s04), after the photos.
+  final List<ListingVideo> videos;
+
   /// Null when the agent is inactive; the realtor's own numbers are used.
   final ListingAgent? agent;
+}
+
+/// A listing video: the HLS playlist (phones), a progressive MP4 for
+/// browsers without HLS (null for videos made before it existed), a poster.
+class ListingVideo {
+  const ListingVideo({required this.hls, this.mp4, required this.poster});
+  final String hls, poster;
+  final String? mp4;
 }
 
 /// Where listing details come from: Firestore once the app has Firebase,

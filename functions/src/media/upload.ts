@@ -6,14 +6,14 @@
  * Retries are safe: mediaId is a content hash.
  */
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Bucket } from '@google-cloud/storage';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { LowResolutionError, processImage, VARIANTS } from './image';
 import { findDuplicates, type PhotoMatch } from './duplicates';
-import { processVideo, VideoRejectedError } from './video';
+import { absolutePlaylist, processVideo, VideoRejectedError } from './video';
 
 export const UPLOAD_PATH = /^uploads\/(agents|staff)\/([A-Za-z0-9_-]{1,128})\/listings\/([A-Za-z0-9_-]{1,128})\/[^/]+$/;
 /** The tenant's mark, uploaded by the deploy step. Optional. */
@@ -124,17 +124,29 @@ export async function handleListingVideo(bucket: Bucket, db: Firestore, path: st
     }
 
     const base = `media/listings/${listingId}/${mediaId}`;
+    // Playlists name their parts relatively; Firebase links can't resolve those, so make them absolute.
+    const link = (name: string) => `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(`${base}/hls/${name}`)}?alt=media`;
+    for (const f of out.files.filter((x) => x.endsWith('.m3u8'))) {
+      const file = join(work, 'hls', f);
+      await writeFile(file, absolutePlaylist(await readFile(file, 'utf8'), link));
+    }
     for (const f of out.files) {
-      const poster = f === 'poster.jpg';
+      const top = f === 'poster.jpg' || f === 'video.mp4';
       await bucket.upload(join(work, 'hls', f), {
-        destination: poster ? `${base}/poster.jpg` : `${base}/hls/${f}`,
-        contentType: f.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : f.endsWith('.ts') ? 'video/mp2t' : 'image/jpeg',
+        destination: top ? `${base}/${f}` : `${base}/hls/${f}`,
+        contentType: f.endsWith('.m3u8')
+          ? 'application/vnd.apple.mpegurl'
+          : f.endsWith('.ts')
+            ? 'video/mp2t'
+            : f.endsWith('.mp4')
+              ? 'video/mp4'
+              : 'image/jpeg',
         metadata: { cacheControl: f.endsWith('.m3u8') ? 'public, max-age=60' : 'public, max-age=31536000, immutable' },
         resumable: false,
       });
     }
 
-    const variants = { hls: `${base}/hls/master.m3u8`, poster: `${base}/poster.jpg` };
+    const variants = { hls: `${base}/hls/master.m3u8`, mp4: `${base}/video.mp4`, poster: `${base}/poster.jpg` };
     const entry = { kind: 'video', variants, width: out.info.width, height: out.info.height, durationSec: Math.round(out.info.durationSec) };
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(listingRef);

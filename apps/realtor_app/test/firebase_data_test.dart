@@ -131,4 +131,18 @@ void main() {
     expect(calls.last.$1, 'payments-startViewingPayment');
     expect(calls.last.$2, {'viewingId': 'agent-a_1', 'phone': '+254712345678'});
   });
+
+  test('video media entries become playable videos; photos and broken entries do not', () {
+    const bucket = 'b';
+    final v = videoFromMedia({
+      'kind': 'video',
+      'variants': {'hls': 'media/listings/l/m/hls/master.m3u8', 'mp4': 'media/listings/l/m/video.mp4', 'poster': 'media/listings/l/m/poster.jpg'},
+    }, bucket)!;
+    expect(v.hls, 'https://firebasestorage.googleapis.com/v0/b/b/o/media%2Flistings%2Fl%2Fm%2Fhls%2Fmaster.m3u8?alt=media');
+    expect(v.mp4, endsWith('video.mp4?alt=media'));
+    expect(v.poster, endsWith('poster.jpg?alt=media'));
+    expect(videoFromMedia({'kind': 'video', 'variants': {'hls': 'a', 'poster': 'b'}}, bucket)!.mp4, isNull, reason: 'older videos have no MP4');
+    expect(videoFromMedia({'kind': 'photo', 'variants': {'card': 'x'}}, bucket), isNull);
+    expect(videoFromMedia({'kind': 'video', 'variants': {'hls': 'a'}}, bucket), isNull);
+  });
 }

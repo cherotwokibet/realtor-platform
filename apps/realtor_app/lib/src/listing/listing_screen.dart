@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
@@ -79,7 +81,7 @@ class _ListingView extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(leading: const AppBack(), title: Text(l.title, overflow: TextOverflow.ellipsis), actions: [FavouriteButton(listing: l)]),
       body: LayoutBuilder(builder: (context, box) {
-        final photos = _Photos(key: const ValueKey('listing-photos'), urls: detail.photos, title: l.title);
+        final photos = _Photos(key: const ValueKey('listing-photos'), urls: detail.photos, videos: detail.videos, title: l.title);
         final details = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -232,8 +234,9 @@ class _SimilarState extends ConsumerState<_Similar> {
 
 /// Swipeable photos, or a quiet placeholder until the listing has some.
 class _Photos extends StatefulWidget {
-  const _Photos({super.key, required this.urls, required this.title});
+  const _Photos({super.key, required this.urls, this.videos = const [], required this.title});
   final List<String> urls;
+  final List<ListingVideo> videos;
   final String title;
 
   @override
@@ -252,8 +255,10 @@ class _PhotosState extends State<_Photos> {
     super.dispose();
   }
 
+  int get _count => widget.urls.length + widget.videos.length;
+
   void _go(int to) {
-    if (to < 0 || to >= widget.urls.length) return;
+    if (to < 0 || to >= _count) return;
     _pages.animateToPage(to, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
   }
 
@@ -261,7 +266,8 @@ class _PhotosState extends State<_Photos> {
   Widget build(BuildContext context) {
     final b = context.brand;
     final urls = widget.urls;
-    if (urls.isEmpty) {
+    final count = _count;
+    if (count == 0) {
       return AspectRatio(
         aspectRatio: 4 / 3,
         child: ColoredBox(
@@ -300,13 +306,14 @@ class _PhotosState extends State<_Photos> {
                       semanticLabel: '${widget.title}, photo ${i + 1}',
                       errorBuilder: (context, error, stack) => ColoredBox(color: b.surfaceAlt),
                     ),
+                  for (final (i, v) in widget.videos.indexed) _VideoSlide(video: v, label: '${widget.title}, video ${i + 1}'),
                 ],
               ),
             ),
-            if (urls.length > 1) ...[
+            if (count > 1) ...[
               if (_index > 0)
                 Positioned(left: b.spacing.sm, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_left, 'Previous photo', _index - 1))),
-              if (_index < urls.length - 1)
+              if (_index < count - 1)
                 Positioned(right: b.spacing.sm, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_right, 'Next photo', _index + 1))),
               Positioned(
                 right: b.spacing.sm,
@@ -315,7 +322,7 @@ class _PhotosState extends State<_Photos> {
                   decoration: BoxDecoration(color: scheme.inverseSurface.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(b.radiusSm)),
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: b.spacing.sm, vertical: 2),
-                    child: Text('${_index + 1} / ${urls.length}',
+                    child: Text('${_index + 1} / $count',
                         key: const Key('photo-count'), style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onInverseSurface)),
                   ),
                 ),
@@ -324,6 +331,96 @@ class _PhotosState extends State<_Photos> {
           ]),
         ),
       ),
+    );
+  }
+}
+
+/// A video's poster with a play button; tapping opens the player.
+class _VideoSlide extends StatelessWidget {
+  const _VideoSlide({required this.video, required this.label});
+  final ListingVideo video;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    return Semantics(
+      button: true,
+      label: 'Play $label',
+      child: InkWell(
+        key: const Key('play-video'),
+        onTap: () => showDialog<void>(context: context, builder: (_) => _VideoDialog(video: video)),
+        child: Stack(fit: StackFit.expand, children: [
+          Image.network(video.poster, fit: BoxFit.cover, errorBuilder: (context, error, stack) => ColoredBox(color: b.surfaceAlt)),
+          Center(
+            child: Icon(Icons.play_circle_fill, size: 72, color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9)),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Plays a listing video: the MP4 on the web (browsers without HLS), the
+/// adaptive HLS stream on phones. Tap to pause or play.
+class _VideoDialog extends StatefulWidget {
+  const _VideoDialog({required this.video});
+  final ListingVideo video;
+
+  @override
+  State<_VideoDialog> createState() => _VideoDialogState();
+}
+
+class _VideoDialogState extends State<_VideoDialog> {
+  late final VideoPlayerController _player;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final v = widget.video;
+    _player = VideoPlayerController.networkUrl(Uri.parse(kIsWeb && v.mp4 != null ? v.mp4! : v.hls))..addListener(_changed);
+    _player.initialize().then((_) => _player.play(), onError: (Object _) {
+      if (mounted) setState(() => _error = 'This video could not be played here.');
+    });
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _player
+      ..removeListener(_changed)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _player.value;
+    return Dialog(
+      insetPadding: EdgeInsets.all(context.brand.spacing.md),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(alignment: Alignment.center, children: [
+        AspectRatio(
+          aspectRatio: value.isInitialized ? value.aspectRatio : 16 / 9,
+          child: _error != null
+              ? Center(child: Text(_error!, textAlign: TextAlign.center))
+              : !value.isInitialized
+                  ? const Center(child: CircularProgressIndicator())
+                  : GestureDetector(
+                      onTap: () => value.isPlaying ? _player.pause() : _player.play(),
+                      child: Stack(alignment: Alignment.bottomCenter, children: [
+                        VideoPlayer(_player),
+                        VideoProgressIndicator(_player, allowScrubbing: true),
+                        if (!value.isPlaying) const Center(child: Icon(Icons.play_arrow, size: 64)),
+                      ]),
+                    ),
+        ),
+        Positioned(top: 4, right: 4, child: IconButton.filledTonal(tooltip: 'Close', onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close))),
+      ]),
     );
   }
 }

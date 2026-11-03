@@ -137,6 +137,14 @@ test('a video upload becomes an HLS ladder and a media entry; photos skip videos
   if (r.status !== 'processed') return;
   for (const p of Object.values(r.variants)) assert.ok((await bucket.file(p).exists())[0], p);
   assert.equal((await bucket.file(path).exists())[0], false);
+  // Every playlist entry is an absolute Firebase link (relative names can't resolve against them).
+  const master = (await bucket.file(r.variants.hls).download())[0].toString();
+  const entries = master.split('\n').filter((l) => l && !l.startsWith('#'));
+  assert.ok(entries.length >= 2, master);
+  for (const e of entries) assert.match(e, /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/.+\/o\/media%2Flistings%2Flisting-001%2F.+%2Fhls%2Fv\d\.m3u8\?alt=media$/);
+  const variant = decodeURIComponent(new URL(entries[0]).pathname.split('/o/')[1]);
+  const segments = (await bucket.file(variant).download())[0].toString().split('\n').filter((l) => l && !l.startsWith('#'));
+  assert.ok(segments.length > 0 && segments.every((l) => l.startsWith('https://firebasestorage.googleapis.com/')));
   const media = (await db.collection('listings').doc('listing-001').get()).get('media') as { kind: string }[];
   assert.equal(media.filter((x) => x.kind === 'video').length, 1);
 });

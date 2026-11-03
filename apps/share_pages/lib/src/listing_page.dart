@@ -119,6 +119,20 @@ class ListingPage extends StatelessComponent {
                 attributes: {'loading': i == 0 ? 'eager' : 'lazy', 'decoding': 'async'},
               ),
           ]),
+        // Walk-through videos: Safari and phones play the HLS stream; other
+        // browsers skip it and play the MP4. No script, so the CSP still holds.
+        for (final (i, v) in l.videos.indexed)
+          video(
+            controls: true,
+            preload: Preload.none,
+            poster: seo.mediaUrl(v.poster),
+            classes: 'video',
+            attributes: {'aria-label': '${l.title}, video ${i + 1}', 'playsinline': ''},
+            [
+              source(src: seo.mediaUrl(v.hls), type: 'application/vnd.apple.mpegurl'),
+              if (v.mp4 != null) source(src: seo.mediaUrl(v.mp4!), type: 'video/mp4'),
+            ],
+          ),
         p([Component.text(seo.description)]),
         // The agent's own text, paragraph by paragraph (escaped like all text).
         for (final para in l.description.split(RegExp(r'\n\s*\n'))) if (para.trim().isNotEmpty) p([Component.text(para.trim())]),

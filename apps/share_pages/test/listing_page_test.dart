@@ -114,6 +114,24 @@ void main() {
     expect(b, isNot(contains('Realtime')));
   });
 
+  test('a listing video plays with no script: HLS first, then the MP4, poster and controls; the CSP allows media', () async {
+    const withVideo = ShareListing(
+      id: 'listing-001', slug: '2-bedroom-apartment-kilimani', title: '2 bedroom apartment, Kilimani', purpose: Purpose.rent,
+      type: 'apartment', beds: 2, baths: 2, priceKES: 65000, area: 'kilimani', lat: -1.29, lng: 36.78,
+      videos: [(hls: 'media/listings/listing-001/v1/hls/master.m3u8', mp4: 'media/listings/listing-001/v1/video.mp4', poster: 'media/listings/listing-001/v1/poster.jpg')],
+    );
+    final html = await (await get('/listing/${withVideo.slug}', listings: const [withVideo])).readAsString();
+    expect(html, contains('<video'));
+    expect(html, contains('controls'));
+    expect(html, contains('preload="none"'));
+    expect(html, contains('poster.jpg?alt=media'));
+    final hls = html.indexOf('type="application/vnd.apple.mpegurl"'), mp4 = html.indexOf('type="video/mp4"');
+    expect(hls, greaterThan(0));
+    expect(mp4, greaterThan(hls), reason: 'browsers take the first source they can play');
+    expect(securityHeaders['content-security-policy'], contains('media-src https:'));
+    expect(await (await get('/listing/${flat.slug}')).readAsString(), isNot(contains('<video')), reason: 'no video, no player');
+  });
+
   test('every response carries the security headers, and pages run no script the CSP would block', () async {
     for (final path in ['/listing/${flat.slug}', '/listing/missing', '/robots.txt', '/sitemap.xml', '/']) {
       final res = await get(path);
