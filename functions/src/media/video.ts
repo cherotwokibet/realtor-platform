@@ -13,6 +13,8 @@ export const MAX_DURATION_SEC = 180;
 export const MIN_LONG_EDGE = 720;
 /** Rendition heights, tallest first; never upscaled past the source. */
 export const LADDER = [720, 360] as const;
+/** Bitrate ceiling per ladder height (kbit/s). */
+export const MAX_KBPS: Record<(typeof LADDER)[number], number> = { 720: 2500, 360: 800 };
 
 export class VideoRejectedError extends Error {}
 
@@ -56,12 +58,33 @@ export function hlsArgs(input: string, outDir: string, hasAudio: boolean): strin
     '-filter_complex', `[0:v]split=${LADDER.length}${split};${scales}`,
     ...maps,
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-sc_threshold', '0', '-g', '48',
+    // A ceiling per rung: kind to mobile data, and it gives each stream the
+    // bandwidth the master playlist needs (without it, and without audio,
+    // ffmpeg writes a master playlist that lists no streams).
+    ...LADDER.flatMap((h, i) => [`-maxrate:v:${i}`, `${MAX_KBPS[h]}k`, `-bufsize:v:${i}`, `${MAX_KBPS[h] * 2}k`]),
     ...(hasAudio ? ['-c:a', 'aac', '-b:a', '96k'] : []),
     '-f', 'hls', '-hls_time', '6', '-hls_playlist_type', 'vod',
     '-hls_segment_filename', join(outDir, 'v%v_%03d.ts'),
     '-master_pl_name', 'master.m3u8',
     '-var_stream_map', streams,
     join(outDir, 'v%v.m3u8'),
+  ];
+}
+
+/**
+ * One progressive MP4 at the top rung (`video.mp4`): browsers that cannot
+ * play HLS in a <video> tag (desktop Chrome, Firefox) play this instead.
+ */
+export function mp4Args(input: string, out: string, hasAudio: boolean): string[] {
+  const h = LADDER[0];
+  return [
+    '-y', '-i', input,
+    '-vf', `scale=-2:'min(${h},ih)'`,
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
+    '-maxrate', `${MAX_KBPS[h]}k`, '-bufsize', `${MAX_KBPS[h] * 2}k`,
+    ...(hasAudio ? ['-c:a', 'aac', '-b:a', '96k'] : ['-an']),
+    '-movflags', '+faststart',
+    out,
   ];
 }
 
@@ -90,7 +113,7 @@ export async function probeVideo(input: string): Promise<VideoInfo> {
 
 export interface ProcessedVideo {
   info: VideoInfo;
-  /** Files written under outDir: master.m3u8, v0.m3u8, v1.m3u8, segments, poster.jpg. */
+  /** Files written under outDir: master.m3u8, v0.m3u8, v1.m3u8, segments, video.mp4, poster.jpg. */
   files: string[];
 }
 
@@ -100,7 +123,27 @@ export async function processVideo(input: string, outDir: string): Promise<Proce
   await mkdir(outDir, { recursive: true });
   const log = await run(hlsArgs(input, outDir, info.hasAudio));
   if (log.startsWith('ffmpeg exited')) throw new VideoRejectedError('could not transcode this video');
+  const mp4 = await run(mp4Args(input, join(outDir, 'video.mp4'), info.hasAudio));
+  if (mp4.startsWith('ffmpeg exited')) throw new VideoRejectedError('could not transcode this video');
   const poster = await run(posterArgs(input, join(outDir, 'poster.jpg')));
   if (poster.startsWith('ffmpeg exited')) throw new VideoRejectedError('could not read a frame from this video');
   return { info, files: (await readdir(outDir)).sort() };
+}
+
+/**
+ * Rewrites every URI in an HLS playlist (lines that are not tags, and
+ * URI="..." attributes) with [url]. Firebase download links encode the whole
+ * object path, so a player cannot resolve ffmpeg's relative names
+ * (v0.m3u8, v0_001.ts) against them; absolute links play anywhere.
+ */
+export function absolutePlaylist(text: string, url: (name: string) => string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      const t = line.trim();
+      if (!t) return line;
+      if (t.startsWith('#')) return line.replace(/URI="([^"]+)"/g, (_m, u: string) => `URI="${/^https?:/.test(u) ? u : url(u)}"`);
+      return /^https?:/.test(t) ? line : url(t);
+    })
+    .join('\n');
 }

@@ -329,6 +329,12 @@ ShareListing listingFromDocument(Map<String, Object?> doc, DateTime now) {
       for (final m in (f['media'] as List<Object?>?) ?? const [])
         if (_map(m)['kind'] == 'photo') (card: _map(_map(m)['variants'])['card']! as String, full: _map(_map(m)['variants'])['full']! as String),
     ],
+    videos: [
+      for (final m in (f['media'] as List<Object?>?) ?? const [])
+        if (_map(m)['kind'] == 'video')
+          if (_map(_map(m)['variants']) case {'hls': final String hls, 'poster': final String poster})
+            (hls: hls, mp4: _map(_map(m)['variants'])['mp4'] as String?, poster: poster),
+    ],
     verified: verifiedAt != null && expiresAt != null && expiresAt.isAfter(now),
     updatedAt: time(f['updatedAt']),
     agentId: f['agentId'] as String?,

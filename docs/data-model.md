@@ -68,7 +68,7 @@ Agents upload raw photos to `uploads/agents/<agentId>/listings/<listingId>/` (ma
 - adds `{kind: 'photo', variants, blurhash, width, height}` to `media`
 - deletes the raw upload
 
-Variants under `media/` are public and cached for a year. Videos become an HLS ladder (720p/360p) and a poster under `media/listings/<id>/<mediaId>/`, made by the Cloud Run job `transcode-video` (D15).
+Variants under `media/` are public and cached for a year. Videos become an HLS ladder (720p/360p, capped at 2.5 and 0.8 Mbit/s), one 720p MP4 and a poster under `media/listings/<id>/<mediaId>/` (variants `hls`, `mp4`, `poster`), made by the Cloud Run job `transcode-video` (D15). Playlists list their parts as absolute Firebase download links, because relative names can't resolve against those. Phones play the HLS stream; browsers without HLS play the MP4.
 
 ## Search (P2-s05, D4)
 

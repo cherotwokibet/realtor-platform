@@ -329,7 +329,7 @@ String _tooMany(TenantConfig tenant) =>
 /// block), load styles inline, fonts from `/fonts/` and images from the media
 /// CDN, post forms only to themselves and are never framed.
 const securityHeaders = {
-  'content-security-policy': "default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline'; font-src 'self'; "
+  'content-security-policy': "default-src 'none'; img-src 'self' https: data:; media-src https:; style-src 'unsafe-inline'; font-src 'self'; "
       "form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',

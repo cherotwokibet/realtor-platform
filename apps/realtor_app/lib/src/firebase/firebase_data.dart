@@ -11,6 +11,19 @@ String mediaUrl(String bucket, String path) =>
 
 DateTime? _time(Object? v) => v is Timestamp ? v.toDate() : v is DateTime ? v : null;
 
+/// A `{kind: 'video'}` media entry as a playable video, or null for anything else.
+ListingVideo? videoFromMedia(Object? m, String bucket) {
+  if (m is! Map || m['kind'] != 'video') return null;
+  final v = m['variants'];
+  if (v is! Map || v['hls'] is! String || v['poster'] is! String) return null;
+  final mp4 = v['mp4'];
+  return ListingVideo(
+    hls: mediaUrl(bucket, v['hls'] as String),
+    mp4: mp4 is String ? mediaUrl(bucket, mp4) : null,
+    poster: mediaUrl(bucket, v['poster'] as String),
+  );
+}
+
 /// A `listings/{id}` document as a results row. Verified while the 30-day
 /// check holds (P6-s02); featured until `featuredUntil` (P5-s02).
 ListingSummary summaryFromDoc(String id, Map<String, Object?> d, {required String bucket, required DateTime now}) {
@@ -97,6 +110,10 @@ class FirestoreListingRepository implements ListingRepository {
         for (final m in (d['media'] as List<Object?>?) ?? const [])
           if (m is Map && m['kind'] == 'photo')
             if ((m['variants'] as Map?)?['card'] case final String card) mediaUrl(bucket, card),
+      ],
+      videos: [
+        for (final m in (d['media'] as List<Object?>?) ?? const [])
+          if (videoFromMedia(m, bucket) case final ListingVideo v) v,
       ],
       agent: a == null || a['active'] != true
           ? null

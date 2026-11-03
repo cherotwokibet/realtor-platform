@@ -19,8 +19,10 @@ class ThreePhotos extends DemoListingRepository {
   @override
   Future<ListingDetail?> bySlug(String slug) async {
     final d = await super.bySlug(slug);
-    return d == null ? null : ListingDetail(summary: d.summary, description: d.description, photos: const ['https://x/1.webp', 'https://x/2.webp', 'https://x/3.webp']);
+    return d == null ? null : ListingDetail(summary: d.summary, description: d.description, photos: const ['https://x/1.webp', 'https://x/2.webp', 'https://x/3.webp'], videos: videos);
   }
+
+  List<ListingVideo> videos = const [];
 }
 
 class FailingLeads extends DemoLeadRepository {
@@ -253,5 +255,18 @@ void main() {
     await tester.drag(find.byType(PageView), const Offset(-500, 0), kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
     expect(find.text('3 / 3'), findsOneWidget);
+  });
+
+  testWidgets('a video comes after the photos, as a poster with a play button', (tester) async {
+    final repo = ThreePhotos()..videos = const [ListingVideo(hls: 'https://x/v/master.m3u8', mp4: 'https://x/v/video.mp4', poster: 'https://x/v/poster.jpg')];
+    await open(tester, kilimani, listings: repo, size: const Size(1400, 1000));
+    expect(find.text('1 / 4'), findsOneWidget);
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.byKey(const Key('Next photo')));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('4 / 4'), findsOneWidget);
+    expect(find.byKey(const Key('play-video')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Play .*video 1$')), findsOneWidget);
   });
 }

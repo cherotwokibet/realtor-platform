@@ -19,6 +19,7 @@ class ShareListing {
     this.viewingFeeKES,
     this.amenities = const [],
     this.photos = const [],
+    this.videos = const [],
     this.verified = false,
     this.updatedAt,
     this.agentId,
@@ -42,6 +43,10 @@ class ShareListing {
 
   /// Storage paths of the media pipeline's `card` / `full` variants.
   final List<({String card, String full})> photos;
+
+  /// Walk-through videos (P2-s04): storage paths of the HLS playlist, the
+  /// MP4 (null on videos made before it existed) and the poster.
+  final List<({String hls, String? mp4, String poster})> videos;
   final bool verified;
   final DateTime? updatedAt;
 }

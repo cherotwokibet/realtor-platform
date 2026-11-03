@@ -32,6 +32,7 @@ fieldset.stars label{display:block;padding:4px 0}
 .reviews .stars{color:var(--color-accent-text);letter-spacing:2px}
 .badge{display:inline-block;background:var(--color-accent);color:var(--color-on-accent);border-radius:var(--radius-sm);padding:2px 8px;font-size:var(--text-caption)}
 .photos{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));margin:16px 0}
+.video{width:100%;max-height:70vh;border-radius:var(--radius-md);background:var(--color-ink);margin:0 0 16px}
 .photos img{width:100%;height:auto;border-radius:var(--radius-md);background:var(--color-surface-alt)}
 .cta{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0}
 .cta a{flex:1 1 200px;text-align:center;padding:14px 16px;border-radius:var(--radius-sm);text-decoration:none;font-weight:600}
