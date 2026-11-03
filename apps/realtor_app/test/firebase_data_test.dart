@@ -118,4 +118,17 @@ void main() {
       throwsA(isA<LeadException>().having((e) => (e.code, e.message), 'code', ('already-exists', 'that time is taken'))),
     );
   });
+
+  test('a booking returns its id and fee; paying calls the M-Pesa Function with no amount (P6-s01)', () async {
+    final calls = <(String, Map<String, Object?>)>[];
+    final leads = CallableLeadRepository((name, data) async {
+      calls.add((name, data));
+      return name == 'bookViewing' ? {'viewingId': 'agent-a_1', 'leadId': 'x', 'feeKES': 500} : {'paymentId': 'p', 'status': 'pending'};
+    });
+    final booked = await leads.bookViewing(listingId: 'l1', slot: '2026-10-30T10:00:00+03:00', name: 'Amina', phone: '+254712345678');
+    expect(booked, (viewingId: 'agent-a_1', feeKES: 500));
+    await leads.payViewingFee(viewingId: booked.viewingId, phone: '+254712345678');
+    expect(calls.last.$1, 'payments-startViewingPayment');
+    expect(calls.last.$2, {'viewingId': 'agent-a_1', 'phone': '+254712345678'});
+  });
 }

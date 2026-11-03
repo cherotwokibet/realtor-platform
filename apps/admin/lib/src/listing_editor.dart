@@ -30,6 +30,7 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
       _price = TextEditingController(),
       _deposit = TextEditingController(),
       _service = TextEditingController(),
+      _viewingFee = TextEditingController(),
       _estate = TextEditingController(),
       _amenities = TextEditingController(),
       _description = TextEditingController(),
@@ -44,7 +45,7 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
 
   @override
   void dispose() {
-    for (final c in [_title, _price, _deposit, _service, _estate, _amenities, _description, _lat, _lng]) {
+    for (final c in [_title, _price, _deposit, _service, _viewingFee, _estate, _amenities, _description, _lat, _lng]) {
       c.dispose();
     }
     super.dispose();
@@ -69,6 +70,7 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
       _price.text = d.priceKES == 0 ? '' : '${d.priceKES}';
       _deposit.text = d.depositMonths?.toString() ?? '';
       _service.text = d.serviceChargeKES?.toString() ?? '';
+      _viewingFee.text = d.viewingFeeKES?.toString() ?? '';
       _estate.text = d.estate ?? '';
       _amenities.text = d.amenities.join(', ');
       _description.text = d.description;
@@ -96,6 +98,7 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
         priceKES: _int(_price) ?? 0,
         depositMonths: () => _int(_deposit),
         serviceChargeKES: () => _int(_service),
+        viewingFeeKES: () => _int(_viewingFee),
         estate: () => _estate.text.trim().isEmpty ? null : _estate.text,
         amenities: [for (final a in _amenities.text.split(',')) if (a.trim().isNotEmpty) a.trim()],
         description: _description.text,
@@ -212,6 +215,11 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
                     gap(),
                     pair(text(_deposit, 'Deposit (months)', 'depositMonths', number: true),
                         text(_service, 'Service charge a month (KES)', 'serviceChargeKES', number: true)),
+                  ],
+                  // Viewing fees are paid by M-Pesa (P6-s01): only where the tenant has it on.
+                  if (ref.watch(tenantProvider).features.isOn(Feature.mpesa)) ...[
+                    gap(),
+                    text(_viewingFee, 'Viewing fee (KES, optional, paid by M-Pesa)', 'viewingFeeKES', number: true),
                   ],
                   gap(),
                   pick('Area', d.area, {for (final a in _areas) a.slug: a.name}, (v) {

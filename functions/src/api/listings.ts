@@ -3,7 +3,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { canMove, type ListingStatus, verificationExpiry } from '../listing-rules';
 import { geohash, slugify } from '../model/geo';
-import { docId, kes, listing, listingPurpose, listingType, mediaItem, slug } from '../model/schema';
+import { docId, kes, listing, listingPurpose, listingType, MAX_VIEWING_FEE_KES, mediaItem, slug } from '../model/schema';
 import transitions from '../model/transitions.json';
 import { audit } from './audit';
 import { requirePurposeOn, tenantFeatures } from './features';
@@ -20,6 +20,7 @@ export const submitListingInput = z.object({
   priceKES: kes,
   depositMonths: z.number().int().min(0).max(12).optional(),
   serviceChargeKES: kes.optional(),
+  viewingFeeKES: z.number().int().min(0).max(MAX_VIEWING_FEE_KES).optional(),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   area: slug,

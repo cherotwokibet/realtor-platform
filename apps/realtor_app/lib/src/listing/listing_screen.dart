@@ -87,6 +87,10 @@ class _ListingView extends ConsumerWidget {
             PriceText(l.priceKES, period: l.purpose.period),
             SizedBox(height: b.spacing.xs),
             Text(facts, style: text.bodyMedium?.copyWith(color: b.textMuted)),
+            if ((detail.viewingFeeKES ?? 0) > 0 && tenant.features.isOn(Feature.mpesa)) ...[
+              SizedBox(height: b.spacing.xs),
+              Text('Viewing fee: ${formatKes(detail.viewingFeeKES!)}, paid by M-Pesa after you book', style: text.bodyMedium),
+            ],
             if (detail.depositMonths != null) ...[
               SizedBox(height: b.spacing.xs),
               Text('Deposit: ${detail.depositMonths} month${detail.depositMonths == 1 ? '' : 's'}', style: text.bodyMedium),

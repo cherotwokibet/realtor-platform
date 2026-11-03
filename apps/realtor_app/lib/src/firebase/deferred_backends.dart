@@ -54,8 +54,11 @@ class DeferredLeadRepository implements LeadRepository {
   Future<List<String>?> openTimes({required String listingId, required String day}) async =>
       (await _inner).openTimes(listingId: listingId, day: day);
   @override
-  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone}) async =>
+  Future<BookedViewing> bookViewing({required String listingId, required String slot, required String name, required String phone}) async =>
       (await _inner).bookViewing(listingId: listingId, slot: slot, name: name, phone: phone);
+  @override
+  Future<void> payViewingFee({required String viewingId, required String phone}) async =>
+      (await _inner).payViewingFee(viewingId: viewingId, phone: phone);
 }
 
 class DeferredCustomerAccount implements CustomerAccount {

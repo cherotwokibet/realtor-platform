@@ -46,8 +46,16 @@ Use Cloud Shell. Do **sandbox first**, on dev.
 
 Without `MPESA_ENV`, the payment functions are not deployed at all, so deploys never need these secrets.
 
+## Where customers see it
+
+- **Admin.** When `features.mpesa` is on, the listing form has a "Viewing fee (KES)" field (0 to 10,000; empty or 0 means free).
+- **Booking.** `bookViewing` copies the listing's fee onto the viewing, but only while M-Pesa is on; otherwise viewings stay free. The booking's answer includes `feeKES`.
+- **App.**
+  - The listing page shows "Viewing fee: KES … paid by M-Pesa after you book".
+  - After booking a viewing that has a fee, the sheet offers **Pay KES … with M-Pesa**, which prompts the phone used for the booking, or **Pay later**.
+
 ## Not done yet
 
-- **Setting a fee:** listings don't carry a viewing fee yet, so `bookViewing` still sets `feeKES: 0`. The next step adds an optional viewing fee to the listing form, and a "Pay with M-Pesa" button on the booking confirmation in the app and on the share pages.
-- **Deposits and featured-ad fees:** these use the same start/callback/reconcile path with their own amount rules.
-- **Receipts by SMS or email:** these need a sender, which is external set-up.
+- The share pages take bookings but don't offer the M-Pesa button yet. The agent collects the fee for those viewings, or the client pays from the app.
+- Deposits and featured-ad fees will use the same start, callback and reconcile path, each with its own amount rules.
+- Receipts by SMS or email need a sender, which is external set-up.

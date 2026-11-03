@@ -47,6 +47,11 @@ class _LeadSheetState extends ConsumerState<_LeadSheet> {
   Map<String, String> _errors = const {};
   String? _notice;
 
+  /// Set once a viewing with a fee is booked (P6-s01): the sheet then offers
+  /// M-Pesa, sent to the phone the viewing was booked with.
+  BookedViewing? _booked;
+  String? _bookedPhone;
+
   @override
   void initState() {
     super.initState();
@@ -91,7 +96,16 @@ class _LeadSheetState extends ConsumerState<_LeadSheet> {
     final tenant = ref.read(tenantProvider);
     try {
       if (widget.viewing) {
-        await leads.bookViewing(listingId: widget.listing.id, slot: viewingSlot(_day, _time), name: name, phone: phone!);
+        final booked = await leads.bookViewing(listingId: widget.listing.id, slot: viewingSlot(_day, _time), name: name, phone: phone!);
+        if (booked.feeKES > 0 && tenant.features.isOn(Feature.mpesa)) {
+          if (!mounted) return;
+          setState(() {
+            _booked = booked;
+            _bookedPhone = phone;
+            _sending = false;
+          });
+          return;
+        }
       } else {
         final message = _message.text.trim();
         await leads.enquire(listingId: widget.listing.id, phone: phone!, name: name.isEmpty ? null : name, message: message.isEmpty ? null : message);
@@ -116,8 +130,71 @@ class _LeadSheetState extends ConsumerState<_LeadSheet> {
     messenger.showSnackBar(SnackBar(content: Text(done)));
   }
 
+  void _closeWith(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.of(context).pop();
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// M-Pesa asks the booking phone for the viewing's fee (the amount is set by the Functions).
+  Future<void> _pay() async {
+    final booked = _booked!;
+    setState(() {
+      _sending = true;
+      _notice = null;
+    });
+    try {
+      await ref.read(leadRepositoryProvider).payViewingFee(viewingId: booked.viewingId, phone: _bookedPhone!);
+    } on LeadException catch (e) {
+      setState(() {
+        _sending = false;
+        _notice = e.code == 'already-exists'
+            ? 'This viewing fee is already paid.'
+            : 'M-Pesa did not take the request. Please try again in a minute, or pay when the agent confirms.';
+      });
+      return;
+    }
+    if (!mounted) return;
+    _closeWith('Check your phone: enter your M-Pesa PIN to pay ${formatKes(booked.feeKES)}.');
+  }
+
+  Widget _payPanel(BuildContext context) {
+    final b = context.brand;
+    final text = Theme.of(context).textTheme;
+    final tenant = ref.watch(tenantProvider);
+    final fee = formatKes(_booked!.feeKES);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(b.spacing.gutter, 0, b.spacing.gutter, b.spacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Viewing requested', style: text.titleLarge),
+          SizedBox(height: b.spacing.sm),
+          Text('${tenant.name} will call or WhatsApp you to confirm the time. This home has a viewing fee of $fee, paid by M-Pesa.',
+              style: text.bodyMedium),
+          if (_notice != null) ...[
+            SizedBox(height: b.spacing.md),
+            Text(_notice!, style: text.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.error)),
+          ],
+          SizedBox(height: b.spacing.lg),
+          FilledButton(
+            key: const Key('pay'),
+            onPressed: _sending ? null : _pay,
+            child: Text(_sending ? 'Sending…' : 'Pay $fee with M-Pesa'),
+          ),
+          TextButton(
+            onPressed: _sending ? null : () => _closeWith('Viewing requested. You can pay the fee when ${tenant.name} confirms.'),
+            child: const Text('Pay later'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_booked != null) return _payPanel(context);
     final b = context.brand;
     final text = Theme.of(context).textTheme;
     final tenant = ref.watch(tenantProvider);

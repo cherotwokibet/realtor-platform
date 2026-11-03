@@ -17,6 +17,7 @@ class ListingDetail {
     required this.summary,
     this.estate,
     this.depositMonths,
+    this.viewingFeeKES,
     this.photos = const [],
     this.agent,
     this.description = '',
@@ -27,6 +28,9 @@ class ListingDetail {
   /// The agent's text (P7-s02); may be empty.
   final String description;
   final int? depositMonths;
+
+  /// The listing's viewing fee (P6-s01), paid by M-Pesa after booking; null or 0: free.
+  final int? viewingFeeKES;
 
   /// Media-pipeline `card` variant URLs, in order.
   final List<String> photos;
@@ -72,6 +76,10 @@ class LeadException implements Exception {
   String toString() => 'LeadException($code: $message)';
 }
 
+/// A booked viewing (`bookViewing`'s answer): its id, and the fee the
+/// Functions set for it (0 when free or M-Pesa is off).
+typedef BookedViewing = ({String viewingId, int feeKES});
+
 /// The lead Functions the app calls (D7: clients never write leads).
 abstract interface class LeadRepository {
   /// `createLead`, channel `form`, with the consent tick.
@@ -89,5 +97,9 @@ abstract interface class LeadRepository {
   Future<List<String>?> openTimes({required String listingId, required String day});
 
   /// `bookViewing`; [slot] as `viewingSlot` builds it.
-  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone});
+  Future<BookedViewing> bookViewing({required String listingId, required String slot, required String name, required String phone});
+
+  /// `payments-startViewingPayment` (P6-s01): M-Pesa asks [phone] to pay the
+  /// viewing's fee. The amount is the viewing's own; the app never sends one.
+  Future<void> payViewingFee({required String viewingId, required String phone});
 }

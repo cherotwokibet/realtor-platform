@@ -119,7 +119,18 @@ class DemoLeadRepository implements LeadRepository {
   @override
   Future<void> logRecommendation({required String listingId, required String event}) async => recommendations.add('$listingId/$event');
 
+  /// Demo: the fee each booking gets (0: free), as the Functions would set it.
+  int viewingFeeKES = 0;
+
   @override
-  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone}) async =>
-      viewings.add({'listingId': listingId, 'slot': slot, 'name': name, 'phone': phone});
+  Future<BookedViewing> bookViewing({required String listingId, required String slot, required String name, required String phone}) async {
+    viewings.add({'listingId': listingId, 'slot': slot, 'name': name, 'phone': phone});
+    return (viewingId: 'demo-${viewings.length}', feeKES: viewingFeeKES);
+  }
+
+  /// `viewingId/phone`, per payment started.
+  final payments = <String>[];
+
+  @override
+  Future<void> payViewingFee({required String viewingId, required String phone}) async => payments.add('$viewingId/$phone');
 }

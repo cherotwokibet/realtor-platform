@@ -12,6 +12,9 @@ void main() {
     expect(ok.copyWith(lat: 0, lng: 0).problems().keys, ['location']);
     expect(ok.copyWith(type: 'castle').problems().keys, ['type']);
     expect(ok.copyWith(depositMonths: () => 13).problems().keys, ['depositMonths']);
+    expect(ok.copyWith(viewingFeeKES: () => 10001).problems().keys, ['viewingFeeKES']);
+    expect(ok.copyWith(viewingFeeKES: () => 500).problems(), isEmpty);
+    expect(ok.copyWith(viewingFeeKES: () => 500).toCallable()['viewingFeeKES'], 500);
     expect(ok.copyWith(estate: () => 'x' * 81).problems().keys, ['estate']);
   });
 

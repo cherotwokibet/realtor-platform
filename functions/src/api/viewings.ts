@@ -10,6 +10,7 @@ import { checkLimits, LIMITS } from './ratelimit';
 import { LEAD_RETENTION_DAYS } from './leads';
 import { assertAgentFree } from './availability';
 import { createReviewInvite } from './reviews';
+import { tenantFeatures } from './features';
 
 /**
  * Viewing slots (P2-s03). Kenya is UTC+3 all year (no daylight saving), so
@@ -61,7 +62,7 @@ const ACTIVE = new Set(['requested', 'confirmed']);
  * client's details are also stored as a lead (channel `viewing`) so they
  * carry consent and retention like every other lead.
  */
-export async function bookViewing(db: Firestore, input: unknown, now = new Date()): Promise<{ viewingId: string; leadId: string }> {
+export async function bookViewing(db: Firestore, input: unknown, now = new Date()): Promise<{ viewingId: string; leadId: string; feeKES: number }> {
   const req = parseInput(bookViewingInput, input);
   const slot = new Date(req.slot);
   const problem = slotProblem(slot, now);
@@ -69,11 +70,15 @@ export async function bookViewing(db: Firestore, input: unknown, now = new Date(
 
   const listingRef = db.collection('listings').doc(req.listingId);
   const leadRef = db.collection('leads').doc();
+  // A listing's viewing fee applies only while M-Pesa is on (P6-s01); otherwise viewings are free.
+  const mpesaOn = (await tenantFeatures(db))?.mpesa === true;
   let viewingId = '';
+  let feeKES = 0;
   await db.runTransaction(async (tx) => {
     const listing = await tx.get(listingRef);
     if (!listing.exists || listing.get('status') !== 'live') throw new HttpsError('not-found', 'listing is not available');
     const agentId = listing.get('agentId') as string;
+    feeKES = mpesaOn ? Number(listing.get('viewingFeeKES') ?? 0) : 0;
     viewingId = `${agentId}_${slot.getTime()}`;
     const viewingRef = db.collection('viewings').doc(viewingId);
     const existing = await tx.get(viewingRef);
@@ -95,7 +100,7 @@ export async function bookViewing(db: Firestore, input: unknown, now = new Date(
       slot,
       client: req.client,
       status: 'requested' as const,
-      feeKES: 0, // viewing fees by M-Pesa come with Daraja (P6)
+      feeKES,
       paymentId: null,
       createdAt: now,
     };
@@ -117,7 +122,7 @@ export async function bookViewing(db: Firestore, input: unknown, now = new Date(
     tx.create(leadRef, l);
     tx.update(listingRef, { 'stats.leads': FieldValue.increment(1) });
   });
-  return { viewingId, leadId: leadRef.id };
+  return { viewingId, leadId: leadRef.id, feeKES };
 }
 
 type ViewingStatus = 'requested' | 'confirmed' | 'done' | 'no-show' | 'cancelled';
