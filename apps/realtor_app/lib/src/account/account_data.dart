@@ -110,7 +110,7 @@ class DemoAccount implements CustomerAccount, AlertsRepository {
     _changed.add(null);
   }
 
-  /// Demo: what the hourly sweep would add.
+  /// Demo: what the 5-minute sweep would add.
   void addAlert(AlertRow a) {
     _alerts.insert(0, a);
     _changed.add(null);

@@ -236,7 +236,7 @@ class _Alerts extends ConsumerWidget {
     final repo = ref.read(alertsRepositoryProvider);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('New homes for you', style: text.titleMedium),
-      if (alerts.isEmpty) Text('Nothing new yet. We check every hour.', style: text.bodySmall),
+      if (alerts.isEmpty) Text('Nothing new yet. We check every few minutes.', style: text.bodySmall),
       for (final a in alerts)
         ListTile(
           contentPadding: EdgeInsets.zero,

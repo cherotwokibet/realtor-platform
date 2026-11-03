@@ -108,8 +108,10 @@ export const savePage = onCall((req) => pages.savePage(getFirestore(), callerFro
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 export const dataRequest = onCall((req) => runDataRequest(getFirestore(), callerFrom(req.auth), req.data));
 
-// Saved-search alerts (D18): every hour, new live listings to matching inboxes.
-export const savedSearchAlerts = onSchedule({ schedule: 'every 60 minutes', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
+// Saved-search alerts (D18, P4-s03): every 5 minutes, new live listings to
+// matching inboxes, so an alert lands within 5 minutes of a listing going live.
+// A quiet run is one small read (config/alerts) and one empty query.
+export const savedSearchAlerts = onSchedule({ schedule: 'every 5 minutes', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
   const r = await sweepSavedSearches(getFirestore());
   console.log(`alerts: ${r.listings} new listings, ${r.alerts} alerts`);
 });
