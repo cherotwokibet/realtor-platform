@@ -42,6 +42,8 @@ export interface Step {
    * hit when ~35 update at once), redeploy just those in small batches.
    */
   retryFunctions?: boolean;
+  /** Printed when the step fails: what usually fixes it. */
+  hint?: string;
 }
 
 /** Cloud Shell's IPv6 route times out on uploads to Firebase; IPv4 first avoids it. */
@@ -135,7 +137,13 @@ export function deploySteps(i: DeployInputs): Step[] {
     if (!on('images')) {
       // Built earlier from the same commit? Fail before Terraform points Cloud Run at a missing image.
       for (const img of [share, transcode]) {
-        steps.push({ part: 'infra', title: `Check ${img.split('/').pop()} exists`, argv: ['gcloud', 'artifacts', 'docker', 'images', 'describe', img, '--quiet'], cwd: '.' });
+        steps.push({
+          part: 'infra',
+          title: `Check ${img.split('/').pop()} exists`,
+          argv: ['gcloud', 'artifacts', 'docker', 'images', 'describe', img, '--quiet'],
+          cwd: '.',
+          hint: `No image is built for this commit yet. Build it in the same run: tenant deploy ${i.id} ${i.env} --only=${['images', ...i.parts].join(',')}`,
+        });
       }
     }
     steps.push(

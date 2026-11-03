@@ -44,6 +44,7 @@ test('infra alone checks the images exist first, and needs the billing account',
     [`${repo}/share-pages:abc1234`, `${repo}/transcode-video:abc1234`],
   );
   assert.equal(steps.findIndex((s) => s.argv.includes('describe')), 0);
+  assert.match(steps[0].hint ?? '', /--only=images,infra$/);
   assert.throws(() => deploySteps({ ...base, billing: undefined, parts: ['infra'] }), /billing/);
 });
 
