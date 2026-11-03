@@ -76,84 +76,109 @@ class _ListingView extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(leading: const AppBack(), title: Text(l.title, overflow: TextOverflow.ellipsis), actions: [FavouriteButton(listing: l)]),
-      body: ListView(
-        padding: EdgeInsets.only(bottom: b.spacing.xxl),
-        children: [
-          _Photos(urls: detail.photos, title: l.title),
-          Padding(
-            padding: EdgeInsets.all(b.spacing.gutter),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      body: LayoutBuilder(builder: (context, box) {
+        final photos = _Photos(key: const ValueKey('listing-photos'), urls: detail.photos, title: l.title);
+        final details = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (l.verified) ...[const VerifiedBadge(), SizedBox(height: b.spacing.sm)],
+            Text(l.title, style: text.headlineSmall),
+            SizedBox(height: b.spacing.xs),
+            PriceText(l.priceKES, period: l.purpose.period),
+            SizedBox(height: b.spacing.xs),
+            Text(facts, style: text.bodyMedium?.copyWith(color: b.textMuted)),
+            if (detail.depositMonths != null) ...[
+              SizedBox(height: b.spacing.xs),
+              Text('Deposit: ${detail.depositMonths} month${detail.depositMonths == 1 ? '' : 's'}', style: text.bodyMedium),
+            ],
+            if (detail.description.trim().isNotEmpty) ...[
+              SizedBox(height: b.spacing.md),
+              Text(detail.description.trim(), style: text.bodyMedium),
+            ],
+            if (l.amenities.isNotEmpty) ...[
+              SizedBox(height: b.spacing.md),
+              Wrap(
+                spacing: b.spacing.sm,
+                runSpacing: b.spacing.sm,
+                children: [for (final a in l.amenities) Chip(label: Text(typeName(a)))],
+              ),
+            ],
+            if (detail.agent != null) ...[
+              SizedBox(height: b.spacing.lg),
+              Text('Listed by ${detail.agent!.name}', style: text.bodyMedium),
+            ],
+            SizedBox(height: b.spacing.lg),
+            Wrap(
+              spacing: b.spacing.sm,
+              runSpacing: b.spacing.sm,
               children: [
-                if (l.verified) ...[const VerifiedBadge(), SizedBox(height: b.spacing.sm)],
-                Text(l.title, style: text.headlineSmall),
-                SizedBox(height: b.spacing.xs),
-                PriceText(l.priceKES, period: l.purpose.period),
-                SizedBox(height: b.spacing.xs),
-                Text(facts, style: text.bodyMedium?.copyWith(color: b.textMuted)),
-                if (detail.depositMonths != null) ...[
-                  SizedBox(height: b.spacing.xs),
-                  Text('Deposit: ${detail.depositMonths} month${detail.depositMonths == 1 ? '' : 's'}', style: text.bodyMedium),
-                ],
-                if (detail.description.trim().isNotEmpty) ...[
-                  SizedBox(height: b.spacing.md),
-                  Text(detail.description.trim(), style: text.bodyMedium),
-                ],
-                if (l.amenities.isNotEmpty) ...[
-                  SizedBox(height: b.spacing.md),
-                  Wrap(
-                    spacing: b.spacing.sm,
-                    runSpacing: b.spacing.sm,
-                    children: [for (final a in l.amenities) Chip(label: Text(typeName(a)))],
+                if (whatsapp != null)
+                  FilledButton.icon(
+                    icon: const Icon(Icons.chat_outlined),
+                    label: const Text('WhatsApp'),
+                    onPressed: () => contact(
+                      'whatsapp',
+                      Uri.https('wa.me', '/${whatsapp.replaceAll('+', '')}', {
+                        'text': 'Hi, I saw "${l.title}" (https://${tenant.shareDomain}/listing/${l.slug}). Is it still available?',
+                      }),
+                    ),
                   ),
-                ],
-                if (detail.agent != null) ...[
-                  SizedBox(height: b.spacing.lg),
-                  Text('Listed by ${detail.agent!.name}', style: text.bodyMedium),
-                ],
-                SizedBox(height: b.spacing.lg),
-                Wrap(
-                  spacing: b.spacing.sm,
-                  runSpacing: b.spacing.sm,
-                  children: [
-                    if (whatsapp != null)
-                      FilledButton.icon(
-                        icon: const Icon(Icons.chat_outlined),
-                        label: const Text('WhatsApp'),
-                        onPressed: () => contact(
-                          'whatsapp',
-                          Uri.https('wa.me', '/${whatsapp.replaceAll('+', '')}', {
-                            'text': 'Hi, I saw "${l.title}" (https://${tenant.shareDomain}/listing/${l.slug}). Is it still available?',
-                          }),
-                        ),
-                      ),
-                    if (phone != null)
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.call_outlined),
-                        label: const Text('Call'),
-                        onPressed: () => contact('call', Uri(scheme: 'tel', path: phone)),
-                      ),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.mail_outline),
-                      label: const Text('Enquire'),
-                      onPressed: () => showEnquirySheet(context, listing: l),
-                    ),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.event_outlined),
-                      label: const Text('Book a viewing'),
-                      onPressed: () => showViewingSheet(context, listing: l),
-                    ),
-                  ],
+                if (phone != null)
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.call_outlined),
+                    label: const Text('Call'),
+                    onPressed: () => contact('call', Uri(scheme: 'tel', path: phone)),
+                  ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.mail_outline),
+                  label: const Text('Enquire'),
+                  onPressed: () => showEnquirySheet(context, listing: l),
                 ),
-                _Similar(listing: l),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.event_outlined),
+                  label: const Text('Book a viewing'),
+                  onPressed: () => showViewingSheet(context, listing: l),
+                ),
               ],
             ),
-          ),
-        ],
-      ),
+            _Similar(listing: l),
+          ],
+        );
+        // Wide screens (web, tablets): photos beside the details, at the
+        // same width as the rest of the app, so the page does not open on
+        // a full-window photo with everything else below the fold.
+        if (box.maxWidth >= wideListingLayout) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: maxContentWidth),
+              child: ListView(
+                padding: EdgeInsets.all(b.spacing.gutter).copyWith(bottom: b.spacing.xxl),
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 3, child: ClipRRect(borderRadius: BorderRadius.circular(b.radiusMd), child: photos)),
+                      SizedBox(width: b.spacing.xl),
+                      Expanded(flex: 2, child: details),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        return ListView(
+          padding: EdgeInsets.only(bottom: b.spacing.xxl),
+          children: [photos, Padding(padding: EdgeInsets.all(b.spacing.gutter), child: details)],
+        );
+      }),
     );
   }
 }
+
+/// From this width the listing shows photos and details side by side.
+const wideListingLayout = 900.0;
 
 /// Up to three live homes like this one (P7-s04), from the same area and
 /// the newest of the same purpose; nothing while loading or when none are close.
@@ -171,8 +196,7 @@ class _SimilarState extends ConsumerState<_Similar> {
 
   /// Click-through counts (P7-s04) are best effort: a failed count never
   /// gets in the way of the page.
-  void _log(String event) =>
-      ref.read(leadRepositoryProvider).logRecommendation(listingId: widget.listing.id, event: event).catchError((Object _) {});
+  void _log(String event) => ref.read(leadRepositoryProvider).logRecommendation(listingId: widget.listing.id, event: event).catchError((Object _) {});
 
   @override
   Widget build(BuildContext context) {
@@ -202,7 +226,7 @@ class _SimilarState extends ConsumerState<_Similar> {
 
 /// Swipeable photos, or a quiet placeholder until the listing has some.
 class _Photos extends StatelessWidget {
-  const _Photos({required this.urls, required this.title});
+  const _Photos({super.key, required this.urls, required this.title});
   final List<String> urls;
   final String title;
 
