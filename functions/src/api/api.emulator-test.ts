@@ -18,7 +18,7 @@ import { saveProject } from './projects';
 import { logRecommendation, nairobiDay } from './recommendations';
 import { MIN_RENTALS, refreshAreaStats, saveArea } from './areas';
 import { moderateReview, submitReview } from './reviews';
-import { sweepSavedSearches } from './alerts';
+import { type PushMessage, type PushSender, sweepSavedSearches } from './alerts';
 import { savePage } from './pages';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
@@ -863,6 +863,35 @@ describe('saved-search alerts (D18)', () => {
 
     const again = await sweepSavedSearches(db, new Date(at.getTime() + 3_600_000));
     assert.equal(again.listings, 0, 'the next sweep starts where this one stopped');
+  });
+
+  test('phones that turned alerts on get one push per person; dead tokens are forgotten', async () => {
+    await db.collection('savedSearches').doc('ss-p1').set({ userId: 'carol', filters: { purpose: 'rent' }, channels: ['inbox'], lastNotifiedAt: null, createdAt: now });
+    await db.collection('savedSearches').doc('ss-p2').set({ userId: 'carol', filters: { purpose: 'rent', areas: ['kilimani'] }, channels: ['inbox'], lastNotifiedAt: null, createdAt: now });
+    await db.collection('savedSearches').doc('ss-p3').set({ userId: 'dan', filters: { purpose: 'rent' }, channels: ['inbox'], lastNotifiedAt: null, createdAt: now });
+    const devices = db.collection('users').doc('carol').collection('devices');
+    await devices.doc('tok-live').set({ token: 'tok-live', platform: 'android', updatedAt: now });
+    await devices.doc('tok-dead').set({ token: 'tok-dead', platform: 'android', updatedAt: now });
+    const start = new Date(now.getTime() + 2 * 3_600_000);
+    await db.collection('config').doc('alerts').set({ lastSweepAt: start });
+    const { listingId } = await submitListing(db, wanjiku, { ...newListing, priceKES: 70000 }, start);
+    const at = new Date(start.getTime() + 60_000);
+    await moderateListing(db, manager, { listingId, action: 'approve' }, at);
+
+    const sent: { tokens: string[]; m: PushMessage }[] = [];
+    const push: PushSender = { send: async (tokens, m) => (sent.push({ tokens, m }), ['tok-dead']) };
+    const r = await sweepSavedSearches(db, new Date(at.getTime() + 1000), push);
+    assert.equal(sent.length, 1, 'two matching searches, one push; dan has no phone registered');
+    assert.deepEqual([...sent[0].tokens].sort(), ['tok-dead', 'tok-live']);
+    assert.equal(sent[0].m.title, 'A new home matches your search');
+    assert.match(sent[0].m.path, /^\/listing\//);
+    assert.equal(r.pushed, 1);
+    assert.deepEqual((await devices.get()).docs.map((d) => d.id), ['tok-live']);
+
+    const failing: PushSender = { send: async () => { throw new Error('FCM down'); } };
+    await moderateListing(db, manager, { listingId: (await submitListing(db, wanjiku, newListing, at)).listingId, action: 'approve' }, new Date(at.getTime() + 2000));
+    const r2 = await sweepSavedSearches(db, new Date(at.getTime() + 3000), failing);
+    assert.ok(r2.alerts >= 1, 'the inbox still gets them when push fails');
   });
 });
 

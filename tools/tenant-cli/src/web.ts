@@ -19,6 +19,10 @@ function setMeta(html: string, attr: 'name' | 'property', key: string, content: 
 // path before Flutter starts, so go_router sees /listing/x (P3-s07).
 const HASH_REDIRECT = `<script>if(location.hash.indexOf('#/')===0)history.replaceState(null,'',location.hash.slice(1));</script>`;
 
+// Push alerts are phone-only until a VAPID key exists (P4-s03): keep
+// FlutterFire from downloading the messaging SDK when the web app starts.
+const SKIP_WEB_MESSAGING = `<script>window.flutterfire_ignore_scripts=['messaging'];</script>`;
+
 /**
  * [fonts] are the tenant's bundled font assets (`fonts.json`), fetched by
  * the app before its first frame and so preloaded with the engine.
@@ -33,6 +37,7 @@ export function patchIndexHtml(html: string, t: any, fonts: string[] = []): stri
   out = setMeta(out, 'property', 'og:title', t.name);
   out = setMeta(out, 'property', 'og:description', webDescription(t));
   out = setMeta(out, 'property', 'og:image', 'og.png');
+  if (!out.includes(SKIP_WEB_MESSAGING)) out = out.replace('</head>', `  ${SKIP_WEB_MESSAGING}\n</head>`);
   if (!out.includes(HASH_REDIRECT)) out = out.replace('</head>', `  ${HASH_REDIRECT}\n</head>`);
   return withStartupPreloads(withLoadingScreen(out, t, t.tagline ?? ''), fonts);
 }

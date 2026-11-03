@@ -3,7 +3,7 @@
  * verification or commissions happens here, never in a client.
  *
  * Callables: createLead, logContactTap, bookViewing, submitReview, logRecommendation (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, savePage, saveProject, setStaffRole, dataRequest.
- * Scheduled, hourly: savedSearchAlerts (D18). Nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
+ * Scheduled, every 5 minutes: savedSearchAlerts (D18, inbox + push). Nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
  *   P4  sendPush        -> FCM HTTP v1 (replaces the legacy server key)
@@ -12,6 +12,7 @@
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onCall, onRequest } from 'firebase-functions/v2/https';
 import { onObjectFinalized } from 'firebase-functions/v2/storage';
@@ -39,7 +40,7 @@ import * as pages from './api/pages';
 import * as projects from './api/projects';
 import * as recommendations from './api/recommendations';
 import { refreshAreaStats } from './api/areas';
-import { sweepSavedSearches } from './api/alerts';
+import { fcmSender, sweepSavedSearches } from './api/alerts';
 import { dataRequest as runDataRequest } from './api/privacy';
 import { purgeExpired } from './api/retention';
 import { callableTwin, enforced, logAppCheck, type PublicCallable, sharePagesInvoker } from './api/appcheck';
@@ -113,10 +114,11 @@ export const dataRequest = onCall((req) => runDataRequest(getFirestore(), caller
 
 // Saved-search alerts (D18, P4-s03): every 5 minutes, new live listings to
 // matching inboxes, so an alert lands within 5 minutes of a listing going live.
-// A quiet run is one small read (config/alerts) and one empty query.
+// A quiet run is one small read (config/alerts) and one empty query. Phones
+// that turned alerts on also get a push (FCM, no key needed on Android).
 export const savedSearchAlerts = onSchedule({ schedule: 'every 5 minutes', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
-  const r = await sweepSavedSearches(getFirestore());
-  console.log(`alerts: ${r.listings} new listings, ${r.alerts} alerts`);
+  const r = await sweepSavedSearches(getFirestore(), new Date(), fcmSender(getMessaging()));
+  console.log(`alerts: ${r.listings} new listings, ${r.alerts} alerts, ${r.pushed} pushes`);
 });
 
 // Area guides (P3-s05): every night, each area's live listings and median rent.

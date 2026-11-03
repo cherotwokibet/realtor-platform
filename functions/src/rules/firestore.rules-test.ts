@@ -143,6 +143,23 @@ describe('saved-search alerts', () => {
     await assertSucceeds(deleteDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a1')));
   });
 
+  test('only the owner registers and removes a phone for push, in the right shape', async () => {
+    const tok = 'fcm-token-abc:APA91b';
+    const device = { token: tok, platform: 'android', updatedAt: serverTimestamp() };
+    await assertSucceeds(setDoc(doc(user('alice'), 'users', 'alice', 'devices', tok), device));
+    await assertSucceeds(setDoc(doc(user('alice'), 'users', 'alice', 'devices', tok), device));
+    await assertSucceeds(getDoc(doc(user('alice'), 'users', 'alice', 'devices', tok)));
+    await assertFails(getDoc(doc(user('bob'), 'users', 'alice', 'devices', tok)));
+    await assertFails(setDoc(doc(user('bob'), 'users', 'alice', 'devices', 'bob-token'), { ...device, token: 'bob-token' }));
+    await assertFails(setDoc(doc(visitor(), 'users', 'alice', 'devices', 'v-token'), { ...device, token: 'v-token' }));
+    await assertFails(setDoc(doc(user('alice'), 'users', 'alice', 'devices', 'other'), device)); // the id is the token
+    await assertFails(setDoc(doc(user('alice'), 'users', 'alice', 'devices', tok), { ...device, platform: 'fax' }));
+    await assertFails(setDoc(doc(user('alice'), 'users', 'alice', 'devices', tok), { ...device, admin: true }));
+    await assertFails(setDoc(doc(user('alice'), 'users', 'alice', 'devices', tok), { ...device, updatedAt: new Date(0) }));
+    await assertFails(deleteDoc(doc(user('bob'), 'users', 'alice', 'devices', tok)));
+    await assertSucceeds(deleteDoc(doc(user('alice'), 'users', 'alice', 'devices', tok)));
+  });
+
   test('a saved search may ask for the in-app inbox', async () => {
     await assertSucceeds(setDoc(doc(user('alice'), 'savedSearches', 'ss-inbox'), {
       userId: 'alice', filters: { purpose: 'rent', areas: ['kilimani'] }, channels: ['inbox'], lastNotifiedAt: null, createdAt: serverTimestamp(),

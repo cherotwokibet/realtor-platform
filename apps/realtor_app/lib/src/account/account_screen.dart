@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../providers.dart';
 import '../search/purpose.dart';
 import 'account_data.dart';
+import 'push.dart';
 
 /// The address the app was opened at (an emailed sign-in link lands here).
 final openedAtProvider = Provider<Uri>((ref) => Uri.base);
@@ -186,7 +187,18 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
           OutlinedButton(onPressed: _busy ? null : _google, child: const Text('Continue with Google')),
         ] else ...[
           Text(customer.email ?? 'Signed in', style: text.titleMedium),
-          TextButton(onPressed: () => ref.read(customerAccountProvider).signOut(), child: const Text('Sign out')),
+          TextButton(
+            onPressed: () async {
+              // This phone stops getting this account's pushes.
+              try {
+                await ref.read(pushAlertsProvider).disable(customer.uid);
+              } on Object {
+                // Signing out still works; the sweep forgets dead tokens.
+              }
+              await ref.read(customerAccountProvider).signOut();
+            },
+            child: const Text('Sign out'),
+          ),
           if (pendingAlert != null) ...[
             FilledButton.icon(
               icon: const Icon(Icons.notifications_active_outlined),
@@ -197,6 +209,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 ref.read(pendingAlertProvider.notifier).set(null);
                 messenger.showSnackBar(
                     SnackBar(content: Text('Saved: ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}. New matches will show here.')));
+                await offerPush(ref, customer.uid);
               },
             ),
           ],
@@ -300,7 +313,18 @@ class AlertButton extends ConsumerWidget {
         }
         await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, filters);
         messenger.showSnackBar(SnackBar(content: Text('Saved: ${describeSearch(filters)}. New matches will show in Account.')));
+        await offerPush(ref, customer.uid);
       },
     );
+  }
+}
+
+/// After a search is saved: on phones, ask once to send push alerts too.
+/// The inbox works either way, so a refusal or an error changes nothing.
+Future<void> offerPush(WidgetRef ref, String uid) async {
+  try {
+    await ref.read(pushAlertsProvider).enable(uid);
+  } on Object {
+    // In-app alerts still arrive.
   }
 }

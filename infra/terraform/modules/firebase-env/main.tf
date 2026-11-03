@@ -13,9 +13,12 @@ locals {
     "cloudscheduler.googleapis.com",
     "compute.googleapis.com",
     "eventarc.googleapis.com",
+    "fcm.googleapis.com",              # push alerts sent by the sweep (P4-s03)
+    "fcmregistrations.googleapis.com", # phones registering for push
     "firebase.googleapis.com",
     "firebaseappcheck.googleapis.com",
     "firebasehosting.googleapis.com",
+    "firebaseinstallations.googleapis.com",
     "firebaserules.googleapis.com",
     "firebasestorage.googleapis.com",
     "firestore.googleapis.com",
@@ -222,6 +225,7 @@ locals {
     pubsub_signs_tokens  = { member = "serviceAccount:${google_project_service_identity.pubsub.email}", role = "roles/iam.serviceAccountTokenCreator" }
     functions_invoke_run = { member = local.compute_sa, role = "roles/run.invoker" }
     functions_get_events = { member = local.compute_sa, role = "roles/eventarc.eventReceiver" }
+    functions_send_push  = { member = local.compute_sa, role = "roles/firebasecloudmessaging.admin" }
   }
 }
 

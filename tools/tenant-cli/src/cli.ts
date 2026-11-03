@@ -19,6 +19,7 @@ import {
   flavorName,
   appName,
   flavorAssetDir,
+  NOTIFICATION_ICON,
   pubspecWithFlavors,
   androidFlavorsGradle,
   patchBuildGradle,
@@ -261,6 +262,11 @@ next:
       writeFileSync(gradle, patchBuildGradle(readFileSync(gradle, 'utf8')));
       const manifest = join(app, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
       writeFileSync(manifest, patchManifest(readFileSync(manifest, 'utf8')));
+      for (const t of tenants) {
+        const icon = join(app, 'android', 'app', 'src', flavorName(t.id), NOTIFICATION_ICON.to);
+        mkdirSync(join(icon, '..'), { recursive: true });
+        copyFileSync(join(app, flavorAssetDir(flavorName(t.id)), 'icons', NOTIFICATION_ICON.from), icon);
+      }
     } else console.log('no android/ folder yet: run `flutter create . --platforms=android` in apps/realtor_app, then re-run');
     console.log(`flavors: ${flavors.join(', ')}
 next, in apps/realtor_app:

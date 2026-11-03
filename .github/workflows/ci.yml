@@ -323,6 +323,18 @@ jobs:
             echo "$tree" | grep -q 'autoVerify' || { echo "$f: autoVerify missing"; exit 1; }
             echo "$f → https://$host/listing/… opens the app"
           done
+      - name: Push alerts (permission and status-bar icon in each flavor)
+        working-directory: apps/realtor_app
+        run: |
+          aapt2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
+          for f in $(ls assets/flavors); do
+            apk=build/app/outputs/flutter-apk/$(ls build/app/outputs/flutter-apk | grep -i "^app-$f-debug\.apk$")
+            tree=$("$aapt2" dump xmltree --file AndroidManifest.xml "$apk")
+            echo "$tree" | grep -q 'android.permission.POST_NOTIFICATIONS' || { echo "$f: no notification permission"; exit 1; }
+            echo "$tree" | grep -q 'default_notification_icon' || { echo "$f: no notification icon"; exit 1; }
+            unzip -l "$apk" | grep -q 'res/drawable-xxxhdpi[^ ]*/ic_notification.png' || { echo "$f: icon not packaged"; exit 1; }
+            echo "$f → push alerts ready"
+          done
 
   terraform:
     name: Terraform (format + validate, never applied)

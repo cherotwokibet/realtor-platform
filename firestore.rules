@@ -69,6 +69,18 @@ service cloud.firestore {
         && request.resource.data.readAt is timestamp;
     }
 
+    // Phones that turned on push alerts (P4-s03): the owner registers its
+    // own FCM token (the document id) and removes it; the sweep reads them.
+    match /users/{uid}/devices/{token} {
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['token', 'platform', 'updatedAt'])
+        && request.resource.data.token == token
+        && token.size() <= 4096
+        && request.resource.data.platform in ['android', 'ios', 'web']
+        && request.resource.data.updatedAt == request.time;
+    }
+
     // Reviews (P6-s03): approved ones are public; managers see all.
     // Review links are read only by the Functions.
     match /reviews/{id} {

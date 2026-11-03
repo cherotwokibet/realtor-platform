@@ -83,6 +83,8 @@ export async function generateIcons(root: string, tenant: any): Promise<IconRepo
   // A wide glyph at 56% width keeps its corners inside the 33 dp radius circle.
   await put('android-foreground-432.png', iconOn(glyph, 432, 0.56, CLEAR));
   await put('android-monochrome-432.png', iconOn(recolourSvg(glyph, '#FFFFFF'), 432, 0.56, CLEAR));
+  // Android status-bar icon for push alerts: white on clear, 24 dp at xxxhdpi.
+  await put('android-notification-96.png', iconOn(recolourSvg(glyph, '#FFFFFF'), 96, 0.84, CLEAR));
   // PWA maskable: opaque, art within the 40%-radius safe circle.
   await put('maskable-512.png', sharp(await iconOn(glyph, 512, 0.62, primary)).flatten({ background: primary }).png().toBuffer());
   await put('pwa-192.png', sharp(await iconOn(glyph, 192, 0.78, primary)).flatten({ background: primary }).png().toBuffer());
