@@ -20,16 +20,19 @@ Future<void> main() async {
   usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
   // Web: Hosting's init.json. Phones: the asset `tenant firebase-config` writes.
-  final (tenant, _, firebase) = await (
-    loadTenant(),
-    loadTenantFonts(),
-    kIsWeb ? hostingFirebaseOptions(Uri.base) : bundledFirebaseOptions(rootBundle, tenantAssetDir(), defaultTargetPlatform),
-  ).wait;
+  // Firebase starts (on the web: its SDK downloads) while the tenant file and
+  // fonts load, not after them: the first frame waits on all three (P3-s01).
+  Future<FirebaseOptions?> startFirebase() async {
+    final options = await (kIsWeb ? hostingFirebaseOptions(Uri.base) : bundledFirebaseOptions(rootBundle, tenantAssetDir(), defaultTargetPlatform));
+    if (options != null) await Firebase.initializeApp(options: options);
+    return options;
+  }
+
+  final (tenant, _, firebase) = await (loadTenant(), loadTenantFonts(), startFirebase()).wait;
   final overrides = [tenantProvider.overrideWithValue(tenant)];
   // On Firebase Hosting: live listings from Firestore and leads to the
   // Functions. Anywhere else (flutter run, a plain server): demo data.
   if (firebase != null) {
-    await Firebase.initializeApp(options: firebase);
     final db = FirebaseFirestore.instance, bucket = '${firebase.projectId}-media';
     // On the web, "Get alerts" sign-in links come back to this site.
     overrides.addAll([

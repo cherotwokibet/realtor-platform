@@ -32,6 +32,20 @@ test('index.html carries the tenant, not the Flutter defaults', () => {
   assert.equal(patchIndexHtml(out, t), out, 'idempotent');
 });
 
+test('the app shell starts the engine, fonts and settings downloads with the HTML', () => {
+  const fonts = ['assets/tenant/fonts/Inter-Regular.ttf', 'assets/tenant/fonts/Poppins-Bold.ttf'];
+  const out = patchIndexHtml(flutterIndex, tenant('demo-homes'), fonts);
+  for (const href of ['assets/assets/tenant/tenant.json', 'assets/assets/tenant/fonts.json', 'assets/assets/tenant/fonts/Inter-Regular.ttf', '/__/firebase/init.json']) {
+    assert.ok(out.includes(`<link rel="preload" href="${href}" as="fetch" crossorigin="anonymous">`), href);
+  }
+  assert.match(out, /<link rel="preconnect" href="https:\/\/www.gstatic.com" crossorigin>/);
+  // The WebAssembly build only where the browser can run it.
+  assert.match(out, /WebAssembly.validate\(.*'main.dart.wasm'/);
+  assert.ok(out.indexOf('rel="preload"') < out.indexOf('</head>'));
+  assert.equal(out.match(/id="startup-preload"/g)?.length, 1);
+  assert.equal(patchIndexHtml(out, tenant('demo-homes'), fonts), out, 'idempotent');
+});
+
 test('values are HTML-escaped', () => {
   const t = { ...tenant('demo-homes'), name: 'A & "B" <Homes>' };
   assert.match(patchIndexHtml(flutterIndex, t), /<title>A &amp; &quot;B&quot; &lt;Homes&gt;<\/title>/);
