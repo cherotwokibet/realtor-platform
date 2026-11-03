@@ -33,10 +33,29 @@ class FakeLeads implements LeadApi {
   final viewings = <Map<String, String?>>[];
   LeadApiException? fail;
 
+  /// The fee each booking gets, as the Functions would set it (0: free).
+  int feeKES = 0;
+
   @override
-  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message}) async {
+  Future<({String viewingId, int feeKES})> bookViewing({
+    required String listingId,
+    required String slot,
+    required String name,
+    required String phone,
+    String? message,
+  }) async {
     if (fail != null) throw fail!;
     viewings.add({'listingId': listingId, 'slot': slot, 'name': name, 'phone': phone, 'message': message});
+    return (viewingId: 'agent-x_${viewings.length}', feeKES: feeKES);
+  }
+
+  final payments = <String>[];
+  LeadApiException? payFail;
+
+  @override
+  Future<void> payViewingFee({required String viewingId}) async {
+    if (payFail != null) throw payFail!;
+    payments.add(viewingId);
   }
 
   @override
@@ -71,8 +90,8 @@ late FakeLeads fake;
 // Monday 26 Oct 2026, 09:00 in Nairobi.
 final now = DateTime.utc(2026, 10, 26, 6);
 
-Future<shelf.Response> send(String method, String path, {String? form, bool withLeads = true}) async {
-  final handler = shareHandler(tenant, InMemoryListingSource(const [flat]), leads: withLeads ? fake : null, now: () => now);
+Future<shelf.Response> send(String method, String path, {String? form, bool withLeads = true, TenantConfig? tenantConfig, ShareListing listing = flat}) async {
+  final handler = shareHandler(tenantConfig ?? tenant, InMemoryListingSource([listing]), leads: withLeads ? fake : null, now: () => now);
   return handler(shelf.Request(method, Uri.parse('https://x$path'),
       body: form, headers: form == null ? null : {'content-type': 'application/x-www-form-urlencoded'}));
 }
@@ -274,6 +293,56 @@ void main() {
     const viewing = '/listing/2-bedroom-apartment-kilimani/viewing';
     const ok = 'day=2026-10-27&time=10%3A30&name=Amina&phone=0712+345+678&consent=yes&website=';
 
+    group('with an M-Pesa viewing fee (P6-s01)', () {
+      final mpesa = () {
+        final j = jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>;
+        (j['features']! as Map)['mpesa'] = true;
+        return TenantConfig.fromJson(j);
+      }();
+      final paid = ShareListing(
+        id: flat.id, slug: flat.slug, title: flat.title, purpose: flat.purpose, type: flat.type, beds: flat.beds,
+        baths: flat.baths, priceKES: flat.priceKES, area: flat.area, lat: flat.lat, lng: flat.lng, viewingFeeKES: 500,
+      );
+
+      test('the page shows the fee; a booking with a fee offers M-Pesa, which goes to the Functions with only the viewing', () async {
+        fake.feeKES = 500;
+        final page = await (await send('GET', '/listing/2-bedroom-apartment-kilimani', tenantConfig: mpesa, listing: paid)).readAsString();
+        expect(page, contains('Viewing fee: KES 500, paid by M-Pesa after you book'));
+        final r = await send('POST', viewing, form: ok, tenantConfig: mpesa, listing: paid);
+        expect(r.statusCode, 303);
+        expect(r.headers['location'], '/listing/2-bedroom-apartment-kilimani?booked=1&pay=agent-x_1#viewing');
+        final offer = await send('GET', '/listing/2-bedroom-apartment-kilimani?booked=1&pay=agent-x_1', tenantConfig: mpesa, listing: paid);
+        expect(offer.headers['cache-control'], contains('no-store'));
+        final html = await offer.readAsString();
+        expect(html, contains('action="/listing/2-bedroom-apartment-kilimani/pay#viewing"'));
+        expect(html, contains('<input type="hidden" name="viewingId" value="agent-x_1"'));
+        expect(html, contains('Pay KES 500 with M-Pesa'));
+        final pay = await send('POST', '/listing/2-bedroom-apartment-kilimani/pay', form: 'viewingId=agent-x_1', tenantConfig: mpesa, listing: paid);
+        expect(pay.statusCode, 303);
+        expect(pay.headers['location'], '/listing/2-bedroom-apartment-kilimani?booked=1&paying=1#viewing');
+        expect(fake.payments, ['agent-x_1']);
+        final done = await (await send('GET', '/listing/2-bedroom-apartment-kilimani?booked=1&paying=1', tenantConfig: mpesa, listing: paid)).readAsString();
+        expect(done, contains('enter your M-Pesa PIN to pay the viewing fee of KES 500'));
+      });
+
+      test('a refused prompt says so and keeps the button; bad ids and M-Pesa off are refused', () async {
+        fake.payFail = LeadApiException('UNAVAILABLE', 'down');
+        final r = await send('POST', '/listing/2-bedroom-apartment-kilimani/pay', form: 'viewingId=agent-x_1', tenantConfig: mpesa, listing: paid);
+        expect(r.statusCode, 503);
+        final html = await r.readAsString();
+        expect(html, contains('M-Pesa did not take the request'));
+        expect(html, contains('Pay KES 500 with M-Pesa'));
+        expect((await send('POST', '/listing/2-bedroom-apartment-kilimani/pay', form: 'viewingId=..%2Fx', tenantConfig: mpesa, listing: paid)).statusCode, 400);
+        expect((await send('POST', '/listing/2-bedroom-apartment-kilimani/pay', form: 'viewingId=agent-x_1', listing: paid)).statusCode, 404,
+            reason: 'M-Pesa off');
+        fake.payFail = null;
+        fake.feeKES = 500;
+        final free = await send('POST', viewing, form: ok, listing: paid);
+        expect(free.headers['location'], '/listing/2-bedroom-apartment-kilimani?booked=1#viewing', reason: 'no pay step while M-Pesa is off');
+        expect(await (await send('GET', '/listing/2-bedroom-apartment-kilimani', listing: paid)).readAsString(), isNot(contains('Viewing fee')));
+      });
+    });
+
     test('the form offers the next 12 viewing days (no Sundays) and half-hour slots 08:00-17:30', () async {
       final html = await (await send('GET', '/listing/2-bedroom-apartment-kilimani')).readAsString();
       expect(html, contains('<option value="2026-10-26">Mon 26 Oct</option>'));
@@ -385,7 +454,9 @@ void main() {
       await api.createLead(listingId: 'listing-001', phone: '+254712345678');
       await api.logTap(listingId: 'listing-001', channel: 'call');
       await api.bookViewing(listingId: 'listing-001', slot: '2026-10-27T10:30:00+03:00', name: 'Amina', phone: '+254712345678');
-      expect([for (final r in seen) r.url.path], ['/shareCreateLead', '/shareLogContactTap', '/shareBookViewing']);
+      await api.payViewingFee(viewingId: 'agent-x_1');
+      expect([for (final r in seen) r.url.path], ['/shareCreateLead', '/shareLogContactTap', '/shareBookViewing', '/payments-shareStartViewingPayment']);
+      expect(jsonDecode(seen.last.body), {'data': {'viewingId': 'agent-x_1'}}, reason: 'no amount, no phone');
       expect(audiences, [for (final r in seen) r.url]);
       expect(seen.first.headers['authorization'], 'Bearer tok');
       expect(jsonDecode(seen.first.body)['data']['consent'], true);

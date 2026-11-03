@@ -53,9 +53,13 @@ Without `MPESA_ENV`, the payment functions are not deployed at all, so deploys n
 - **App.**
   - The listing page shows "Viewing fee: KES … paid by M-Pesa after you book".
   - After booking a viewing that has a fee, the sheet offers **Pay KES … with M-Pesa**, which prompts the phone used for the booking, or **Pay later**.
+- **Share pages.**
+  - The listing shows the fee.
+  - After booking, the page offers **Pay KES … with M-Pesa**. It calls the `payments-shareStartViewingPayment` twin, which only the share pages' service account may call.
+  - It then says to check the phone.
+- **Safety.** The prompt always goes to the phone the viewing was booked with, and the amount is always the viewing's fee. Clients send only the viewing id, so nobody can aim a prompt at another number or change the amount.
 
 ## Not done yet
 
-- The share pages take bookings but don't offer the M-Pesa button yet. The agent collects the fee for those viewings, or the client pays from the app.
 - Deposits and featured-ad fees will use the same start, callback and reconcile path, each with its own amount rules.
 - Receipts by SMS or email need a sender, which is external set-up.

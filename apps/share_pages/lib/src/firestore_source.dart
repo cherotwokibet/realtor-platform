@@ -318,6 +318,7 @@ ShareListing listingFromDocument(Map<String, Object?> doc, DateTime now) {
     baths: f['baths']! as int,
     priceKES: f['priceKES']! as int,
     depositMonths: f['depositMonths'] as int?,
+    viewingFeeKES: f['viewingFeeKES'] as int?,
     area: f['area']! as String,
     estate: f['estate'] as String?,
     description: (f['description'] as String?) ?? '',

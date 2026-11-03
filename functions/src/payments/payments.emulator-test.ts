@@ -60,16 +60,18 @@ beforeEach(async () => {
 const payment = async (id = 'viewing-fee_v-fee') => (await db.collection('payments').doc(id).get()).data()!;
 
 describe('startViewingPayment', () => {
-  test('pushes the viewing fee from the viewing, not from the client', async () => {
+  test('pushes the viewing fee from the viewing, to the booking phone, not what the client sends', async () => {
     const d = fakeDaraja();
-    const r = await startViewingPayment(db, { viewingId: 'v-fee', phone: '+254712345678', amountKES: 1 }, d.deps, now);
+    const r = await startViewingPayment(db, { viewingId: 'v-fee', phone: '+254799999999', amountKES: 1 }, d.deps, now);
     assert.deepEqual(r, { paymentId: 'viewing-fee_v-fee', status: 'pending' });
     const p = await payment();
     assert.equal(p.amountKES, 500);
+    assert.equal(p.phone, '+254712345678', 'the phone the viewing was booked with');
     assert.equal(p.status, 'pending');
     assert.equal(p.checkoutRequestId, 'ws_CO_1');
     assert.match(p.callbackToken, /^[0-9a-f]{48}$/);
     assert.deepEqual(d.calls, ['/oauth/v1/generate', '/mpesa/stkpush/v1/processrequest']);
+    assert.equal((await startViewingPayment(db, { viewingId: 'v-fee' }, d.deps, now)).status, 'pending', 'phone is optional');
   });
 
   test('refuses when M-Pesa is off, the viewing has no fee, or is not open', async () => {
