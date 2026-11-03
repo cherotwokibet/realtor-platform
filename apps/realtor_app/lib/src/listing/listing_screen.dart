@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:realtor_core/realtor_core.dart';
@@ -229,32 +231,99 @@ class _SimilarState extends ConsumerState<_Similar> {
 }
 
 /// Swipeable photos, or a quiet placeholder until the listing has some.
-class _Photos extends StatelessWidget {
+class _Photos extends StatefulWidget {
   const _Photos({super.key, required this.urls, required this.title});
   final List<String> urls;
   final String title;
 
   @override
+  State<_Photos> createState() => _PhotosState();
+}
+
+/// Swipe on a phone; on the web also drag with the mouse, use the arrows on
+/// the photo or the keyboard's left/right keys. "2 / 8" says how many there are.
+class _PhotosState extends State<_Photos> {
+  final _pages = PageController();
+  int _index = 0;
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  void _go(int to) {
+    if (to < 0 || to >= widget.urls.length) return;
+    _pages.animateToPage(to, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final b = context.brand;
+    final urls = widget.urls;
+    if (urls.isEmpty) {
+      return AspectRatio(
+        aspectRatio: 4 / 3,
+        child: ColoredBox(
+          color: b.surfaceAlt,
+          child: Center(child: Icon(Icons.home_work_outlined, size: 64, color: b.textMuted, semanticLabel: 'No photos yet')),
+        ),
+      );
+    }
+    final scheme = Theme.of(context).colorScheme;
+    Widget arrow(IconData icon, String label, int to) => IconButton.filledTonal(
+          key: Key(label),
+          tooltip: label,
+          onPressed: () => _go(to),
+          icon: Icon(icon),
+        );
     return AspectRatio(
       aspectRatio: 4 / 3,
-      child: urls.isEmpty
-          ? ColoredBox(
-              color: b.surfaceAlt,
-              child: Center(child: Icon(Icons.home_work_outlined, size: 64, color: b.textMuted, semanticLabel: 'No photos yet')),
-            )
-          : PageView(
-              children: [
-                for (final (i, u) in urls.indexed)
-                  Image.network(
-                    u,
-                    fit: BoxFit.cover,
-                    semanticLabel: '$title, photo ${i + 1}',
-                    errorBuilder: (context, error, stack) => ColoredBox(color: b.surfaceAlt),
-                  ),
-              ],
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _go(_index - 1),
+          const SingleActivator(LogicalKeyboardKey.arrowRight): () => _go(_index + 1),
+        },
+        child: Focus(
+          child: Stack(fit: StackFit.expand, children: [
+            ScrollConfiguration(
+              // Flutter web leaves mouse dragging off for page views; turn it on.
+              behavior: ScrollConfiguration.of(context).copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+              child: PageView(
+                controller: _pages,
+                onPageChanged: (i) => setState(() => _index = i),
+                children: [
+                  for (final (i, u) in urls.indexed)
+                    Image.network(
+                      u,
+                      fit: BoxFit.cover,
+                      semanticLabel: '${widget.title}, photo ${i + 1}',
+                      errorBuilder: (context, error, stack) => ColoredBox(color: b.surfaceAlt),
+                    ),
+                ],
+              ),
             ),
+            if (urls.length > 1) ...[
+              if (_index > 0)
+                Positioned(left: b.spacing.sm, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_left, 'Previous photo', _index - 1))),
+              if (_index < urls.length - 1)
+                Positioned(right: b.spacing.sm, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_right, 'Next photo', _index + 1))),
+              Positioned(
+                right: b.spacing.sm,
+                bottom: b.spacing.sm,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: scheme.inverseSurface.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(b.radiusSm)),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: b.spacing.sm, vertical: 2),
+                    child: Text('${_index + 1} / ${urls.length}',
+                        key: const Key('photo-count'), style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onInverseSurface)),
+                  ),
+                ),
+              ),
+            ],
+          ]),
+        ),
+      ),
     );
   }
 }

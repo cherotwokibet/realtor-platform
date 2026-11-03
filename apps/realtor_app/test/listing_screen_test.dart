@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +14,15 @@ TenantConfig tenant() =>
     TenantConfig.fromJson(jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>);
 
 /// A lead repository that can fail like the Functions do.
+/// Demo listings, with three photos on each.
+class ThreePhotos extends DemoListingRepository {
+  @override
+  Future<ListingDetail?> bySlug(String slug) async {
+    final d = await super.bySlug(slug);
+    return d == null ? null : ListingDetail(summary: d.summary, description: d.description, photos: const ['https://x/1.webp', 'https://x/2.webp', 'https://x/3.webp']);
+  }
+}
+
 class FailingLeads extends DemoLeadRepository {
   FailingLeads(this.error);
   final LeadException error;
@@ -24,7 +34,7 @@ class FailingLeads extends DemoLeadRepository {
 late DemoLeadRepository leads;
 late List<Uri> opened;
 
-Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size size = const Size(412, 1600), TenantConfig? tenantConfig}) async {
+Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size size = const Size(412, 1600), TenantConfig? tenantConfig, ListingRepository? listings}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -34,6 +44,7 @@ Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size 
     overrides: [
       tenantProvider.overrideWithValue(tenantConfig ?? tenant()),
       leadRepositoryProvider.overrideWithValue(repo ?? leads),
+      if (listings != null) listingRepositoryProvider.overrideWithValue(listings),
       urlOpenerProvider.overrideWithValue((uri) async {
         opened.add(uri);
         return true;
@@ -222,5 +233,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('pay')), findsNothing);
     expect(repo.payments, isEmpty);
+  });
+
+  testWidgets('more than one photo: a count, arrows and keys move through them', (tester) async {
+    await open(tester, kilimani, listings: ThreePhotos(), size: const Size(1400, 1000));
+    expect(find.text('1 / 3'), findsOneWidget);
+    expect(find.byKey(const Key('Previous photo')), findsNothing, reason: 'on the first photo');
+    await tester.tap(find.byKey(const Key('Next photo')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 3'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('Next photo')));
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 3'), findsOneWidget);
+    expect(find.byKey(const Key('Next photo')), findsNothing, reason: 'on the last photo');
+    await tester.tap(find.byKey(const Key('Previous photo')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 3'), findsOneWidget);
+    // A mouse drag also turns the page on the web.
+    await tester.drag(find.byType(PageView), const Offset(-500, 0), kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 3'), findsOneWidget);
   });
 }
