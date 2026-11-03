@@ -17,14 +17,14 @@ class FailingLeads extends DemoLeadRepository {
   FailingLeads(this.error);
   final LeadException error;
   @override
-  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone}) =>
+  Future<BookedViewing> bookViewing({required String listingId, required String slot, required String name, required String phone}) =>
       Future.error(error);
 }
 
 late DemoLeadRepository leads;
 late List<Uri> opened;
 
-Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size size = const Size(412, 1600)}) async {
+Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size size = const Size(412, 1600), TenantConfig? tenantConfig}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -32,7 +32,7 @@ Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size 
   opened = [];
   await tester.pumpWidget(ProviderScope(
     overrides: [
-      tenantProvider.overrideWithValue(tenant()),
+      tenantProvider.overrideWithValue(tenantConfig ?? tenant()),
       leadRepositoryProvider.overrideWithValue(repo ?? leads),
       urlOpenerProvider.overrideWithValue((uri) async {
         opened.add(uri);
@@ -189,5 +189,38 @@ void main() {
     final photos = tester.getRect(find.byKey(const ValueKey('listing-photos')));
     expect(photos.width, 412);
     expect(tester.getRect(find.text('WhatsApp')).top, greaterThan(photos.bottom));
+  });
+
+  testWidgets('a viewing with a fee offers M-Pesa to the booking phone (P6-s01)', (tester) async {
+    final json = jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>;
+    (json['features']! as Map<String, Object?>)['mpesa'] = true;
+    final repo = DemoLeadRepository()..viewingFeeKES = 500;
+    await open(tester, kilimani, repo: repo, tenantConfig: TenantConfig.fromJson(json));
+    await tester.tap(find.text('Book a viewing'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('name')), 'Amina');
+    await tester.enterText(find.byKey(const Key('phone')), '0712 345 678');
+    await tester.tap(find.byKey(const Key('consent')));
+    await tester.tap(find.text('Request viewing'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('viewing fee of KES 500'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('pay')));
+    await tester.pumpAndSettle();
+    expect(repo.payments, ['demo-1/+254712345678']);
+    expect(find.textContaining('enter your M-Pesa PIN to pay KES 500'), findsOneWidget);
+  });
+
+  testWidgets('without M-Pesa on, a fee is never offered', (tester) async {
+    final repo = DemoLeadRepository()..viewingFeeKES = 500;
+    await open(tester, kilimani, repo: repo);
+    await tester.tap(find.text('Book a viewing'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('name')), 'Amina');
+    await tester.enterText(find.byKey(const Key('phone')), '0712 345 678');
+    await tester.tap(find.byKey(const Key('consent')));
+    await tester.tap(find.text('Request viewing'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pay')), findsNothing);
+    expect(repo.payments, isEmpty);
   });
 }

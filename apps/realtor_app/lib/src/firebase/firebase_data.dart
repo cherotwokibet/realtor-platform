@@ -91,6 +91,7 @@ class FirestoreListingRepository implements ListingRepository {
       summary: summaryFromDoc(doc.id, d, bucket: bucket, now: _clock()),
       estate: d['estate'] as String?,
       depositMonths: (d['depositMonths'] as num?)?.toInt(),
+      viewingFeeKES: (d['viewingFeeKES'] as num?)?.toInt(),
       description: d['description'] as String? ?? '',
       photos: [
         for (final m in (d['media'] as List<Object?>?) ?? const [])
@@ -170,9 +171,9 @@ class CallableLeadRepository implements LeadRepository {
 
   final CallFunction _call;
 
-  Future<void> _run(String name, Map<String, Object?> data) async {
+  Future<Object?> _run(String name, Map<String, Object?> data) async {
     try {
-      await _call(name, data);
+      return await _call(name, data);
     } on FirebaseException catch (e) {
       final code = e.code.replaceFirst('functions/', '');
       throw LeadException(code, (e.message ?? code).replaceFirst(RegExp(r'\s*\[\d{3}\]$'), ''));
@@ -207,11 +208,18 @@ class CallableLeadRepository implements LeadRepository {
       _run('logRecommendation', {'listingId': listingId, 'event': event, 'surface': 'app'});
 
   @override
-  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone}) =>
-      _run('bookViewing', {
-        'listingId': listingId,
-        'slot': slot,
-        'client': {'name': name, 'phone': phone},
-        'consent': true,
-      });
+  Future<BookedViewing> bookViewing({required String listingId, required String slot, required String name, required String phone}) async {
+    final r = await _run('bookViewing', {
+      'listingId': listingId,
+      'slot': slot,
+      'client': {'name': name, 'phone': phone},
+      'consent': true,
+    });
+    final m = r is Map ? r : const {};
+    return (viewingId: '${m['viewingId'] ?? ''}', feeKES: (m['feeKES'] as num?)?.toInt() ?? 0);
+  }
+
+  @override
+  Future<void> payViewingFee({required String viewingId, required String phone}) =>
+      _run('payments-startViewingPayment', {'viewingId': viewingId, 'phone': phone});
 }

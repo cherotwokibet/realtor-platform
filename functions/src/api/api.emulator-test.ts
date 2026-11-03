@@ -85,6 +85,18 @@ describe('bookViewing', () => {
     assert.equal(l.retainUntil.toDate().getTime() - l.consentAt.toDate().getTime(), LEAD_RETENTION_DAYS * 86_400_000);
   });
 
+  test("the listing's viewing fee applies only while M-Pesa is on (P6-s01)", async () => {
+    await db.collection('listings').doc('listing-001').update({ viewingFeeKES: 500 });
+    const off = await bookViewing(db, { listingId: 'listing-001', slot, client: amina, consent: true }, now);
+    assert.equal(off.feeKES, 0, 'no config/tenant: M-Pesa is off');
+    assert.equal((await db.collection('viewings').doc(off.viewingId).get()).get('feeKES'), 0);
+    await db.collection('config').doc('tenant').set({ features: { mpesa: true } });
+    const later = '2026-10-26T11:00:00+03:00';
+    const on = await bookViewing(db, { listingId: 'listing-001', slot: later, client: { name: 'Juma', phone: '+254700000402' }, consent: true }, now);
+    assert.equal(on.feeKES, 500);
+    assert.equal((await db.collection('viewings').doc(on.viewingId).get()).get('feeKES'), 500);
+  });
+
   test('one active booking per agent per slot; a cancelled slot frees up', async () => {
     await bookViewing(db, { listingId: 'listing-001', slot, client: amina, consent: true }, now);
     // listing-004 has the same agent (every third listing): same slot is taken.

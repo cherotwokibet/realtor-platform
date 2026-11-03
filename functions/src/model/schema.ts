@@ -6,6 +6,9 @@
 import { z } from 'zod';
 import { isValidKes } from '../listing-rules';
 
+/** A viewing fee is a token, not a deposit. */
+export const MAX_VIEWING_FEE_KES = 10_000;
+
 export const kes = z.number().refine(isValidKes, 'whole shillings, 0 to 10 billion');
 export const kenyanPhone = z.string().regex(/^\+254[17]\d{8}$/, 'E.164 Kenyan mobile, e.g. +254712345678');
 export const slug = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(80);
@@ -49,6 +52,8 @@ export const listing = z
     /** Rent deposit in months. */
     depositMonths: z.number().int().min(0).max(12).optional(),
     serviceChargeKES: kes.optional(),
+    /** Fee to view, paid by M-Pesa when the tenant has it on (P6-s01). 0 or absent: free. */
+    viewingFeeKES: z.number().int().min(0).max(MAX_VIEWING_FEE_KES).optional(),
     geo: geoPoint,
     /** areas/{slug} */
     area: slug,

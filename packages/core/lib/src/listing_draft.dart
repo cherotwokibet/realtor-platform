@@ -22,6 +22,7 @@ class ListingDraft {
     this.priceKES = 0,
     this.depositMonths,
     this.serviceChargeKES,
+    this.viewingFeeKES,
     this.lat = 0,
     this.lng = 0,
     this.area = '',
@@ -36,6 +37,9 @@ class ListingDraft {
   final String title, purpose, type, area;
   final int beds, baths, priceKES;
   final int? depositMonths, serviceChargeKES;
+
+  /// Paid by M-Pesa after booking a viewing (P6-s01); null or 0: free.
+  final int? viewingFeeKES;
   final double lat, lng;
   final String? estate;
 
@@ -60,6 +64,7 @@ class ListingDraft {
       priceKES: optInt(d['priceKES']) ?? 0,
       depositMonths: optInt(d['depositMonths']),
       serviceChargeKES: optInt(d['serviceChargeKES']),
+      viewingFeeKES: optInt(d['viewingFeeKES']),
       lat: ((geo['lat'] ?? d['lat']) as num?)?.toDouble() ?? 0,
       lng: ((geo['lng'] ?? d['lng']) as num?)?.toDouble() ?? 0,
       area: d['area'] as String? ?? '',
@@ -79,6 +84,7 @@ class ListingDraft {
     int? priceKES,
     int? Function()? depositMonths,
     int? Function()? serviceChargeKES,
+    int? Function()? viewingFeeKES,
     double? lat,
     double? lng,
     String? area,
@@ -97,6 +103,7 @@ class ListingDraft {
         priceKES: priceKES ?? this.priceKES,
         depositMonths: depositMonths == null ? this.depositMonths : depositMonths(),
         serviceChargeKES: serviceChargeKES == null ? this.serviceChargeKES : serviceChargeKES(),
+        viewingFeeKES: viewingFeeKES == null ? this.viewingFeeKES : viewingFeeKES(),
         lat: lat ?? this.lat,
         lng: lng ?? this.lng,
         area: area ?? this.area,
@@ -116,6 +123,7 @@ class ListingDraft {
         if (priceKES <= 0 || priceKES > _maxKes) 'priceKES': 'Enter the price in whole shillings.',
         if (depositMonths != null && (depositMonths! < 0 || depositMonths! > 12)) 'depositMonths': '0 to 12 months.',
         if (serviceChargeKES != null && (serviceChargeKES! < 0 || serviceChargeKES! > _maxKes)) 'serviceChargeKES': 'Whole shillings.',
+        if (viewingFeeKES != null && (viewingFeeKES! < 0 || viewingFeeKES! > maxViewingFeeKES)) 'viewingFeeKES': 'KES 0 to 10,000.',
         if (!_slug.hasMatch(area)) 'area': 'Pick an area.',
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180 || (lat == 0 && lng == 0)) 'location': 'Set the map position.',
         if ((estate ?? '').length > 80) 'estate': 'Under 80 characters.',
@@ -135,6 +143,7 @@ class ListingDraft {
         'priceKES': priceKES,
         if (depositMonths != null) 'depositMonths': depositMonths,
         if (serviceChargeKES != null) 'serviceChargeKES': serviceChargeKES,
+        if (viewingFeeKES != null) 'viewingFeeKES': viewingFeeKES,
         'lat': lat,
         'lng': lng,
         'area': area,
@@ -144,3 +153,6 @@ class ListingDraft {
         if (agentId != null) 'agentId': agentId,
       };
 }
+
+/// Same ceiling as the Functions' schema: a viewing fee is a token, not a deposit.
+const maxViewingFeeKES = 10000;
