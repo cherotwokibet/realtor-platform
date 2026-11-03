@@ -45,6 +45,9 @@ import { purgeExpired } from './api/retention';
 import { callableTwin, enforced, logAppCheck, type PublicCallable, sharePagesInvoker } from './api/appcheck';
 import { updateAgentResponseTimes } from './api/response';
 import { REGION, verificationExpiry } from './listing-rules';
+import { callbackUrl, type MpesaConfig, mpesaConfig } from './payments/config';
+import { parseStkCallback } from './payments/daraja';
+import { type PaymentDeps, reconcilePayments, recordStkCallback, startViewingPayment } from './payments/payments';
 
 initializeApp();
 
@@ -180,6 +183,36 @@ function listingSearchTrigger(cfg: SearchConfig) {
     });
     await syncListing(client, cfg.tenantId, event.params.id, event.data?.after.data());
   });
+}
+
+// M-Pesa (P6-s01): deployed as payments-* only when the project has M-Pesa
+// set up (see payments/config.ts); otherwise the group is empty.
+const mpesaCfg = mpesaConfig(process.env);
+export const payments = mpesaCfg ? paymentFunctions(mpesaCfg) : {};
+
+function paymentFunctions(cfg: MpesaConfig) {
+  const key = defineSecret('MPESA_CONSUMER_KEY');
+  const secret = defineSecret('MPESA_CONSUMER_SECRET');
+  const passkey = defineSecret('MPESA_PASSKEY');
+  const secrets = [key, secret, passkey];
+  const deps = (): PaymentDeps => ({
+    daraja: { ...cfg, consumerKey: key.value(), consumerSecret: secret.value(), passkey: passkey.value() },
+    callbackUrl: callbackUrl(process.env.GCLOUD_PROJECT ?? '', REGION),
+  });
+  return {
+    startViewingPayment: onCall({ secrets }, (req) => startViewingPayment(getFirestore(), req.data, deps())),
+    // Safaricom posts here; always 200 so it does not retry, details only in our logs.
+    mpesaCallback: onRequest({ secrets: [] }, async (req, res) => {
+      const t = typeof req.query.t === 'string' ? req.query.t : undefined;
+      const r = await recordStkCallback(getFirestore(), req.method === 'POST' ? parseStkCallback(req.body) : null, t);
+      if (r === 'ignored') console.warn('mpesaCallback: ignored a callback (unknown push or wrong token)');
+      res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    }),
+    reconcilePayments: onSchedule({ schedule: 'every 5 minutes', timeZone: 'Africa/Nairobi', retryCount: 0, secrets }, async () => {
+      const r = await reconcilePayments(getFirestore(), deps());
+      if (r.checked) console.log(`payments: ${r.checked} pending checked, ${r.settled} settled`);
+    }),
+  };
 }
 
 export { verificationExpiry };
