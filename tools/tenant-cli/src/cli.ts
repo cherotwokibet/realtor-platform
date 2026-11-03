@@ -441,7 +441,8 @@ next, in apps/realtor_app:
         maxBuffer: 256 * 1024 * 1024,
       });
       if (r.status !== 0) {
-        console.error(`\n✗ "${s.title}" failed. Fix it, then carry on with: tenant deploy ${id} ${env} --only=${parts.slice(parts.indexOf(s.part)).join(',')}`);
+        if (s.hint) console.error(`\n✗ "${s.title}" failed. ${s.hint}`);
+        else console.error(`\n✗ "${s.title}" failed. Fix it, then carry on with: tenant deploy ${id} ${env} --only=${parts.slice(parts.indexOf(s.part)).join(',')}`);
         process.exit(1);
       }
       if (s.checkPlan) {
