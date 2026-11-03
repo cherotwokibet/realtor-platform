@@ -2,6 +2,8 @@
 
 What goes live first, what follows, and what waits. Realtime Estates signs this off (section 5). After that, anything new is a change request (section 4).
 
+This is a fresh system. The old vendor app was a reference only, and no data moves from it: listings start in the new admin, by form or CSV import.
+
 **Status on 3 Nov 2026.** "Built" means merged and running on dev (rte-realtor-dev). "Go-live" means the work in section 3.
 
 ## 1. Must have at go-live
@@ -27,7 +29,6 @@ What goes live first, what follows, and what waits. Realtime Estates signs this 
 | M-Pesa viewing fees | The backend is built and tested (`docs/mpesa.md`). It needs a fee field on listings, a "Pay with M-Pesa" button, and Safaricom keys. | Daraja sandbox, then go-live (P0-s08) |
 | iOS app | Same code base, built from the same flavors. | Apple Developer organisation account |
 | Viewing reminders by SMS or WhatsApp | A message sender is needed. | WhatsApp Business verification |
-| Moving the old app's listings and users | A one-off import into the new shape. | An export of the old vendor's Firebase project |
 
 ## 3. Go-live checklist (P8-s03)
 
