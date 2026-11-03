@@ -422,6 +422,26 @@
         "tiles",
         "attribution"
       ]
+    },
+    "ops": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Operations (P8-s02). Who gets an email when an uptime check fails. Leave out to keep the checks without alerts.",
+      "properties": {
+        "alertEmails": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+          }
+        }
+      },
+      "required": [
+        "alertEmails"
+      ]
     }
   },
   "if": {

@@ -20,6 +20,7 @@ locals {
     "firebasestorage.googleapis.com",
     "firestore.googleapis.com",
     "identitytoolkit.googleapis.com",
+    "monitoring.googleapis.com",
     "pubsub.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
@@ -470,4 +471,87 @@ resource "google_cloud_run_v2_job_iam_member" "functions_start_transcode" {
   name     = google_cloud_run_v2_job.transcode[0].name
   role     = "roles/run.jobsExecutorWithOverrides"
   member   = local.compute_sa
+}
+
+# Uptime checks (P8-s02): the app, admin and share sites, every 5 minutes
+# from three regions. Each failing check alerts the tenant file's
+# ops.alertEmails, when given. Within Cloud Monitoring's free allowance.
+locals {
+  uptime_sites = {
+    app   = { host = "${google_firebase_hosting_site.app.site_id}.web.app", path = "/" }
+    admin = { host = "${google_firebase_hosting_site.admin.site_id}.web.app", path = "/" }
+    share = { host = "${google_firebase_hosting_site.share.site_id}.web.app", path = "/sitemap.xml" }
+  }
+  alert_emails = try(local.t.ops.alertEmails, [])
+}
+
+resource "google_monitoring_uptime_check_config" "site" {
+  for_each     = local.uptime_sites
+  project      = google_project.this.project_id
+  display_name = "${local.t.id} ${var.env} ${each.key}"
+  timeout      = "10s"
+  period       = "300s"
+
+  http_check {
+    path         = each.value.path
+    port         = 443
+    use_ssl      = true
+    validate_ssl = true
+    accepted_response_status_codes {
+      status_class = "STATUS_CLASS_2XX"
+    }
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+    labels = {
+      project_id = google_project.this.project_id
+      host       = each.value.host
+    }
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_monitoring_notification_channel" "email" {
+  for_each     = toset(local.alert_emails)
+  project      = google_project.this.project_id
+  display_name = "Ops ${each.value}"
+  type         = "email"
+  labels       = { email_address = each.value }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_monitoring_alert_policy" "site_down" {
+  for_each     = local.uptime_sites
+  project      = google_project.this.project_id
+  display_name = "${local.t.id} ${var.env} ${each.key} is down"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Uptime check failing"
+    condition_threshold {
+      filter          = "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\" AND metric.label.check_id=\"${google_monitoring_uptime_check_config.site[each.key].uptime_check_id}\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 1
+      duration        = "600s"
+      aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_NEXT_OLDER"
+        cross_series_reducer = "REDUCE_COUNT_FALSE"
+        group_by_fields      = ["resource.label.project_id", "resource.label.host"]
+      }
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [for c in google_monitoring_notification_channel.email : c.id]
+
+  documentation {
+    content   = "The ${each.key} site (${each.value.host}) failed its uptime check from more than one region for 10 minutes. Runbook: docs/operations.md."
+    mime_type = "text/markdown"
+  }
 }
