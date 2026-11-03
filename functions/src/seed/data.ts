@@ -15,7 +15,7 @@ type Area = { slug: string; name: string; county: string; lat: number; lng: numb
  * Rents are indicative market figures for the demo, not a realtor's data;
  * each realtor rewrites guides and amenities in admin.
  */
-const AREAS: Area[] = [
+export const AREAS: Area[] = [
   { slug: 'kilimani', name: 'Kilimani', county: 'Nairobi', lat: -1.2921, lng: 36.7856, medianRent: 75000,
     guide: 'Central and leafy, with apartment blocks close to the CBD and Upper Hill. Popular with young professionals; traffic on Argwings Kodhek and Ngong Road builds at peak hours.',
     amenities: ['Yaya Centre', 'Prestige Plaza', 'Nairobi Hospital nearby', 'Matatus on Ngong Road'] },

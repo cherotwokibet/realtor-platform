@@ -34,7 +34,7 @@ This is a fresh system. The old vendor app was a reference only, and no data mov
 
 1. **Stores.** Play Console in Realtime Estates' name (D-U-N-S), then `tenant release realtime-estates --track=internal`, then closed testing, then production.
 2. **Domains.** `realtimeestates.co.ke` goes to the share pages, `app.` to the web app and `admin.` to the admin. Publish the site pages in the admin before the store release.
-3. **Prod deploy.** `tenant deploy realtime-estates prod`, then seed the areas, then create the staff accounts.
+3. **Prod deploy.** `tenant deploy realtime-estates prod`, then load the areas (`areas:load`, `docs/onboarding.md` step 4), then make the owner, who adds the staff.
 4. **Staff training.** Two sessions: managers, then agents.
 5. **First live lead received.** That marks go-live.
 
