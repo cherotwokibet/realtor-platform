@@ -13,6 +13,7 @@
     "deploy": "firebase deploy --only functions",
     "seed": "npm run build && node lib/seed/run.js",
     "staff:owner": "npm run build && node lib/staff/owner.js",
+    "areas:load": "npm run build && node lib/seed/load-areas.js",
     "test:rules": "npm run build && node --test --test-concurrency=1 'lib/**/*.rules-test.js'",
     "test:emulator": "npm run build && node --test --test-concurrency=1 'lib/**/*.emulator-test.js'",
     "test:typesense": "npm run build && node --test --test-concurrency=1 'lib/**/*.typesense-test.js'"
