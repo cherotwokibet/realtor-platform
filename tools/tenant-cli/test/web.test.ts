@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ADMIN_ROBOTS, patchAdminIndexHtml, patchIndexHtml, patchManifest, webDescription } from '../src/web.ts';
+import { ADMIN_ROBOTS, APP_ROBOTS, patchAdminIndexHtml, patchIndexHtml, patchManifest, webDescription } from '../src/web.ts';
 import { repoRoot } from '../src/validate.ts';
 
 const tenant = (id: string) => JSON.parse(readFileSync(join(repoRoot(), 'tenants', `${id}.json`), 'utf8'));
@@ -79,4 +79,8 @@ test('the admin shell: tenant title, kept out of search, robots.txt disallows al
   assert.doesNotMatch(out, /A new Flutter project|realtor_admin/);
   assert.match(out, /<div id="loading" aria-hidden="true">Demo Homes<small>Admin<\/small><\/div>/);
   assert.equal(ADMIN_ROBOTS, 'User-agent: *\nDisallow: /\n');
+});
+
+test('the customer app gets a valid robots.txt that lets crawlers in', () => {
+  assert.equal(APP_ROBOTS, 'User-agent: *\nAllow: /\n');
 });

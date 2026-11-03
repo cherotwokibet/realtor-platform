@@ -33,6 +33,7 @@ class ListingPage extends StatelessComponent {
     this.viewingDays = const [],
     this.areaMedianRentKES,
     this.freeTimes,
+    this.pickedDay,
     this.similar = const [],
     super.key,
   });
@@ -57,6 +58,9 @@ class ListingPage extends StatelessComponent {
 
   /// After "Show free times" (`?day=`): that day and its free times only.
   final ({String day, List<String> times})? freeTimes;
+
+  /// The day in `?day=`, also when its free times could not be fetched.
+  final String? pickedDay;
 
   /// Up to three live homes like this one (`similarListings`, P7-s04).
   final List<ShareListing> similar;
@@ -196,66 +200,65 @@ class ListingPage extends StatelessComponent {
           ],
         );
     final free = freeTimes;
+    // The day is asked once: picked here (a plain GET, no script), or kept
+    // from a submitted form. Only then do the time and contact fields show.
+    final kept = f.values['day'] ?? '';
+    final day = free?.day ?? pickedDay ?? (kept.isEmpty ? null : kept);
+    final dayLabel = viewingDays.where((d) => d.value == day).firstOrNull?.label ?? day;
     return section(id: 'viewing', classes: 'enquire', [
       const h2([Component.text('Book a viewing')]),
       if (f.notice != null) p(classes: 'notice', [Component.text(f.notice!)]),
       if (f.failed)
         const p(classes: 'notice', [Component.text('Sorry, we could not book that just now. Please try again or ask on WhatsApp.')]),
-      // Step 1 (optional, no script): pick a day to see only its free times.
       form(classes: 'days', action: '/listing/${listing.slug}#viewing', method: FormMethod.get, [
         const label(htmlFor: 'f-day', [Component.text('Day')]),
         select(name: 'day', id: 'f-day', [
-          for (final d in viewingDays) option(value: d.value, selected: (free?.day ?? f.values['day']) == d.value, [Component.text(d.label)]),
+          for (final d in viewingDays) option(value: d.value, selected: day == d.value, [Component.text(d.label)]),
         ]),
-        const button(type: ButtonType.submit, classes: 'wa', [Component.text('Show free times')]),
+        button(type: ButtonType.submit, classes: day == null ? null : 'wa', [Component.text(day == null ? 'Show free times' : 'Change day')]),
       ]),
-      form(action: '/listing/${listing.slug}/viewing#viewing', method: FormMethod.post, [
-        if (free == null) ...[
-          const label(htmlFor: 'v-day', [Component.text('Day')]),
-          select_('day', 'v-day', viewingDays),
-        ] else
-          input(type: InputType.hidden, name: 'day', value: free.day),
-        if (free != null && free.times.isEmpty)
-          const p(classes: 'notice', [Component.text('No free times that day. Please pick another day above.')])
-        else ...[
-          label(htmlFor: 'v-time', [
-            Component.text(free == null ? 'Time' : 'Free times on ${viewingDays.where((d) => d.value == free.day).firstOrNull?.label ?? free.day}'),
-          ]),
-          select_('time', 'v-time', [for (final t in free?.times ?? viewingTimes) (value: t, label: t)]),
-        ],
-        ?error('slot'),
-        const label(htmlFor: 'v-name', [Component.text('Your name')]),
-        input(
-          type: InputType.text,
-          name: 'name',
-          id: 'v-name',
-          value: f.values['name'],
-          attributes: const {'autocomplete': 'name', 'maxlength': '80', 'required': ''},
-        ),
-        ?error('name'),
-        const label(htmlFor: 'v-phone', [Component.text('Phone number')]),
-        input(
-          type: InputType.tel,
-          name: 'phone',
-          id: 'v-phone',
-          value: f.values['phone'],
-          attributes: const {'autocomplete': 'tel', 'inputmode': 'tel', 'placeholder': '0712 345 678', 'required': ''},
-        ),
-        ?error('phone'),
-        const div(classes: 'hp', attributes: {'aria-hidden': 'true'}, [
-          label(htmlFor: 'v-website', [Component.text('Leave this empty')]),
-          input(type: InputType.text, name: 'website', id: 'v-website', attributes: {'tabindex': '-1', 'autocomplete': 'off'}),
-        ]),
-        label(classes: 'consent', [
-          input(type: InputType.checkbox, name: 'consent', value: 'yes', checked: f.values['consent'] == 'yes'),
-          Component.text(
-            'I agree that ${tenant.name} may contact me about this viewing and keep my details for up to $leadRetentionMonths months '
-            '(Data Protection Act 2019).',
+      if (day != null)
+        form(action: '/listing/${listing.slug}/viewing#viewing', method: FormMethod.post, [
+          input(type: InputType.hidden, name: 'day', value: day),
+          if (free != null && free.times.isEmpty)
+            const p(classes: 'notice', [Component.text('No free times that day. Please pick another day above.')])
+          else ...[
+            label(htmlFor: 'v-time', [Component.text(free == null ? 'Time on $dayLabel' : 'Free times on $dayLabel')]),
+            select_('time', 'v-time', [for (final t in free?.times ?? viewingTimes) (value: t, label: t)]),
+          ],
+          ?error('slot'),
+          const label(htmlFor: 'v-name', [Component.text('Your name')]),
+          input(
+            type: InputType.text,
+            name: 'name',
+            id: 'v-name',
+            value: f.values['name'],
+            attributes: const {'autocomplete': 'name', 'maxlength': '80', 'required': ''},
           ),
+          ?error('name'),
+          const label(htmlFor: 'v-phone', [Component.text('Phone number')]),
+          input(
+            type: InputType.tel,
+            name: 'phone',
+            id: 'v-phone',
+            value: f.values['phone'],
+            attributes: const {'autocomplete': 'tel', 'inputmode': 'tel', 'placeholder': '0712 345 678', 'required': ''},
+          ),
+          ?error('phone'),
+          const div(classes: 'hp', attributes: {'aria-hidden': 'true'}, [
+            label(htmlFor: 'v-website', [Component.text('Leave this empty')]),
+            input(type: InputType.text, name: 'website', id: 'v-website', attributes: {'tabindex': '-1', 'autocomplete': 'off'}),
+          ]),
+          label(classes: 'consent', [
+            input(type: InputType.checkbox, name: 'consent', value: 'yes', checked: f.values['consent'] == 'yes'),
+            Component.text(
+              'I agree that ${tenant.name} may contact me about this viewing and keep my details for up to $leadRetentionMonths months '
+              '(Data Protection Act 2019).',
+            ),
+          ]),
+          ?error('consent'),
+          const button(type: ButtonType.submit, [Component.text('Request viewing')]),
         ]),
-        ?error('consent'),
-        const button(type: ButtonType.submit, [Component.text('Request viewing')]),
-      ]),
     ]);
   }
 }

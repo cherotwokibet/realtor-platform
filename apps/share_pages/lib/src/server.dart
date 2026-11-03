@@ -40,9 +40,8 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
       {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {
     // "Show free times": ?day=YYYY-MM-DD asks openSlots for that day.
     final day = req.url.queryParameters['day'];
-    final times = leads != null && day != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(day)
-        ? await leads.openTimes(listingId: listing.id, day: day)
-        : null;
+    final validDay = day != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(day) ? day : null;
+    final times = leads != null && validDay != null ? await leads.openTimes(listingId: listing.id, day: validDay) : null;
     final (agent, area, inArea, newest) = await (
       listing.agentId == null || !_docId.hasMatch(listing.agentId!) ? Future<ShareAgent?>.value() : source.agent(listing.agentId!),
       listing.purpose == Purpose.rent && _slug.hasMatch(listing.area) ? source.area(listing.area) : Future<ShareArea?>.value(),
@@ -62,7 +61,8 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
         viewing: viewing,
         viewingDays: viewingDays(clock()),
         areaMedianRentKES: area?.medianRentKES,
-        freeTimes: times == null ? null : (day: day!, times: times),
+        freeTimes: times == null ? null : (day: validDay!, times: times),
+        pickedDay: validDay,
         similar: similarListings(listing, [...inArea, ...newest], _similarKey),
       ),
       request: req,

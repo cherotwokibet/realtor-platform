@@ -44,6 +44,7 @@ fieldset.stars label{display:block;padding:4px 0}
 .enquire input[type=text],.enquire input[type=tel],.enquire textarea,.enquire select{width:100%;padding:12px;border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);font:inherit;background:var(--color-surface);color:var(--color-text)}
 .enquire .consent{display:flex;gap:8px;align-items:flex-start;font-weight:400}
 .enquire button{margin-top:16px;width:100%;padding:14px;border:0;border-radius:var(--radius-sm);background:var(--color-primary);color:var(--color-on-primary);font:inherit;font-weight:600}
+.enquire button.wa{background:none;border:1px solid var(--color-border-strong);color:var(--color-ink)}
 .enquire .hp{position:absolute;left:-9999px}
 .error{color:var(--color-error);margin:4px 0 0}
 .notice{padding:12px 16px;border-radius:var(--radius-sm);background:var(--color-primary-soft);color:var(--color-ink)}

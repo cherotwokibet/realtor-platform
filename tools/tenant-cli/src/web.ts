@@ -51,6 +51,10 @@ export function patchAdminIndexHtml(html: string, t: any): string {
 
 export const ADMIN_ROBOTS = 'User-agent: *\nDisallow: /\n';
 
+/** The customer app's web/robots.txt. Without one, Hosting answers
+ * /robots.txt with the app's index.html, which crawlers read as invalid. */
+export const APP_ROBOTS = 'User-agent: *\nAllow: /\n';
+
 /**
  * Plain HTML shown while Flutter starts (P3-s01): the tenant's name in its
  * colours, painted with the first bytes, so a phone on 4G sees the brand at
