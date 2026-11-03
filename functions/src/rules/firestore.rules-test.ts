@@ -268,6 +268,21 @@ describe('everything else', () => {
     await assertFails(setDoc(doc(manager(), 'commissions', 'x'), { amountKES: 1 }));
   });
 
+  test('a visitor (no sign-in) can write nothing, in any collection (P0-s03)', async () => {
+    const paths: [string, string][] = [
+      ['listings', 'listing-001'], ['listings', 'new'], ['agents', 'agent-wanjiku'], ['areas', 'kilimani'], ['config', 'tenant'],
+      ['leads', 'x'], ['viewings', 'x'], ['projects', 'x'], ['pages', 'about'], ['users/u1/alerts', 'x'], ['reviews', 'x'],
+      ['reviewInvites', 'x'], ['agentBlocks', 'x'], ['payments', 'x'], ['staff', 'x'], ['audit', 'x'], ['photoFlags', 'x'],
+      ['savedSearches', 'x'], ['photoHashes', 'x'], ['rateLimits', 'x'], ['commissions', 'x'],
+    ];
+    for (const [col, id] of paths) {
+      const ref = doc(visitor(), col, id);
+      await assertFails(setDoc(ref, { status: 'live', priceKES: 1 }));
+      await assertFails(updateDoc(ref, { status: 'live' }));
+      await assertFails(deleteDoc(ref));
+    }
+  });
+
   test('rate-limit counters are Functions-only', async () => {
     await assertFails(getDoc(doc(manager(), 'rateLimits', 'x')));
     await assertFails(setDoc(doc(manager(), 'rateLimits', 'x'), { count: 0 }));
