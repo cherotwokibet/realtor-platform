@@ -11,6 +11,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'src/app.dart';
 import 'src/account/account_data.dart';
+import 'src/firebase/deferred_backends.dart';
 import 'src/firebase/firebase_account.dart';
 import 'src/firebase/firebase_data.dart';
 import 'src/providers.dart';
@@ -20,28 +21,36 @@ Future<void> main() async {
   usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
   // Web: Hosting's init.json. Phones: the asset `tenant firebase-config` writes.
-  // Firebase starts (on the web: its SDK downloads) while the tenant file and
-  // fonts load, not after them: the first frame waits on all three (P3-s01).
-  Future<FirebaseOptions?> startFirebase() async {
-    final options = await (kIsWeb ? hostingFirebaseOptions(Uri.base) : bundledFirebaseOptions(rootBundle, tenantAssetDir(), defaultTargetPlatform));
-    if (options != null) await Firebase.initializeApp(options: options);
-    return options;
-  }
-
-  final (tenant, _, firebase) = await (loadTenant(), loadTenantFonts(), startFirebase()).wait;
+  final (tenant, _, firebase) = await (
+    loadTenant(),
+    loadTenantFonts(),
+    kIsWeb ? hostingFirebaseOptions(Uri.base) : bundledFirebaseOptions(rootBundle, tenantAssetDir(), defaultTargetPlatform),
+  ).wait;
   final overrides = [tenantProvider.overrideWithValue(tenant)];
   // On Firebase Hosting: live listings from Firestore and leads to the
   // Functions. Anywhere else (flutter run, a plain server): demo data.
   if (firebase != null) {
-    final db = FirebaseFirestore.instance, bucket = '${firebase.projectId}-media';
+    // The first screen does not wait for Firebase: on the web, starting it
+    // downloads and runs its SDK, seconds on a mid-range phone (P3-s01).
+    // Each backend call waits for it instead.
+    final ready = Firebase.initializeApp(options: firebase);
+    Future<T> once<T>(T Function() make) {
+      // A start-up failure reaches each caller; it is not also an uncaught error.
+      final backend = ready.then((_) => make())..ignore();
+      return backend;
+    }
+
+    final bucket = '${firebase.projectId}-media';
     // On the web, "Get alerts" sign-in links come back to this site.
     overrides.addAll([
-      listingSearchProvider.overrideWithValue(FirestoreListingSearch(db, bucket: bucket)),
-      listingRepositoryProvider.overrideWithValue(FirestoreListingRepository(db, bucket: bucket)),
-      customerAccountProvider.overrideWithValue(FirebaseCustomerAccount(FirebaseAuth.instance)),
-      alertsRepositoryProvider.overrideWithValue(FirestoreAlerts(db)),
+      listingSearchProvider.overrideWithValue(DeferredListingSearch(once(() => FirestoreListingSearch(FirebaseFirestore.instance, bucket: bucket)))),
+      listingRepositoryProvider.overrideWithValue(
+        DeferredListingRepository(once(() => FirestoreListingRepository(FirebaseFirestore.instance, bucket: bucket))),
+      ),
+      customerAccountProvider.overrideWithValue(DeferredCustomerAccount(once(() => FirebaseCustomerAccount(FirebaseAuth.instance)))),
+      alertsRepositoryProvider.overrideWithValue(DeferredAlertsRepository(once(() => FirestoreAlerts(FirebaseFirestore.instance)))),
       leadRepositoryProvider.overrideWithValue(
-        CallableLeadRepository.firebase(FirebaseFunctions.instanceFor(region: tenant.firebaseRegion)),
+        DeferredLeadRepository(once(() => CallableLeadRepository.firebase(FirebaseFunctions.instanceFor(region: tenant.firebaseRegion)))),
       ),
     ]);
   }
