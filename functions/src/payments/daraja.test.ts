@@ -100,5 +100,5 @@ test('config: off unless MPESA_ENV is set; checks the shortcode and type', () =>
   assert.throws(() => mpesaConfig({ MPESA_ENV: 'live', MPESA_SHORTCODE: '174379' }), /sandbox or production/);
   assert.throws(() => mpesaConfig({ MPESA_ENV: 'sandbox', MPESA_SHORTCODE: 'secret://x' }), /5 to 7 digit/);
   assert.throws(() => mpesaConfig({ MPESA_ENV: 'sandbox', MPESA_SHORTCODE: '174379', MPESA_TYPE: 'bank' }), /paybill or till/);
-  assert.equal(callbackUrl('rte-realtor-dev', 'europe-west1'), 'https://europe-west1-rte-realtor-dev.cloudfunctions.net/payments-mpesaCallback');
+  assert.equal(callbackUrl('demo-project', 'europe-west1'), 'https://europe-west1-demo-project.cloudfunctions.net/payments-mpesaCallback');
 });
