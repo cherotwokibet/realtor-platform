@@ -201,6 +201,11 @@ function paymentFunctions(cfg: MpesaConfig) {
   });
   return {
     startViewingPayment: onCall({ secrets }, (req) => startViewingPayment(getFirestore(), req.data, deps())),
+    // The share pages' twin (D16): only their service account may invoke it.
+    shareStartViewingPayment: onRequest(
+      { secrets, invoker: sharePagesInvoker(process.env.GCLOUD_PROJECT ?? 'local') },
+      callableTwin((data) => startViewingPayment(getFirestore(), data, deps())),
+    ),
     // Safaricom posts here; always 200 so it does not retry, details only in our logs.
     mpesaCallback: onRequest({ secrets: [] }, async (req, res) => {
       const t = typeof req.query.t === 'string' ? req.query.t : undefined;

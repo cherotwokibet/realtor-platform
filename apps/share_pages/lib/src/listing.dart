@@ -16,6 +16,7 @@ class ShareListing {
     required this.lng,
     this.estate,
     this.depositMonths,
+    this.viewingFeeKES,
     this.amenities = const [],
     this.photos = const [],
     this.verified = false,
@@ -32,6 +33,9 @@ class ShareListing {
   final Purpose purpose;
   final int beds, baths, priceKES;
   final int? depositMonths;
+
+  /// Viewing fee (P6-s01), paid by M-Pesa after booking; null or 0: free.
+  final int? viewingFeeKES;
   final double lat, lng;
   final String? estate;
   final List<String> amenities;

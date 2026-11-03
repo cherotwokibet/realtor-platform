@@ -12,7 +12,8 @@ import { type DarajaConfig, darajaToken, stkPush, stkQuery, type StkOutcome } fr
  * clients read payments/{id} (managers) and their viewing's paymentId.
  *
  * - startViewingPayment: the viewing's fee, from the viewing (set by
- *   bookViewing), never from the client. One payment per viewing
+ *   bookViewing), never from the client, and only to the phone that booked
+ *   it, so nobody can aim a prompt at someone else's number. One payment per viewing
  *   (payments/viewing-fee_<viewingId>): a second tap within 2 minutes reuses
  *   the push already on the phone, and a paid viewing can't be paid twice.
  * - recordStkCallback: Safaricom's callback, matched by CheckoutRequestID
@@ -33,7 +34,8 @@ const REUSE_PENDING_MS = 2 * 60_000;
 export const RECONCILE_AFTER_MS = 3 * 60_000;
 export const GIVE_UP_AFTER_MS = 24 * 3_600_000;
 
-const startInput = z.object({ viewingId: docId, phone: kenyanPhone });
+/** `phone` is accepted for older clients and ignored: the prompt goes to the booking phone. */
+const startInput = z.object({ viewingId: docId, phone: kenyanPhone.optional() });
 
 export async function startViewingPayment(
   db: Firestore,
@@ -49,11 +51,13 @@ export async function startViewingPayment(
   const paymentRef = db.collection('payments').doc(`viewing-fee_${req.viewingId}`);
   const token = randomBytes(24).toString('hex');
   let amountKES = 0;
+  let phone = '';
   let reuse = false;
   await db.runTransaction(async (tx) => {
     const [v, p] = await Promise.all([tx.get(viewingRef), tx.get(paymentRef)]);
     if (!v.exists || !['requested', 'confirmed'].includes(v.get('status'))) throw new HttpsError('not-found', 'that viewing is not open');
     amountKES = Number(v.get('feeKES') ?? 0);
+    phone = String(v.get('client.phone') ?? '');
     if (!Number.isInteger(amountKES) || amountKES < 1) throw new HttpsError('failed-precondition', 'this viewing has no fee to pay');
     if (p.exists && p.get('status') === 'paid') throw new HttpsError('already-exists', 'this viewing fee is already paid');
     const created = p.exists ? (p.get('createdAt')?.toDate() as Date) : null;
@@ -64,7 +68,7 @@ export async function startViewingPayment(
     tx.set(paymentRef, {
       purpose: 'viewing-fee',
       amountKES,
-      phone: req.phone,
+      phone,
       listingId: v.get('listingId'),
       viewingId: req.viewingId,
       checkoutRequestId: null,
@@ -87,7 +91,7 @@ export async function startViewingPayment(
       bearer,
       {
         amountKES,
-        phone: req.phone,
+        phone,
         callbackUrl: `${deps.callbackUrl}?t=${token}`,
         accountReference: 'Viewing',
         description: 'Viewing fee',

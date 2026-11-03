@@ -34,6 +34,9 @@ class ListingPage extends StatelessComponent {
     this.areaMedianRentKES,
     this.freeTimes,
     this.pickedDay,
+    this.payViewingId,
+    this.paying = false,
+    this.payNotice,
     this.similar = const [],
     super.key,
   });
@@ -58,6 +61,17 @@ class ListingPage extends StatelessComponent {
 
   /// After "Show free times" (`?day=`): that day and its free times only.
   final ({String day, List<String> times})? freeTimes;
+
+  /// After booking a viewing with a fee (P6-s01): the viewing to pay for.
+  final String? payViewingId;
+
+  /// The M-Pesa prompt was sent; the visitor finishes on their phone.
+  final bool paying;
+
+  /// Why starting the payment failed, shown above the pay button.
+  final String? payNotice;
+
+  int get _fee => tenant.features.isOn(Feature.mpesa) ? (listing.viewingFeeKES ?? 0) : 0;
 
   /// The day in `?day=`, also when its free times could not be fetched.
   final String? pickedDay;
@@ -88,6 +102,7 @@ class ListingPage extends StatelessComponent {
         h1([Component.text(l.title)]),
         p(classes: 'price', priceText(l)),
         p(classes: 'facts', [Component.text(facts)]),
+        if (_fee > 0) p([Component.text('Viewing fee: ${formatKes(_fee)}, paid by M-Pesa after you book')]),
         if (l.purpose == Purpose.rent)
           if (percentBelowTypical(l.priceKES, areaMedianRentKES) case final int pct)
             p(classes: 'insight', [
@@ -188,8 +203,20 @@ class ListingPage extends StatelessComponent {
   Component _viewingForm(EnquiryFormState f) {
     Component? error(String field) => f.errors[field] == null ? null : p(classes: 'error', [Component.text(f.errors[field]!)]);
     if (f.sent) {
-      return section(id: 'viewing', [
+      final fee = formatKes(_fee);
+      return section(id: 'viewing', classes: 'enquire', [
         p(classes: 'notice', [Component.text('Viewing requested. ${tenant.name} will call or WhatsApp you to confirm the time.')]),
+        if (paying && _fee > 0)
+          p(classes: 'notice', [Component.text('Check your phone: enter your M-Pesa PIN to pay the viewing fee of $fee.')])
+        else if (payViewingId != null && _fee > 0) ...[
+          p([Component.text('This home has a viewing fee of $fee, paid by M-Pesa to the phone you booked with.')]),
+          if (payNotice != null) p(classes: 'notice', [Component.text(payNotice!)]),
+          form(action: '/listing/${listing.slug}/pay#viewing', method: FormMethod.post, [
+            input(type: InputType.hidden, name: 'viewingId', value: payViewingId),
+            button(type: ButtonType.submit, [Component.text('Pay $fee with M-Pesa')]),
+          ]),
+          p([Component.text('Or pay when ${tenant.name} confirms the time.')]),
+        ],
       ]);
     }
     Component select_(String name, String id, List<({String value, String label})> options) => select(

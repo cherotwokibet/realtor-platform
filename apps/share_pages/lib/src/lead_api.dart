@@ -26,8 +26,13 @@ abstract interface class LeadApi {
   /// being `shown`, or one of them `opened`, on the web. Counts only.
   Future<void> logRecommendation({required String listingId, required String event});
 
-  /// `bookViewing`: [slot] is ISO 8601 with the Nairobi offset.
-  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message});
+  /// `bookViewing`: [slot] is ISO 8601 with the Nairobi offset. Answers the
+  /// viewing's id and the fee the Functions set (0: free).
+  Future<({String viewingId, int feeKES})> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message});
+
+  /// `payments-startViewingPayment` (P6-s01): M-Pesa asks the phone that
+  /// booked [viewingId] for its fee. The amount and phone are the viewing's own.
+  Future<void> payViewingFee({required String viewingId});
 
   /// `openSlots` (P4-s04): the free times on [day]; null when unknown.
   Future<List<String>?> openTimes({required String listingId, required String day});
@@ -60,8 +65,8 @@ class CallableLeadApi implements LeadApi {
   final IdTokenSource? idToken;
   final http.Client _client;
 
-  Future<Object?> _call(String name, Map<String, Object?> data, {bool twin = true}) async {
-    final fn = idToken == null || !twin ? name : 'share${name[0].toUpperCase()}${name.substring(1)}';
+  Future<Object?> _call(String name, Map<String, Object?> data, {bool twin = true, String? twinName}) async {
+    final fn = idToken == null || !twin ? name : twinName ?? 'share${name[0].toUpperCase()}${name.substring(1)}';
     final url = Uri.parse('${base.toString().replaceFirst(RegExp(r'/$'), '')}/$fn');
     final res = await _client
         .post(url,
@@ -117,14 +122,27 @@ class CallableLeadApi implements LeadApi {
       _call('logRecommendation', {'listingId': listingId, 'event': event, 'surface': 'web'});
 
   @override
-  Future<void> bookViewing({required String listingId, required String slot, required String name, required String phone, String? message}) =>
-      _call('bookViewing', {
-        'listingId': listingId,
-        'slot': slot,
-        'client': {'name': name, 'phone': phone},
-        'message': ?message,
-        'consent': true,
-      });
+  Future<({String viewingId, int feeKES})> bookViewing({
+    required String listingId,
+    required String slot,
+    required String name,
+    required String phone,
+    String? message,
+  }) async {
+    final r = await _call('bookViewing', {
+      'listingId': listingId,
+      'slot': slot,
+      'client': {'name': name, 'phone': phone},
+      'message': ?message,
+      'consent': true,
+    });
+    final m = r is Map ? r : const {};
+    return (viewingId: '${m['viewingId'] ?? ''}', feeKES: (m['feeKES'] as num?)?.toInt() ?? 0);
+  }
+
+  @override
+  Future<void> payViewingFee({required String viewingId}) =>
+      _call('payments-startViewingPayment', {'viewingId': viewingId}, twinName: 'payments-shareStartViewingPayment');
 }
 
 /// What a visitor typed into the enquiry form, checked before any call.

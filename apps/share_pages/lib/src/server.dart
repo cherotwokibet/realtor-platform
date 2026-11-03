@@ -37,7 +37,7 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
   final source = FeatureFilteredSource(inner, tenant.features);
   final clock = now ?? DateTime.now;
   Future<shelf.Response> listingPage(shelf.Request req, ShareListing listing,
-      {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200}) async {
+      {EnquiryFormState? form, EnquiryFormState? viewingForm, int status = 200, String? payViewingId, String? payNotice}) async {
     // "Show free times": ?day=YYYY-MM-DD asks openSlots for that day.
     final day = req.url.queryParameters['day'];
     final validDay = day != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(day) ? day : null;
@@ -52,6 +52,8 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
     final q = req.url.queryParameters;
     final enquiry = leads == null ? null : form ?? EnquiryFormState(sent: q['sent'] == '1');
     final viewing = leads == null ? null : viewingForm ?? EnquiryFormState(sent: q['booked'] == '1');
+    // M-Pesa viewing fee (P6-s01): ?pay=<viewingId> offers the button, ?paying=1 says check the phone.
+    final payId = q['pay'];
     final r = await renderComponent(
       ListingPage(
         tenant: tenant,
@@ -63,6 +65,9 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
         areaMedianRentKES: area?.medianRentKES,
         freeTimes: times == null ? null : (day: validDay!, times: times),
         pickedDay: validDay,
+        payViewingId: payViewingId ?? (payId != null && _docId.hasMatch(payId) ? payId : null),
+        paying: q['paying'] == '1',
+        payNotice: payNotice,
         similar: similarListings(listing, [...inArea, ...newest], _similarKey),
       ),
       request: req,
@@ -124,8 +129,9 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
       if (request == null) {
         return listingPage(req, listing, viewingForm: EnquiryFormState(values: values, errors: errors), status: 400);
       }
+      final ({String viewingId, int feeKES}) result;
       try {
-        await leads.bookViewing(listingId: listing.id, slot: request.slot, name: request.name, phone: request.phone, message: request.message);
+        result = await leads.bookViewing(listingId: listing.id, slot: request.slot, name: request.name, phone: request.phone, message: request.message);
       } on LeadApiException catch (e) {
         stderr.writeln('bookViewing failed: ${e.status}');
         return switch (e.status) {
@@ -141,7 +147,36 @@ shelf.Handler shareHandler(TenantConfig tenant, ListingSource inner,
         stderr.writeln('bookViewing failed: ${e.runtimeType}');
         return listingPage(req, listing, viewingForm: again(failed: true), status: 503);
       }
+      if (result.feeKES > 0 && tenant.features.isOn(Feature.mpesa) && _docId.hasMatch(result.viewingId)) {
+        return shelf.Response.seeOther('/listing/$slug?booked=1&pay=${Uri.encodeQueryComponent(result.viewingId)}#viewing',
+            headers: {'cache-control': 'no-store'});
+      }
       return booked;
+    })
+    // The M-Pesa prompt for a booked viewing's fee (P6-s01): the Functions
+    // take the amount and the phone from the viewing itself.
+    ..post('/listing/<slug>/pay', (shelf.Request req, String slug) async {
+      if (leads == null || !tenant.features.isOn(Feature.mpesa) || !_slug.hasMatch(slug) || slug.length > 80) return _notFound(tenant);
+      final listing = await source.bySlug(slug);
+      if (listing == null) return _notFound(tenant);
+      final body = await _formBody(req);
+      if (body == null) return shelf.Response(413, body: 'form too large');
+      final viewingId = body['viewingId'] ?? '';
+      if (!_docId.hasMatch(viewingId)) return shelf.Response(400, body: 'bad request');
+      const sent = EnquiryFormState(sent: true);
+      try {
+        await leads.payViewingFee(viewingId: viewingId);
+      } on LeadApiException catch (e) {
+        stderr.writeln('payViewingFee failed: ${e.status}');
+        final notice = e.status == 'ALREADY_EXISTS'
+            ? 'This viewing fee is already paid.'
+            : 'M-Pesa did not take the request. Please try again in a minute, or pay when the agent confirms.';
+        return listingPage(req, listing, viewingForm: sent, payViewingId: viewingId, payNotice: notice, status: e.status == 'ALREADY_EXISTS' ? 409 : 503);
+      } on Exception catch (e) {
+        stderr.writeln('payViewingFee failed: ${e.runtimeType}');
+        return listingPage(req, listing, viewingForm: sent, payViewingId: viewingId, payNotice: 'M-Pesa did not take the request. Please try again in a minute.', status: 503);
+      }
+      return shelf.Response.seeOther('/listing/$slug?booked=1&paying=1#viewing', headers: {'cache-control': 'no-store'});
     })
     ..get('/review/<token>', (shelf.Request req, String token) async {
       if (leads == null || !reviewToken.hasMatch(token)) return _notFound(tenant);
