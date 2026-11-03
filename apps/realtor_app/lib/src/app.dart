@@ -8,6 +8,7 @@ import 'package:realtor_core/realtor_core.dart';
 import 'account/account_screen.dart';
 import 'home_screen.dart';
 import 'listing/listing_screen.dart';
+import 'nav.dart';
 import 'places/off_plan_screens.dart';
 import 'places/place_screens.dart';
 import 'providers.dart';
@@ -74,8 +75,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-String? _resultsOrHome(BuildContext context, GoRouterState state) =>
-    ListingFilters.fromUri(state.uri) == null ? '/' : null;
+String? _resultsOrHome(BuildContext context, GoRouterState state) => ListingFilters.fromUri(state.uri) == null ? '/' : null;
 
 Widget _results(BuildContext context, GoRouterState state) =>
     RecordSearch(filters: ListingFilters.fromUri(state.uri)!, child: ResultsScreen(filters: ListingFilters.fromUri(state.uri)!));
@@ -108,7 +108,6 @@ class _SectionShell extends StatelessWidget {
 
   /// Material 3 "expanded" window class starts here.
   static const wideFrom = 840.0;
-  static const maxContentWidth = 1200.0;
 
   @override
   Widget build(BuildContext context) {

@@ -24,8 +24,8 @@ class FailingLeads extends DemoLeadRepository {
 late DemoLeadRepository leads;
 late List<Uri> opened;
 
-Future<void> open(WidgetTester tester, String path, {LeadRepository? repo}) async {
-  tester.view.physicalSize = const Size(412, 1600);
+Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size size = const Size(412, 1600)}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   leads = DemoLeadRepository();
@@ -173,5 +173,21 @@ void main() {
 
     await open(tester, kilimani);
     expect(find.text('Similar homes'), findsNothing, reason: 'no other rental near KES 65,000 shares its area or type');
+  });
+
+  testWidgets('on desktop the photos sit beside the details, within the content width', (tester) async {
+    await open(tester, kilimani, size: const Size(1900, 1000));
+    final photos = tester.getRect(find.byKey(const ValueKey('listing-photos')));
+    final whatsapp = tester.getRect(find.text('WhatsApp'));
+    expect(whatsapp.left, greaterThan(photos.right));
+    expect(whatsapp.bottom, lessThan(1000));
+    expect(photos.width, lessThan(1200));
+  });
+
+  testWidgets('on a phone the photos come first, full width', (tester) async {
+    await open(tester, kilimani);
+    final photos = tester.getRect(find.byKey(const ValueKey('listing-photos')));
+    expect(photos.width, 412);
+    expect(tester.getRect(find.text('WhatsApp')).top, greaterThan(photos.bottom));
   });
 }
