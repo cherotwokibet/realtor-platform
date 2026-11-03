@@ -136,6 +136,14 @@ export const payment = z.object({
   checkoutRequestId: z.string().nullable(),
   status: z.enum(['pending', 'paid', 'failed', 'cancelled']),
   receipt: z.string().nullable(),
+  /** The viewing a viewing fee is for. */
+  viewingId: docId.optional(),
+  merchantRequestId: z.string().nullable().optional(),
+  /** Random, per payment: the callback URL carries it, so only Safaricom's callback for this push settles it. */
+  callbackToken: z.string().optional(),
+  /** Why a payment failed or was cancelled. */
+  reason: z.string().max(200).nullable().optional(),
+  attempts: z.number().int().min(1).optional(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
