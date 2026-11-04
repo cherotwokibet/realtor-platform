@@ -8,6 +8,8 @@ node tools/tenant-cli/src/cli.ts release <id> --dry-run        # show the steps 
 
 Run it in Cloud Shell from a clean checkout of `main`, signed in to `gcloud` and `firebase` with an account that can read the tenant's **prod** project.
 
+Cloud Shell has no Android SDK. Run `source tools/cloudshell-android.sh` first, once per Cloud Shell session (`docs/android-build.md`).
+
 The command does six things:
 1. Builds that tenant's Android App Bundle from the current commit, with the prod Firebase settings and a version code that always goes up.
 2. Signs the bundle with the tenant's **upload key**.
