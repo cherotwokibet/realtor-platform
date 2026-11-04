@@ -221,7 +221,10 @@ resource "google_project_service_identity" "pubsub" {
 locals {
   compute_sa = "serviceAccount:${google_project.this.number}-compute@developer.gserviceaccount.com"
   functions_agent_roles = {
-    gcs_publishes_events = { member = "serviceAccount:${data.google_storage_project_service_account.gcs.email_address}", role = "roles/pubsub.publisher" }
+    # Built from the project number, not read from the data source: a read
+    # deferred to apply time made this binding drop and come back on every
+    # plan that also changed an API (storage events lost in between).
+    gcs_publishes_events = { member = "serviceAccount:service-${google_project.this.number}@gs-project-accounts.iam.gserviceaccount.com", role = "roles/pubsub.publisher" }
     pubsub_signs_tokens  = { member = "serviceAccount:${google_project_service_identity.pubsub.email}", role = "roles/iam.serviceAccountTokenCreator" }
     functions_invoke_run = { member = local.compute_sa, role = "roles/run.invoker" }
     functions_get_events = { member = local.compute_sa, role = "roles/eventarc.eventReceiver" }
@@ -230,11 +233,12 @@ locals {
 }
 
 resource "google_project_iam_member" "functions_agents" {
-  for_each   = local.functions_agent_roles
-  project    = google_project.this.project_id
-  role       = each.value.role
-  member     = each.value.member
-  depends_on = [google_project_service.apis]
+  for_each = local.functions_agent_roles
+  project  = google_project.this.project_id
+  role     = each.value.role
+  member   = each.value.member
+  # The data source makes sure the Storage agent exists before it gets a role.
+  depends_on = [google_project_service.apis, data.google_storage_project_service_account.gcs]
 }
 
 # Staff admin (P5): its own web app and Hosting site. Hosting serves the
