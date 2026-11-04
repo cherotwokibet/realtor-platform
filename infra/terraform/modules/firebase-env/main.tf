@@ -170,12 +170,22 @@ resource "google_firebaserules_release" "storage" {
 }
 
 # App registrations: their configs become each flavor's firebase_options.
+# Signing certificates the project trusts, for Google sign-in and email
+# sign-in links on Android: the store certificate on prod, test builds'
+# certificates on dev and stage (tenant file, apps.*). Hex without colons.
+locals {
+  android_sha1   = var.env == "prod" ? try(local.t.apps.androidCertSha1, []) : [for c in try(local.t.apps.testCerts, []) : c.sha1]
+  android_sha256 = var.env == "prod" ? try(local.t.apps.androidCertSha256, []) : [for c in try(local.t.apps.testCerts, []) : c.sha256]
+}
+
 resource "google_firebase_android_app" "app" {
-  provider     = google-beta
-  project      = google_project.this.project_id
-  display_name = "${local.t.name} (${var.env})"
-  package_name = local.t.apps.androidId
-  depends_on   = [google_firebase_project.this]
+  provider      = google-beta
+  project       = google_project.this.project_id
+  display_name  = "${local.t.name} (${var.env})"
+  package_name  = local.t.apps.androidId
+  sha1_hashes   = [for h in local.android_sha1 : lower(replace(h, ":", ""))]
+  sha256_hashes = [for h in local.android_sha256 : lower(replace(h, ":", ""))]
+  depends_on    = [google_firebase_project.this]
 }
 
 resource "google_firebase_apple_app" "app" {
@@ -283,6 +293,9 @@ resource "google_identity_platform_config" "auth" {
     # Customers sign in on the web app for saved-search alerts (D18).
     "${google_firebase_hosting_site.app.site_id}.web.app",
     "${google_firebase_hosting_site.app.site_id}.firebaseapp.com",
+    # The realtor's own domains, once DNS points them at Hosting (go-live).
+    local.t.domains.app,
+    local.t.domains.admin,
   ]
   sign_in {
     allow_duplicate_emails = false

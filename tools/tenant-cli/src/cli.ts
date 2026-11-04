@@ -10,7 +10,7 @@ import { generateIcons } from './icons.ts';
 import { flutterConfigs } from './flutter-config.ts';
 import { createTenant } from './create.ts';
 import { rebrandTenant } from './rebrand.ts';
-import { ADMIN_ROBOTS, APP_ROBOTS, patchAdminIndexHtml, patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
+import { ADMIN_ROBOTS, APP_ROBOTS, appAssetLinks, patchAdminIndexHtml, patchIndexHtml, patchManifest as patchWebManifest } from './web.ts';
 import { tenantFontFiles } from './fonts.ts';
 import { ENVS, type Env, blockingChanges, deploySteps, failedFunctions, functionBatches, imageRepo, parseBilling, parseParts, planProblems, planSummary, shellLine } from './deploy.ts';
 import { RELEASE_SECRETS, TRACKS, type Track, BUNDLE_DIR, pickBundle, listingProblems, publishToPlay, playToken, releaseSteps, signingEnv, storeListing, versionCode } from './release.ts';
@@ -20,6 +20,7 @@ import {
   appName,
   flavorAssetDir,
   NOTIFICATION_ICON,
+  flavorManifest,
   pubspecWithFlavors,
   androidFlavorsGradle,
   patchBuildGradle,
@@ -204,6 +205,9 @@ next:
     const fonts = existsSync(fontsJson) ? (JSON.parse(readFileSync(fontsJson, 'utf8')) as { asset: string }[]).map((f) => f.asset) : [];
     writeFileSync(join(web, 'index.html'), patchIndexHtml(readFileSync(join(web, 'index.html'), 'utf8'), t, fonts));
     writeFileSync(join(web, 'robots.txt'), APP_ROBOTS);
+    // Android opens emailed sign-in links in the app (firebase.json keeps .well-known).
+    mkdirSync(join(web, '.well-known'), { recursive: true });
+    writeFileSync(join(web, '.well-known', 'assetlinks.json'), appAssetLinks(t));
     // The admin's shell too, when it exists: title, noindex, robots.txt, loading screen.
     const adminWeb = join(root, 'apps', 'admin', 'web');
     if (existsSync(join(adminWeb, 'index.html'))) {
@@ -263,6 +267,8 @@ next:
       const manifest = join(app, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
       writeFileSync(manifest, patchManifest(readFileSync(manifest, 'utf8')));
       for (const t of tenants) {
+        mkdirSync(join(app, 'android', 'app', 'src', flavorName(t.id)), { recursive: true });
+        writeFileSync(join(app, 'android', 'app', 'src', flavorName(t.id), 'AndroidManifest.xml'), flavorManifest(t));
         const icon = join(app, 'android', 'app', 'src', flavorName(t.id), NOTIFICATION_ICON.to);
         mkdirSync(join(icon, '..'), { recursive: true });
         copyFileSync(join(app, flavorAssetDir(flavorName(t.id)), 'icons', NOTIFICATION_ICON.from), icon);

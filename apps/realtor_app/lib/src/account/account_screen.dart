@@ -56,7 +56,10 @@ String label(Purpose p) => switch (p) { Purpose.rent => 'Rent', Purpose.sale => 
 /// `/account` (D18): no account is needed to browse or save homes; one is
 /// needed for alerts when new homes match a saved search.
 class AccountScreen extends ConsumerStatefulWidget {
-  const AccountScreen({super.key});
+  const AccountScreen({super.key, this.emailLink});
+
+  /// An emailed sign-in link that opened the app (phones: /__/auth/links).
+  final String? emailLink;
   @override
   ConsumerState<AccountScreen> createState() => _AccountScreenState();
 }
@@ -78,8 +81,18 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(AccountScreen old) {
+    super.didUpdateWidget(old);
+    // A link tapped while Account was already open.
+    if (widget.emailLink != old.emailLink) _finishLink();
+  }
+
+  /// The web page's own address, or the link that opened the app.
+  Uri get _link => widget.emailLink != null ? Uri.parse(widget.emailLink!) : ref.read(openedAtProvider);
+
   bool get _isLink {
-    final q = ref.read(openedAtProvider).queryParameters;
+    final q = emailLinkFrom(_link).queryParameters;
     return q['mode'] == 'signIn' && q.containsKey('oobCode');
   }
 
@@ -98,16 +111,19 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   Future<void> _complete(String email) async {
     setState(() => _busy = true);
     try {
-      final ok = await ref.read(customerAccountProvider).completeSignInLink(ref.read(openedAtProvider), email);
+      final ok = await ref.read(customerAccountProvider).completeSignInLink(_link, email);
       await ref.read(pendingEmailProvider).write(null);
       if (mounted) setState(() => _status = ok ? 'Signed in.' : null);
       if (mounted && ok) context.go('/account');
-    } on Object {
-      if (mounted) setState(() => _error = 'That link did not work. It may be old; ask for a new one.');
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = 'That link did not work. It may be old; ask for a new one.${_code(e)}');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// The provider's reason, small, for reports from phones.
+  static String _code(Object e) => e is SignInFailure ? ' (${e.code})' : '';
 
   Future<void> _sendLink() async {
     final email = _email.text.trim();
@@ -128,8 +144,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       await ref.read(pendingEmailProvider).write(email);
       await ref.read(customerAccountProvider).sendSignInLink(email, back);
       if (mounted) setState(() => _status = 'Check $email for a sign-in link. Open it on this phone or computer.');
-    } on Object {
-      if (mounted) setState(() => _error = 'We could not send the link just now. Please try again.');
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = 'We could not send the link just now. Please try again.${_code(e)}');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -139,8 +155,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     setState(() => _error = null);
     try {
       await ref.read(customerAccountProvider).signInWithGoogle();
-    } on Object {
-      if (mounted) setState(() => _error = 'Google sign-in is not available here yet. Use the email link.');
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = 'Google sign-in is not available here yet. Use the email link.${_code(e)}');
     }
   }
 

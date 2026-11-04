@@ -12,7 +12,8 @@
       "public": "apps/realtor_app/build/web",
       "ignore": [
         "firebase.json",
-        "**/.*"
+        ".last_build_id",
+        "**/.DS_Store"
       ],
       "cleanUrls": true,
       "rewrites": [

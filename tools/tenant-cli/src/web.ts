@@ -117,3 +117,23 @@ export function patchManifest(json: string, t: any, shortName: string): string {
   });
   return JSON.stringify(m, null, 2) + '\n';
 }
+
+/**
+ * The app site's /.well-known/assetlinks.json: lets the Android app open
+ * emailed sign-in links (flavorManifest). Lists the store certificate and
+ * test builds' certificates; empty, and so claiming nothing, until known.
+ */
+export function appAssetLinks(t: any): string {
+  const certs = [...(t.apps.androidCertSha256 ?? []), ...(t.apps.testCerts ?? []).map((c: any) => c.sha256)];
+  if (!certs.length) return '[]\n';
+  return JSON.stringify(
+    [
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: { namespace: 'android_app', package_name: t.apps.androidId, sha256_cert_fingerprints: [...new Set(certs)] },
+      },
+    ],
+    null,
+    2,
+  ) + '\n';
+}

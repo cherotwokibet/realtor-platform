@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:realtor_app/src/account/account_data.dart';
 import 'package:realtor_app/src/firebase/firebase_account.dart';
 import 'package:realtor_core/realtor_core.dart';
 
@@ -27,5 +28,35 @@ void main() {
     expect((await alerts.alerts('alice').first).map((x) => x.id), ['new']);
     await alerts.deleteSearch(rows.single.id);
     expect(await alerts.searches('alice').first, isEmpty);
+  });
+
+  test('phones get the link through the app site, with the app ids; the web returns to its own page', () {
+    final web = signInLinkSettings(Uri.parse('https://app.example/account'), null);
+    expect(web.url, 'https://app.example/account');
+    expect(web.androidPackageName, isNull);
+    expect(web.linkDomain, isNull);
+
+    final phone = signInLinkSettings(
+      Uri.parse('https://app.example/account'),
+      (appSite: appSiteHost('demo-project-dev'), androidId: 'ke.example.app', iosId: 'ke.example.ios'),
+    );
+    expect(phone.url, 'https://demo-project-dev-app.web.app/account');
+    expect(phone.linkDomain, 'demo-project-dev-app.web.app');
+    expect(phone.androidPackageName, 'ke.example.app');
+    expect(phone.androidInstallApp, isFalse);
+    expect(phone.iOSBundleId, 'ke.example.ios');
+    expect(phone.handleCodeInApp, isTrue);
+  });
+
+  test('app site names follow Terraform: 26 characters, no trailing dash, then -app', () {
+    expect(appSiteHost('demo-project-dev'), 'demo-project-dev-app.web.app');
+    expect(appSiteHost('a-very-long-project-name-x-prod'), 'a-very-long-project-name-x-app.web.app');
+    expect(appSiteHost('a-very-long-project-name--prod'), 'a-very-long-project-name--app.web.app', reason: 'one dash trimmed, as trimsuffix does');
+  });
+
+  test('the sign-in link is taken out of the link that opened the app', () {
+    const inner = 'https://demo-app.web.app/__/auth/action?mode=signIn&oobCode=abc';
+    expect(emailLinkFrom(Uri.https('demo-app.web.app', '/__/auth/links', {'link': inner})).toString(), inner);
+    expect(emailLinkFrom(Uri.parse(inner)).toString(), inner, reason: 'the web page itself');
   });
 }

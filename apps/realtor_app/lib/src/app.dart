@@ -37,7 +37,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               builder: (context, state) => switch (s.path) {
                 '/' => const HomeScreen(),
                 '/saved' => const SavedScreen(),
-                '/account' => const AccountScreen(),
+                '/account' => AccountScreen(emailLink: state.uri.queryParameters['emailLink']),
                 '/off-plan' => const OffPlanScreen(),
                 _ => PlaceholderScreen(title: s.label),
               },
@@ -55,6 +55,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 ],
               ),
         ],
+      ),
+      // An emailed sign-in link that opened the app (P4-s03): Account finishes it.
+      GoRoute(
+        path: '/__/auth/links',
+        redirect: (context, state) => Uri(path: '/account', queryParameters: {'emailLink': state.uri.toString()}).toString(),
       ),
       // Share pages hand visitors to these paths (P3), and App Links open
       // them from shared links: keep them in step with appLinkPaths.

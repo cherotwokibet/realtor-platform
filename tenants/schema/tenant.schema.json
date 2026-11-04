@@ -238,6 +238,42 @@
           },
           "uniqueItems": true
         },
+        "androidCertSha1": {
+          "type": "array",
+          "description": "SHA-1 fingerprints of the same release certificates, for Google sign-in in the store app (prod project).",
+          "items": {
+            "type": "string",
+            "pattern": "^([0-9A-F]{2}:){19}[0-9A-F]{2}$"
+          },
+          "uniqueItems": true
+        },
+        "testCerts": {
+          "type": "array",
+          "description": "Certificates of test builds (docs/android-build.md), registered on the dev and stage projects so sign-in works in them. Fingerprints are public; never add a keystore or password.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "sha1",
+              "sha256"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 2
+              },
+              "sha1": {
+                "type": "string",
+                "pattern": "^([0-9A-F]{2}:){19}[0-9A-F]{2}$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^([0-9A-F]{2}:){31}[0-9A-F]{2}$"
+              }
+            }
+          }
+        },
         "appleTeamId": {
           "type": "string",
           "description": "Apple Developer Team ID, for iOS Universal Links. Leave out until the Apple account exists.",
