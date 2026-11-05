@@ -105,5 +105,8 @@
   "mpesa": {
     "shortcode": "secret://mpesa-shortcode",
     "type": "paybill"
+  },
+  "ops": {
+    "alertEmails": ["kibetboniface@gmail.com"]
   }
 }
