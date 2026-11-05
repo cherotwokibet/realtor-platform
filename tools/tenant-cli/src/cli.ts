@@ -21,6 +21,7 @@ import {
   flavorAssetDir,
   NOTIFICATION_ICON,
   flavorManifest,
+  onlyFlavorBlockChanged,
   pubspecWithFlavors,
   androidFlavorsGradle,
   patchBuildGradle,
@@ -71,6 +72,20 @@ function loadValid(id: string): any {
     process.exit(1);
   }
   return JSON.parse(readFileSync(join(repoRoot(), 'tenants', `${id}.json`), 'utf8'));
+}
+
+/**
+ * Uncommitted changes that would make a build differ from its commit. The
+ * flavors block `tenant flavors` writes into the app's pubspec.yaml doesn't
+ * count: it is generated, and phone builds leave it behind.
+ */
+function uncommitted(root: string): string[] {
+  const pubspec = 'apps/realtor_app/pubspec.yaml';
+  return blockingChanges(execSync('git status --porcelain', { cwd: root, encoding: 'utf8' })).filter((path) => {
+    if (path !== pubspec) return true;
+    const committed = execSync(`git show HEAD:${pubspec}`, { cwd: root, encoding: 'utf8' });
+    return !onlyFlavorBlockChanged(readFileSync(join(root, pubspec), 'utf8'), committed);
+  });
 }
 
 function resetDir(dir: string): void {
@@ -338,7 +353,7 @@ next, in apps/realtor_app:
       console.log(`\n# Full description:\n${listing.fullDescription}`);
       break;
     }
-    const dirty = blockingChanges(execSync('git status --porcelain', { cwd: root, encoding: 'utf8' }));
+    const dirty = uncommitted(root);
     if (dirty.length) {
       console.error(`✗ uncommitted changes in ${dirty.join(', ')}: the bundle is built from the commit, so commit or stash them first`);
       process.exit(1);
@@ -396,7 +411,7 @@ next, in apps/realtor_app:
     const tag = git('rev-parse --short HEAD');
     const dryRun = flag('dry-run');
     // Images are tagged with the commit, so they must be built from exactly it.
-    const dirty = blockingChanges(execSync('git status --porcelain', { cwd: root, encoding: 'utf8' }));
+    const dirty = uncommitted(root);
     if (parts.includes('images') && !dryRun && dirty.length) {
       console.error(`✗ uncommitted changes in ${dirty.join(', ')}: commit or stash them first (images are tagged with the commit)`);
       process.exit(1);
