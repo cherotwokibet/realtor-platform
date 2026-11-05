@@ -38,10 +38,10 @@ void main() {
 
     final phone = signInLinkSettings(
       Uri.parse('https://app.example/account'),
-      (appSite: appSiteHost('demo-project-dev'), androidId: 'ke.example.app', iosId: 'ke.example.ios'),
+      (appSite: appSiteHost('demo-project-dev'), linkDomain: authLinkDomain('demo-project-dev'), androidId: 'ke.example.app', iosId: 'ke.example.ios'),
     );
     expect(phone.url, 'https://demo-project-dev-app.web.app/account');
-    expect(phone.linkDomain, 'demo-project-dev-app.web.app');
+    expect(phone.linkDomain, 'demo-project-dev.firebaseapp.com', reason: 'Firebase refuses other sites (invalid-hosting-link-domain)');
     expect(phone.androidPackageName, 'ke.example.app');
     expect(phone.androidInstallApp, isFalse);
     expect(phone.iOSBundleId, 'ke.example.ios');
