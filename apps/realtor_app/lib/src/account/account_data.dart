@@ -12,6 +12,22 @@ typedef SavedSearchRow = ({String id, ListingFilters filters, DateTime? lastNoti
 /// A new home that matched a saved search (users/{uid}/alerts).
 typedef AlertRow = ({String id, String slug, String title, int priceKES, Purpose purpose, String area, DateTime createdAt, bool read});
 
+/// Why sign-in failed, with the provider's code (e.g. auth/unauthorized-continue-uri),
+/// so a failure on a phone can be reported precisely.
+class SignInFailure implements Exception {
+  const SignInFailure(this.code);
+  final String code;
+  @override
+  String toString() => 'SignInFailure($code)';
+}
+
+/// The emailed link inside a link that opened the app: Firebase sends
+/// `https://<app site>/__/auth/links?link=<the sign-in link>`.
+Uri emailLinkFrom(Uri opened) {
+  final inner = opened.queryParameters['link'];
+  return inner == null ? opened : Uri.parse(inner);
+}
+
 abstract interface class CustomerAccount {
   Stream<Customer?> get customer;
 
@@ -79,7 +95,7 @@ class DemoAccount implements CustomerAccount, AlertsRepository {
 
   @override
   Future<bool> completeSignInLink(Uri link, String email) async {
-    if (link.queryParameters['mode'] != 'signIn') return false;
+    if (emailLinkFrom(link).queryParameters['mode'] != 'signIn') return false;
     _set((uid: 'demo-customer', email: email));
     return true;
   }

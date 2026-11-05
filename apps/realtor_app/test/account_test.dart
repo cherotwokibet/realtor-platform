@@ -116,6 +116,17 @@ void main() {
     expect(find.textContaining('then tap "Get alerts"'), findsOneWidget);
   });
 
+  testWidgets('on a phone, the emailed link opens the app at /__/auth/links and signs in', (tester) async {
+    pending.email = 'amina@example.com';
+    final c = await open(tester, '/');
+    const inner = 'https://demo-app.web.app/__/auth/action?mode=signIn&oobCode=abc&apiKey=k';
+    c.read(routerProvider).go(Uri(path: '/__/auth/links', queryParameters: {'link': inner}).toString());
+    await tester.pumpAndSettle();
+    expect(find.text('amina@example.com'), findsOneWidget);
+    expect(pending.email, isNull);
+    expect(c.read(routerProvider).state.uri.path, '/account');
+  });
+
   testWidgets('after signing in, Account offers the search "Get alerts" was tapped on', (tester) async {
     final c = await open(tester, '/rent/apartments/kilimani');
     await tester.tap(find.text('Get alerts for new matches'));

@@ -5,30 +5,67 @@ import 'package:realtor_core/realtor_core.dart';
 
 import '../account/account_data.dart';
 
+/// On a phone, where emailed links come back to: the project's app site
+/// (its Hosting domain, so Firebase accepts it) and the app's ids.
+typedef PhoneLinks = ({String appSite, String androidId, String iosId});
+
+/// The customer app's Hosting site for a project, as Terraform names it
+/// (google_firebase_hosting_site.app; tenant-cli appSiteHost).
+String appSiteHost(String projectId) {
+  final id = projectId.length > 26 ? projectId.substring(0, 26) : projectId;
+  return '${id.endsWith('-') ? id.substring(0, id.length - 1) : id}-app.web.app';
+}
+
+/// The settings for an emailed sign-in link. On the web it returns to
+/// [continueUrl]; on a phone it goes through the app site, whose verified
+/// App Link (`tenant flavors`) opens the app at /__/auth/links.
+ActionCodeSettings signInLinkSettings(Uri continueUrl, PhoneLinks? phone) => phone == null
+    ? ActionCodeSettings(url: continueUrl.toString(), handleCodeInApp: true)
+    : ActionCodeSettings(
+        url: Uri.https(phone.appSite, '/account').toString(),
+        handleCodeInApp: true,
+        linkDomain: phone.appSite,
+        androidPackageName: phone.androidId,
+        androidInstallApp: false,
+        iOSBundleId: phone.iosId,
+      );
+
 /// Firebase Auth: an emailed sign-in link, or Google where switched on.
 class FirebaseCustomerAccount implements CustomerAccount {
-  FirebaseCustomerAccount(this._auth);
+  FirebaseCustomerAccount(this._auth, {this.phone});
   final FirebaseAuth _auth;
+
+  /// Set in the Android and iOS apps; null on the web.
+  final PhoneLinks? phone;
 
   @override
   Stream<Customer?> get customer => _auth.authStateChanges().map((u) => u == null ? null : (uid: u.uid, email: u.email));
 
-  @override
-  Future<void> sendSignInLink(String email, Uri continueUrl) => _auth.sendSignInLinkToEmail(
-        email: email,
-        actionCodeSettings: ActionCodeSettings(url: continueUrl.toString(), handleCodeInApp: true),
-      );
-
-  @override
-  Future<bool> completeSignInLink(Uri link, String email) async {
-    if (!_auth.isSignInWithEmailLink(link.toString())) return false;
-    await _auth.signInWithEmailLink(email: email, emailLink: link.toString());
-    return true;
+  Future<T> _reported<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on FirebaseAuthException catch (e) {
+      throw SignInFailure(e.code);
+    }
   }
 
   @override
-  Future<void> signInWithGoogle() =>
-      kIsWeb ? _auth.signInWithPopup(GoogleAuthProvider()) : _auth.signInWithProvider(GoogleAuthProvider());
+  Future<void> sendSignInLink(String email, Uri continueUrl) => _reported(
+        () => _auth.sendSignInLinkToEmail(email: email, actionCodeSettings: signInLinkSettings(continueUrl, phone)),
+      );
+
+  @override
+  Future<bool> completeSignInLink(Uri link, String email) => _reported(() async {
+        final emailLink = emailLinkFrom(link).toString();
+        if (!_auth.isSignInWithEmailLink(emailLink)) return false;
+        await _auth.signInWithEmailLink(email: email, emailLink: emailLink);
+        return true;
+      });
+
+  @override
+  Future<void> signInWithGoogle() => _reported(
+        () => kIsWeb ? _auth.signInWithPopup(GoogleAuthProvider()) : _auth.signInWithProvider(GoogleAuthProvider()),
+      );
 
   @override
   Future<void> signOut() => _auth.signOut();

@@ -50,7 +50,10 @@ Future<void> main() async {
       listingRepositoryProvider.overrideWithValue(
         DeferredListingRepository(once(() => FirestoreListingRepository(FirebaseFirestore.instance, bucket: bucket))),
       ),
-      customerAccountProvider.overrideWithValue(DeferredCustomerAccount(once(() => FirebaseCustomerAccount(FirebaseAuth.instance)))),
+      customerAccountProvider.overrideWithValue(DeferredCustomerAccount(once(() => FirebaseCustomerAccount(
+            FirebaseAuth.instance,
+            phone: kIsWeb ? null : (appSite: appSiteHost(firebase.projectId), androidId: tenant.androidId, iosId: tenant.iosId),
+          )))),
       alertsRepositoryProvider.overrideWithValue(DeferredAlertsRepository(once(() => FirestoreAlerts(FirebaseFirestore.instance)))),
       // Push alerts on phones (P4-s03); web push needs a VAPID key first.
       if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS))

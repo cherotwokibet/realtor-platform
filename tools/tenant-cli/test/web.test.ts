@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ADMIN_ROBOTS, APP_ROBOTS, patchAdminIndexHtml, patchIndexHtml, patchManifest, webDescription } from '../src/web.ts';
+import { ADMIN_ROBOTS, APP_ROBOTS, appAssetLinks, patchAdminIndexHtml, patchIndexHtml, patchManifest, webDescription } from '../src/web.ts';
 import { repoRoot } from '../src/validate.ts';
 
 const tenant = (id: string) => JSON.parse(readFileSync(join(repoRoot(), 'tenants', `${id}.json`), 'utf8'));
@@ -98,4 +98,15 @@ test('the admin shell: tenant title, kept out of search, robots.txt disallows al
 
 test('the customer app gets a valid robots.txt that lets crawlers in', () => {
   assert.equal(APP_ROBOTS, 'User-agent: *\nAllow: /\n');
+});
+
+test('the app site\'s assetlinks.json claims nothing until a certificate is known, then lists them all', () => {
+  const t = tenant('realtime-estates');
+  const bare = { ...t, apps: { androidId: t.apps.androidId, iosId: t.apps.iosId } };
+  assert.equal(appAssetLinks(bare), '[]\n');
+  const a = 'AA:' + '00:'.repeat(30) + '01';
+  const b = 'BB:' + '00:'.repeat(30) + '02';
+  const links = JSON.parse(appAssetLinks({ ...bare, apps: { ...bare.apps, androidCertSha256: [a], testCerts: [{ name: 'Cloud Shell', sha1: 'x', sha256: b }, { name: 'dup', sha1: 'y', sha256: a }] } }));
+  assert.equal(links[0].target.package_name, t.apps.androidId);
+  assert.deepEqual(links[0].target.sha256_cert_fingerprints, [a, b]);
 });

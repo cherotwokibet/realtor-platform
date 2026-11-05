@@ -63,7 +63,14 @@
   },
   "apps": {
     "androidId": "ke.co.realtimeestates.app",
-    "iosId": "ke.co.realtimeestates.app"
+    "iosId": "ke.co.realtimeestates.app",
+    "testCerts": [
+      {
+        "name": "Cloud Shell debug key (Boniface)",
+        "sha1": "8C:5D:FD:60:B1:98:ED:AD:50:60:7A:AF:87:CB:78:48:ED:81:2C:AF",
+        "sha256": "97:27:58:76:8B:CE:BA:4F:D2:8A:F8:73:DC:73:93:C4:FB:EA:02:17:FF:42:97:2D:5A:4A:ED:C4:62:75:5C:94"
+      }
+    ]
   },
   "firebase": {
     "projects": {

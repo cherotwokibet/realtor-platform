@@ -136,3 +136,36 @@ export function patchManifest(src: string): string {
   if (end >= 0 && !out.includes('default_notification_icon')) out = out.slice(0, end) + PUSH_ICON + out.slice(end);
   return out;
 }
+
+/** The customer app's Hosting site for a project (Terraform: google_firebase_hosting_site.app). */
+export const appSiteHost = (project: string) => `${project.slice(0, 26).replace(/-$/, '')}-app.web.app`;
+
+/** Where emailed sign-in links come back to the app (Firebase Auth's Hosting link path). */
+export const EMAIL_LINK_PATH = '/__/auth/links';
+
+/**
+ * A flavor's own manifest, merged into the main one: emailed sign-in links
+ * on the app site of each of the tenant's projects open the app (verified
+ * by the assetlinks.json `tenant web` writes there).
+ */
+export function flavorManifest(t: any): string {
+  const hosts = Object.values(t.firebase.projects as Record<string, string>).map(appSiteHost);
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from tenants/${t.id}.json by \`tenant flavors\`. Do not edit. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity android:name=".MainActivity" android:exported="true">
+            <!-- Emailed sign-in links (P4-s03): they open the app, which finishes signing in. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+${hosts.map((h) => `                <data android:host="${h}" />`).join('\n')}
+                <data android:pathPrefix="${EMAIL_LINK_PATH}" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+`;
+}
