@@ -41,7 +41,7 @@ Firebase trusts only the signing certificates it knows. Without them, Google sig
    ```json
    "testCerts": [{ "name": "Cloud Shell debug key", "sha1": "AB:CD:…", "sha256": "12:34:…" }]
    ```
-3. Run `tenant deploy <id> dev --only=infra,web`. Terraform registers the certificates on the dev and stage projects, and the app site publishes `/.well-known/assetlinks.json`, so Android opens emailed links in the app.
+3. Run `tenant deploy <id> dev --only=images,infra,web` (the tenant file changed, so the share pages image is rebuilt). Terraform registers the certificates on the dev and stage projects. Emailed links open through the project's default domain, `<project>.firebaseapp.com`; Firebase Hosting vouches for the app there from those certificates, so Android opens the links in the app.
 4. Rebuild from the `flavors` line onwards, so the manifest picks up the email-link filter.
 
 The store build's certificate goes in `apps.androidCertSha256` and `apps.androidCertSha1`, from Play Console → Test and release → App integrity → App signing; prod uses only those. Terraform owns this list, so fingerprints added by hand in the Firebase console are removed at the next infra deploy.

@@ -5,9 +5,13 @@ import 'package:realtor_core/realtor_core.dart';
 
 import '../account/account_data.dart';
 
-/// On a phone, where emailed links come back to: the project's app site
-/// (its Hosting domain, so Firebase accepts it) and the app's ids.
-typedef PhoneLinks = ({String appSite, String androidId, String iosId});
+/// On a phone: the app site the link continues to, the project's default
+/// Hosting domain the link opens through (the only kind Firebase accepts as
+/// linkDomain: `<project>.firebaseapp.com`), and the app's ids.
+typedef PhoneLinks = ({String appSite, String linkDomain, String androidId, String iosId});
+
+/// The project's default Hosting domain, which emailed links open through.
+String authLinkDomain(String projectId) => '$projectId.firebaseapp.com';
 
 /// The customer app's Hosting site for a project, as Terraform names it
 /// (google_firebase_hosting_site.app; tenant-cli appSiteHost).
@@ -17,14 +21,15 @@ String appSiteHost(String projectId) {
 }
 
 /// The settings for an emailed sign-in link. On the web it returns to
-/// [continueUrl]; on a phone it goes through the app site, whose verified
-/// App Link (`tenant flavors`) opens the app at /__/auth/links.
+/// [continueUrl]; on a phone it goes through the project's default Hosting
+/// domain, whose verified App Link (`tenant flavors`) opens the app at
+/// /__/auth/links.
 ActionCodeSettings signInLinkSettings(Uri continueUrl, PhoneLinks? phone) => phone == null
     ? ActionCodeSettings(url: continueUrl.toString(), handleCodeInApp: true)
     : ActionCodeSettings(
         url: Uri.https(phone.appSite, '/account').toString(),
         handleCodeInApp: true,
-        linkDomain: phone.appSite,
+        linkDomain: phone.linkDomain,
         androidPackageName: phone.androidId,
         androidInstallApp: false,
         iOSBundleId: phone.iosId,

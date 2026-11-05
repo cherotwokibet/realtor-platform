@@ -11,6 +11,7 @@ import {
   patchManifest,
   appLinkPaths,
   appSiteHost,
+  authLinkHost,
   flavorManifest,
   onlyFlavorBlockChanged,
 } from '../src/flavors.ts';
@@ -109,12 +110,14 @@ test('app-link paths match the share server\'s', () => {
   assert.deepEqual([...list.matchAll(/'([^']+)'/g)].map((m) => m[1]), appLinkPaths);
 });
 
-test('emailed sign-in links open the app from each project\'s app site', () => {
+test('emailed sign-in links open the app from each project\'s default Hosting domain', () => {
   assert.equal(appSiteHost('rte-realtor-dev'), 'rte-realtor-dev-app.web.app');
   assert.equal(appSiteHost('a-very-long-project-name-x-prod'), 'a-very-long-project-name-x-app.web.app', 'Terraform trims to 26 characters');
   const t = tenant('realtime-estates');
   const m = flavorManifest(t);
-  for (const p of Object.values(t.firebase.projects as Record<string, string>)) assert.ok(m.includes(`android:host="${appSiteHost(p)}"`), p);
+  for (const p of Object.values(t.firebase.projects as Record<string, string>)) assert.ok(m.includes(`android:host="${authLinkHost(p)}"`), p);
+  assert.equal(authLinkHost('rte-realtor-dev'), 'rte-realtor-dev.firebaseapp.com');
+  assert.ok(!m.includes('-app.web.app'), 'not the app site: Firebase refuses it as linkDomain');
   assert.match(m, /<intent-filter android:autoVerify="true">[\s\S]*android:pathPrefix="\/__\/auth\/links"/);
   assert.match(m, /<activity android:name=".MainActivity"/);
 });
