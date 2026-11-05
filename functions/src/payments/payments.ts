@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import type { Firestore } from 'firebase-admin/firestore';
+import type { DocumentReference, Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { docId, kenyanPhone } from '../model/schema';
-import { parseInput } from '../api/auth';
+import { type Caller, parseInput, requireManager } from '../api/auth';
+import { MAX_FEATURE_DAYS } from '../api/listings';
 import { tenantFeatures } from '../api/features';
 import { type DarajaConfig, darajaToken, stkPush, stkQuery, type StkOutcome } from './daraja';
 
@@ -27,6 +28,8 @@ export interface PaymentDeps {
   daraja: DarajaConfig;
   /** The deployed mpesaCallback URL, without query. */
   callbackUrl: string;
+  /** Price of one featured day (D20); null or absent switches featured-ad payments off. */
+  featuredPerDayKES?: number | null;
   fetch?: typeof fetch;
 }
 
@@ -84,27 +87,87 @@ export async function startViewingPayment(
   });
   if (reuse) return { paymentId: paymentRef.id, status: 'pending' };
 
+  await sendPush(paymentRef, token, { amountKES, phone, accountReference: 'Viewing', description: 'Viewing fee' }, deps, now);
+  return { paymentId: paymentRef.id, status: 'pending' };
+}
+
+/** Asks Daraja to prompt the phone; a refusal marks the payment failed. */
+async function sendPush(
+  paymentRef: DocumentReference,
+  token: string,
+  push: { amountKES: number; phone: string; accountReference: string; description: string },
+  deps: PaymentDeps,
+  now: Date,
+): Promise<void> {
   try {
     const bearer = await darajaToken(deps.daraja, deps.fetch);
-    const r = await stkPush(
-      deps.daraja,
-      bearer,
-      {
-        amountKES,
-        phone,
-        callbackUrl: `${deps.callbackUrl}?t=${token}`,
-        accountReference: 'Viewing',
-        description: 'Viewing fee',
-      },
-      now,
-      deps.fetch,
-    );
+    const r = await stkPush(deps.daraja, bearer, { ...push, callbackUrl: `${deps.callbackUrl}?t=${token}` }, now, deps.fetch);
     await paymentRef.update({ checkoutRequestId: r.checkoutRequestId, merchantRequestId: r.merchantRequestId, updatedAt: now });
   } catch (e) {
     await paymentRef.update({ status: 'failed', reason: e instanceof Error ? e.message.slice(0, 200) : 'STK Push failed', updatedAt: now });
     throw new HttpsError('unavailable', 'M-Pesa did not take the request. Please try again in a minute.');
   }
-  return { paymentId: paymentRef.id, status: 'pending' };
+}
+
+const featuredInput = z.object({ listingId: docId, days: z.number().int().min(1).max(MAX_FEATURE_DAYS), phone: kenyanPhone });
+
+/**
+ * Featured-ad fee (D20): a manager pays for [days] of featuring a live
+ * listing, from their own M-Pesa. The price is days x the project's
+ * FEATURED_PER_DAY_KES, never from the client. The listing is featured only
+ * when the payment settles as paid (see settle). Repeated taps within 2
+ * minutes for the same listing, days and phone reuse the push already sent.
+ */
+export async function startFeaturedPayment(
+  db: Firestore,
+  caller: Caller,
+  input: unknown,
+  deps: PaymentDeps,
+  now = new Date(),
+): Promise<{ paymentId: string; amountKES: number; status: 'pending' }> {
+  requireManager(caller);
+  const req = parseInput(featuredInput, input);
+  const features = await tenantFeatures(db);
+  if (features?.mpesa !== true) throw new HttpsError('failed-precondition', 'M-Pesa payments are not switched on for this realtor');
+  const perDay = deps.featuredPerDayKES;
+  if (!perDay) throw new HttpsError('failed-precondition', 'featured-ad payments have no price set');
+  const amountKES = perDay * req.days;
+
+  const listing = await db.collection('listings').doc(req.listingId).get();
+  if (!listing.exists || listing.get('status') !== 'live') throw new HttpsError('failed-precondition', 'only a live listing can be featured');
+
+  const pending = await db
+    .collection('payments')
+    .where('listingId', '==', req.listingId)
+    .where('purpose', '==', 'featured-ad')
+    .where('status', '==', 'pending')
+    .get();
+  const open = pending.docs.find(
+    (d) => d.get('days') === req.days && d.get('phone') === req.phone && now.getTime() - (d.get('createdAt').toDate() as Date).getTime() < REUSE_PENDING_MS,
+  );
+  if (open) return { paymentId: open.id, amountKES, status: 'pending' };
+
+  const token = randomBytes(24).toString('hex');
+  const paymentRef = db.collection('payments').doc(`featured-ad_${req.listingId}_${now.getTime()}`);
+  await paymentRef.set({
+    purpose: 'featured-ad',
+    amountKES,
+    phone: req.phone,
+    listingId: req.listingId,
+    days: req.days,
+    requestedBy: caller.uid,
+    checkoutRequestId: null,
+    merchantRequestId: null,
+    callbackToken: token,
+    status: 'pending',
+    receipt: null,
+    reason: null,
+    attempts: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await sendPush(paymentRef, token, { amountKES, phone: req.phone, accountReference: 'Featured', description: 'Featured listing' }, deps, now);
+  return { paymentId: paymentRef.id, amountKES, status: 'pending' };
 }
 
 /** Applies an outcome to a pending payment (callback or query). Returns false when nothing changed. */
@@ -114,6 +177,8 @@ async function settle(db: Firestore, paymentId: string, outcome: StkOutcome, now
   return db.runTransaction(async (tx) => {
     const p = await tx.get(ref);
     if (!p.exists || p.get('status') !== 'pending') return false;
+    const featuring = outcome.status === 'paid' && p.get('purpose') === 'featured-ad' ? db.collection('listings').doc(String(p.get('listingId'))) : null;
+    const listingSnap = featuring ? await tx.get(featuring) : null;
     if (outcome.status === 'paid') {
       const expected = Number(p.get('amountKES'));
       if (outcome.amountKES !== null && outcome.amountKES !== expected) {
@@ -123,6 +188,16 @@ async function settle(db: Firestore, paymentId: string, outcome: StkOutcome, now
       tx.update(ref, { status: 'paid', receipt: outcome.receipt, reason: null, updatedAt: now });
       const viewingId = p.get('viewingId') as string | undefined;
       if (viewingId) tx.update(db.collection('viewings').doc(viewingId), { paymentId: ref.id });
+      if (featuring && listingSnap?.exists) {
+        // Paid days add to any featuring still running; a listing taken down since stays down.
+        const current = listingSnap.get('featuredUntil')?.toDate?.() as Date | undefined;
+        const from = current && current > now ? current : now;
+        if (listingSnap.get('status') === 'live') {
+          tx.update(featuring, { featuredUntil: new Date(from.getTime() + Number(p.get('days')) * 86_400_000), updatedAt: now });
+        } else {
+          tx.update(ref, { reason: 'paid, but the listing is no longer live: not featured, refund by hand', updatedAt: now });
+        }
+      }
       return true;
     }
     tx.update(ref, { status: outcome.status, reason: outcome.reason.slice(0, 200), updatedAt: now });
