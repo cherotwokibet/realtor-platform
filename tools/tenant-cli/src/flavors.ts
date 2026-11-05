@@ -169,3 +169,12 @@ ${hosts.map((h) => `                <data android:host="${h}" />`).join('\n')}
 </manifest>
 `;
 }
+
+/** True when [current] differs from [committed] only inside the generated flavors block. */
+export function onlyFlavorBlockChanged(current: string, committed: string): boolean {
+  try {
+    return pubspecWithFlavors(current, []) === committed;
+  } catch {
+    return false;
+  }
+}

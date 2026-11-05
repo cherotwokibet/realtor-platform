@@ -12,6 +12,7 @@ import {
   appLinkPaths,
   appSiteHost,
   flavorManifest,
+  onlyFlavorBlockChanged,
 } from '../src/flavors.ts';
 import { repoRoot } from '../src/validate.ts';
 
@@ -116,4 +117,12 @@ test('emailed sign-in links open the app from each project\'s app site', () => {
   for (const p of Object.values(t.firebase.projects as Record<string, string>)) assert.ok(m.includes(`android:host="${appSiteHost(p)}"`), p);
   assert.match(m, /<intent-filter android:autoVerify="true">[\s\S]*android:pathPrefix="\/__\/auth\/links"/);
   assert.match(m, /<activity android:name=".MainActivity"/);
+});
+
+test('a pubspec changed only in the generated flavors block counts as unchanged', () => {
+  const src = readFileSync(join(repoRoot(), 'apps/realtor_app/pubspec.yaml'), 'utf8');
+  assert.ok(onlyFlavorBlockChanged(pubspecWithFlavors(src, ['realtimeEstates']), src));
+  assert.ok(onlyFlavorBlockChanged(src, src));
+  assert.ok(!onlyFlavorBlockChanged(pubspecWithFlavors(src, ['realtimeEstates']).replace('video_player:', 'video_player_x:'), src), 'a real edit still counts');
+  assert.ok(!onlyFlavorBlockChanged('name: x\n', src), 'no block at all');
 });
