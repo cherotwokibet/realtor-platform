@@ -8,15 +8,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 import '../providers.dart';
 import 'results_screen.dart';
 
-/// Results as a list or on the map (P3-s04, P4-s02). Kept while filters
-/// change, so drawing an area or removing a chip stays on the map.
-class ResultsViewNotifier extends Notifier<bool> {
-  @override
-  bool build() => false;
-  void set(bool map) => state = map;
-}
-
-final resultsOnMapProvider = NotifierProvider<ResultsViewNotifier, bool>(ResultsViewNotifier.new);
+export 'results_view.dart';
 
 /// Map tiles load from the network; tests switch them off.
 final mapTilesEnabledProvider = Provider<bool>((ref) => true);

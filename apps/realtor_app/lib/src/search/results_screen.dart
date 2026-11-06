@@ -9,7 +9,8 @@ import '../account/account_screen.dart';
 import '../saved/favourites.dart';
 import 'purpose.dart';
 import '../nav.dart';
-import 'results_map.dart';
+import 'results_map_loader.dart';
+import 'results_view.dart';
 
 /// Results for a filter URL. Every change of filter is a new URL, so the
 /// browser back button, shared links and app deep links all work.
@@ -63,7 +64,7 @@ class ResultsScreen extends ConsumerWidget {
                   child: _ActiveFilters(filters: filters, onChange: (f) => _go(context, f)),
                 ),
                 SizedBox(height: b.spacing.sm),
-                Expanded(child: ResultsMap(hits: r.hits, filters: filters, onChange: (f) => _go(context, f))),
+                Expanded(child: DeferredResultsMap(hits: r.hits, filters: filters, onChange: (f) => _go(context, f))),
               ])
             : ListView(
           padding: EdgeInsets.all(b.spacing.gutter),
