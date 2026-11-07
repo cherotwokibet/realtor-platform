@@ -42,4 +42,20 @@ void main() {
     expect(ListingDraft(description: 'x' * 3001).problems()['description'], 'Under 3,000 characters.');
     expect(ListingDraft.fromDoc('l1', {'description': 'Hi'}).description, 'Hi');
   });
+
+  test('Kiswahili: same facts, nothing invented (P7-s02)', () {
+    const d = ListingDraft(
+      purpose: 'rent', type: 'apartment', beds: 2, baths: 2, priceKES: 65000, depositMonths: 2, serviceChargeKES: 3000,
+      area: 'kilimani', estate: 'Rose Court', amenities: ['Parking', 'CCTV'],
+    );
+    final c = suggestListingCopy(d, areaName: 'Kilimani', lang: 'sw');
+    expect(c.title, 'Apartment ya vyumba 2 vya kulala ya kupangisha katika Rose Court, Kilimani');
+    expect(c.description, startsWith('Apartment ya kupangisha katika Rose Court, Kilimani, chenye vyumba 2 vya kulala na bafu 2.'));
+    expect(c.description, contains('Ina parking na CCTV.'));
+    expect(c.description, contains('Kodi ni ${formatKes(65000)} kwa mwezi, amana ya miezi 2 na malipo ya huduma ya ${formatKes(3000)} kwa mwezi.'));
+    final plot = suggestListingCopy(const ListingDraft(purpose: 'sale', type: 'land', beds: 0, baths: 0, priceKES: 3000000, area: 'kitengela'), areaName: 'Kitengela', lang: 'sw');
+    expect(plot.title, 'Kiwanja cha kuuzwa katika Kitengela');
+    expect(plot.description, isNot(contains('vyumba')));
+    expect(plot.description, contains('Bei: ${formatKes(3000000)}.'));
+  });
 }
