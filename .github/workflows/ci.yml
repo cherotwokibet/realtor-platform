@@ -145,6 +145,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned: the version the code is built and tested with (3.50 deprecates
+          # package:flutter/material.dart; moving to material_ui is its own change).
+          flutter-version: 3.47.8
           cache: true
       - run: flutter --version
       - name: Resolve workspace
@@ -197,6 +200,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned: the version the code is built and tested with (3.50 deprecates
+          # package:flutter/material.dart; moving to material_ui is its own change).
+          flutter-version: 3.47.8
           cache: true
       - run: flutter pub get
       - name: Prepare ${{ matrix.tenant }}
@@ -233,6 +239,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned: the version the code is built and tested with (3.50 deprecates
+          # package:flutter/material.dart; moving to material_ui is its own change).
+          flutter-version: 3.47.8
           cache: true
       - run: flutter pub get
       - run: node tools/tenant-cli/src/cli.ts prepare realtime-estates
@@ -273,6 +282,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned: the version the code is built and tested with (3.50 deprecates
+          # package:flutter/material.dart; moving to material_ui is its own change).
+          flutter-version: 3.47.8
           cache: true
       - run: flutter pub get
       - name: Android folder + one flavor per tenant
@@ -394,6 +406,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned: the version the code is built and tested with (3.50 deprecates
+          # package:flutter/material.dart; moving to material_ui is its own change).
+          flutter-version: 3.47.8
           cache: true
       - run: flutter pub get
       - name: Seed the emulator, read it back, and serve share pages from it
