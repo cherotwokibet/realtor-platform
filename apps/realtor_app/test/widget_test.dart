@@ -24,7 +24,8 @@ void main() {
         child: const RealtorApp(),
       ));
       await tester.pump();
-      expect(find.text(tenant.tagline ?? tenant.name), findsOneWidget);
+      // The hero says the realtor's own words, or its tagline when it has none.
+      expect(find.text(tenant.home.hero?.title ?? tenant.tagline ?? tenant.name), findsOneWidget);
       expect(find.text('Bedsitter'), findsOneWidget);
       if (tenant.features.rent) expect(find.text('Rent'), findsOneWidget);
       final app = tester.widget<MaterialApp>(find.byType(MaterialApp));

@@ -86,4 +86,25 @@ void main() {
       expect(t.withFeatures(off).name, t.name);
     });
   });
+
+  group('home content', () {
+    test('the realtor\'s words, and whether each band names a photo', () {
+      final json = load('demo-homes');
+      final t = TenantConfig.fromJson(json);
+      expect(t.home.hero!.title, isNotEmpty);
+      expect(t.home.hero!.hasImage, isFalse);
+      (json['home'] as Map<String, Object?>)['hero'] = {'title': 'Welcome', 'image': 'brand/demo-homes/home/hero.jpg'};
+      final withPhoto = TenantConfig.fromJson(json);
+      expect(withPhoto.home.hero!.hasImage, isTrue);
+      expect(withPhoto.home.hero!.text, isNull);
+      expect(withPhoto.withFeatures(withPhoto.features).home.hero!.title, 'Welcome');
+    });
+
+    test('a tenant file without `home` has no bands', () {
+      final json = load('demo-homes')..remove('home');
+      final t = TenantConfig.fromJson(json);
+      expect(t.home.hero, isNull);
+      expect(t.home.banner, isNull);
+    });
+  });
 }

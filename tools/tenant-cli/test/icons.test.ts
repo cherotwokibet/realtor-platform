@@ -4,7 +4,7 @@ import { readFileSync, mkdtempSync, cpSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { generateIcons, recolourSvg } from '../src/icons.ts';
+import { generateIcons, recolourSvg, writeHomeImages } from '../src/icons.ts';
 import { repoRoot } from '../src/validate.ts';
 
 test('recolourSvg sets every fill', () => {
@@ -50,3 +50,15 @@ for (const id of ['realtime-estates', 'demo-homes']) {
     assert.equal(opaqueInBorder, 0);
   });
 }
+
+test('home page photos are resized to WebP under fixed names; none named, none written', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'home-'));
+  mkdirSync(join(root, 'brand', 'x', 'home'), { recursive: true });
+  await sharp({ create: { width: 3000, height: 1200, channels: 3, background: { r: 30, g: 60, b: 90 } } }).jpeg().toFile(join(root, 'brand/x/home/hero.jpg'));
+  const out = mkdtempSync(join(tmpdir(), 'home-out-'));
+  assert.deepEqual(await writeHomeImages(root, { home: { hero: { title: 't', image: 'brand/x/home/hero.jpg' }, banner: { title: 'b' } } }, out), ['home-hero.webp']);
+  const meta = await sharp(join(out, 'home-hero.webp')).metadata();
+  assert.equal(meta.format, 'webp');
+  assert.equal(meta.width, 1600);
+  assert.deepEqual(await writeHomeImages(root, {}, out), []);
+});

@@ -38,6 +38,12 @@ void main() {
     expect(f.minBeds, 3);
   });
 
+  test('"bnb" means a short stay', () {
+    for (final t in ['bnb in westlands', 'air bnb kilimani', '2br b&b westlands']) {
+      expect(parse(t).filters.purpose, Purpose.shortStay, reason: t);
+    }
+  });
+
   test('a purpose the tenant has switched off is ignored', () {
     final r = parse('airbnb studio westlands', allowed: const {Purpose.rent, Purpose.sale});
     expect(r.filters.purpose, Purpose.rent);

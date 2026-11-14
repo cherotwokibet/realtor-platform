@@ -12,6 +12,7 @@ This is a fresh system. The old vendor app was a reference only, and no data mov
 |---|---|---|
 | **Find a home** | Search to rent or buy by area, budget, bedrooms, type and amenities. Type in plain English or Swahili ("2br Kilimani under 60k with parking"). See results as a list or on a map, and draw an area on the map. Every search is a shareable link. | Built |
 | **See a home** | Photos and video, price, key facts, description, a "Verified" badge with its date, the agent, and similar homes. Share pages load in 0.9 s on 4G. | Built |
+| **BnB (daily rentals)** | A "BnB" link beside Rent and Buy. Staff add a home as a short stay with a price a night. Visitors search and filter them like any other home, and ask about dates by WhatsApp, call or the enquiry form. | Built (client asked, Nov 2026) |
 | **Contact** | WhatsApp with the listing pre-filled, call, an enquiry form with data protection consent, and booking a viewing in a free slot. Every contact is logged as a lead. | Built |
 | **Area guides** | 16 Nairobi areas, each with its description, typical rent and live listings. | Built |
 | **Accounts and alerts** | Save homes on the phone. Sign in by email link. Get an in-app alert (and a push on Android) within 5 minutes when a new home matches a saved search. | Built (deploy pending) |
@@ -41,7 +42,7 @@ This is a fresh system. The old vendor app was a reference only, and no data mov
 ## 4. Could have, and won't have now
 
 - **Could, as priced extras:** in-app chat (WhatsApp hand-off works now); deposits and featured-ad fees by M-Pesa; push campaigns to customer segments; PDF reports; area trend charts; an AI copywriter (the current one is rule-based).
-- **Won't have in this release:** short-stay bookings with calendars and payment; tenant and rent management for landlords; a mortgage calculator or bank partnerships; a multi-agency marketplace.
+- **Won't have in this release:** booking a BnB online with an availability calendar and payment (BnB homes are listed and enquired about now); tenant and rent management for landlords; a mortgage calculator or bank partnerships; a multi-agency marketplace.
 
 Any change to sections 1 to 3 after sign-off is a change request with its own estimate. Section 1 of `docs/commercial/pricing-and-contract.md` prices the extras.
 

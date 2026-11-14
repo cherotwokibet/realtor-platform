@@ -86,7 +86,9 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         },
         // One demo listing reuses another's photo, so the flag shows.
         photoMatch: i == 4,
-        featuredUntil: i == 0 ? _now.add(const Duration(days: 12)) : null,
+        // Counted from today, not from the demo's fixed date: the screens ask
+        // "featured now?" against the real clock, so a fixed end date expires.
+        featuredUntil: i == 0 ? (now ?? _clock()).add(const Duration(days: 12)) : null,
       ));
     }
     // Viewings: some past (done, no-show, cancelled, one still confirmed to close), most this week.

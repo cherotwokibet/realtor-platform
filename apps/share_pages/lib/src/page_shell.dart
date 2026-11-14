@@ -16,7 +16,7 @@ const pageCss = '''
 body{margin:0;background:var(--color-background);color:var(--color-text);font-family:var(--font-body);font-size:var(--text-body);line-height:1.5}
 main{max-width:720px;margin:0 auto;padding:16px}
 header{padding:12px 16px;background:var(--color-surface);border-bottom:1px solid var(--color-border)}
-header img{height:36px;width:auto;display:block}
+header img{height:56px;width:auto;display:block}
 h1{font-family:var(--font-display);font-size:var(--text-headline);color:var(--color-ink);margin:16px 0 4px;line-height:1.2}
 h2{font-family:var(--font-display);font-size:var(--text-title);color:var(--color-ink);margin:24px 0 8px}
 .price{font-size:var(--text-title);color:var(--color-primary);font-weight:600;margin:0 0 8px}
@@ -94,7 +94,7 @@ Component sharePage({
     body: Component.fragment([
       header([
         a(href: '/', [
-          img(src: logoPath, alt: tenant.name, height: 36),
+          img(src: logoPath, alt: tenant.name, height: 56),
         ]),
       ]),
       main_(body),

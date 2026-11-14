@@ -223,6 +223,32 @@ class Features {
 
 enum FirebaseEnv { dev, stage, prod }
 
+/// One photo band on the home page: the hero behind the search, or the
+/// promotion under it. The words are the realtor's (tenant file `home`).
+/// [hasImage] says the tenant file names a photo; `tenant prepare` then
+/// bundles it under a fixed name, and the band falls back to the brand
+/// colour when there is none.
+class HomeBand {
+  const HomeBand({required this.title, this.text, this.hasImage = false});
+  final String title;
+  final String? text;
+  final bool hasImage;
+
+  static HomeBand? fromJson(Object? j) {
+    if (j is! Map<String, Object?>) return null;
+    return HomeBand(title: _req<String>(j, 'title', 'home'), text: j['text'] as String?, hasImage: j['image'] is String);
+  }
+}
+
+/// What the realtor says on the home page; both parts are optional.
+class HomeContent {
+  const HomeContent({this.hero, this.banner});
+  final HomeBand? hero, banner;
+
+  factory HomeContent.fromJson(Object? j) =>
+      j is Map<String, Object?> ? HomeContent(hero: HomeBand.fromJson(j['hero']), banner: HomeBand.fromJson(j['banner'])) : const HomeContent();
+}
+
 class TenantConfig {
   const TenantConfig({
     required this.id,
@@ -246,6 +272,7 @@ class TenantConfig {
     required this.extraLocales,
     required this.currency,
     required this.features,
+    this.home = const HomeContent(),
     this.mapTiles = defaultMapTiles,
     this.mapAttribution = defaultMapAttribution,
   });
@@ -269,6 +296,9 @@ class TenantConfig {
   final List<String> extraLocales;
   final String currency;
   final Features features;
+
+  /// Home page words and photos (tenant file `home`).
+  final HomeContent home;
 
   /// Map search (P3-s04): a raster tile URL template ({z}/{x}/{y}) and the
   /// credit the provider requires. OpenStreetMap unless the tenant file sets
@@ -300,6 +330,7 @@ class TenantConfig {
         extraLocales: extraLocales,
         currency: currency,
         features: f,
+        home: home,
         mapTiles: mapTiles,
         mapAttribution: mapAttribution,
       );
@@ -343,6 +374,7 @@ class TenantConfig {
       extraLocales: _req<List<Object?>>(locale, 'extra', 'locale').cast<String>(),
       currency: _req<String>(locale, 'currency', 'locale'),
       features: Features.fromJson(_obj(j, 'features', p)),
+      home: HomeContent.fromJson(j['home']),
       mapTiles: (j['map'] as Map?)?['tiles'] as String? ?? defaultMapTiles,
       mapAttribution: (j['map'] as Map?)?['attribution'] as String? ?? defaultMapAttribution,
     );

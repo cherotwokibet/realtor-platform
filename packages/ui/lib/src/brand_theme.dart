@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_tokens/realtor_tokens.dart';
+import 'tenant_scope.dart';
 
 /// Brand colours Material's ColorScheme has no slot for.
 /// Read with `context.brand`.
@@ -171,7 +172,8 @@ ThemeData buildBrandTheme(TenantConfig tenant) {
         radiusSm: b.radiusSm,
         radiusMd: b.radiusMd,
         spacing: tokens.spacing,
-        logoAsset: 'assets/tenant/logo-horizontal.png',
+        // Flavor builds keep each tenant's files in their own folder.
+        logoAsset: '${tenantAssetDir()}/logo-horizontal.png',
       ),
     ],
   );

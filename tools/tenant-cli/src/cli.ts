@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline/promises';
 import { join, basename, relative } from 'node:path';
 import { validateTenants, repoRoot } from './validate.ts';
 import { tenantCss } from './css.ts';
-import { generateIcons } from './icons.ts';
+import { generateIcons, writeHomeImages } from './icons.ts';
 import { flutterConfigs } from './flutter-config.ts';
 import { createTenant } from './create.ts';
 import { rebrandTenant } from './rebrand.ts';
@@ -117,6 +117,8 @@ async function writeAppAssets(root: string, t: any, rel: string, alsoTo: string[
       JSON.stringify(fonts.map((f) => ({ family: f.family, weight: f.weight, asset: `${rel}/fonts/${f.file}` })), null, 2),
     );
     if (app !== 'realtor_app') continue;
+    // Home page photos, when the tenant has some.
+    await writeHomeImages(root, t, out);
     // Launcher icon + splash inputs live in a subfolder, which Flutter does not bundle.
     mkdirSync(join(out, 'icons'), { recursive: true });
     for (const f of r.files.filter((f) => f.endsWith('.png'))) copyFileSync(join(r.outDir, f), join(out, 'icons', f));

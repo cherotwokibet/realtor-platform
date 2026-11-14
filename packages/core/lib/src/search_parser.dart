@@ -28,7 +28,7 @@ ParsedSearch parseSearch(
   // Purpose.
   var p = purpose;
   for (final (want, re) in [
-    (Purpose.shortStay, RegExp(r' (short[ -]?stay|airbnb|per night|a night|nightly|kwa usiku|holiday) ')),
+    (Purpose.shortStay, RegExp(r' (short[ -]?stay|air ?bnb|bnb|b&b|per night|a night|nightly|kwa usiku|holiday) ')),
     (Purpose.sale, RegExp(r' (for sale|to buy|buy|buying|kununua|inauzwa|ya kuuza) ')),
     (Purpose.rent, RegExp(r' (for rent|to rent|to let|rent|rental|kukodisha|ya kukodi|kodi) ')),
   ]) {

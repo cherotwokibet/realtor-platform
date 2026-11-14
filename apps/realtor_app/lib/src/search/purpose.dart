@@ -2,8 +2,8 @@ import 'package:realtor_core/realtor_core.dart';
 
 /// App wording and feature switch for each search purpose.
 extension PurposeUi on Purpose {
-  String get label => switch (this) { Purpose.rent => 'Rent', Purpose.sale => 'Buy', Purpose.shortStay => 'Short stay' };
-  String get heading => switch (this) { Purpose.rent => 'to rent', Purpose.sale => 'for sale', Purpose.shortStay => 'for short stays' };
+  String get label => switch (this) { Purpose.rent => 'Rent', Purpose.sale => 'Buy', Purpose.shortStay => 'BnB' };
+  String get heading => switch (this) { Purpose.rent => 'to rent', Purpose.sale => 'for sale', Purpose.shortStay => 'for short stays (BnB)' };
   Feature get feature => switch (this) { Purpose.rent => Feature.rent, Purpose.sale => Feature.sale, Purpose.shortStay => Feature.shortStay };
 
   /// Price period shown after a price.
