@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
@@ -152,7 +154,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _PhotoBand(
           key: const Key('home-banner'),
           band: banner,
-          asset: homeBannerAsset,
+          name: 'banner',
           minHeight: 120,
           onTap: listProperty == null ? null : () => ref.read(urlOpenerProvider)(listProperty),
         ),
@@ -181,7 +183,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: ListView(
         padding: EdgeInsets.all(b.spacing.gutter),
         children: [
-          _PhotoBand(key: const Key('home-hero'), band: hero, asset: homeHeroAsset, minHeight: wide ? 220 : 120, large: true),
+          _PhotoBand(key: const Key('home-hero'), band: hero, name: 'hero', minHeight: wide ? 220 : 120, large: true),
           // The search sits over the bottom edge of the photo.
           Transform.translate(
             offset: Offset(0, -b.spacing.xl),
@@ -230,22 +232,67 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-/// The home page photos `tenant prepare` bundles when the tenant names some.
-String get homeHeroAsset => '${tenantAssetDir()}/home-hero.webp';
-String get homeBannerAsset => '${tenantAssetDir()}/home-banner.webp';
+/// A band's n-th photo (1-based), as `tenant prepare` bundles it.
+String homePhotoAsset(String band, int n) => '${tenantAssetDir()}/home-$band-$n.webp';
 
 /// A band with the realtor's words over a photo, or over the brand colour
-/// when the tenant has no photo (or it fails to load).
-class _PhotoBand extends StatelessWidget {
-  const _PhotoBand({super.key, required this.band, required this.asset, required this.minHeight, this.large = false, this.onTap});
+/// when the tenant has no photo (or it fails to load). With several photos
+/// it shows them in turn, cross-fading every [interval]; visitors who have
+/// turned animations off see the first one only.
+class _PhotoBand extends StatefulWidget {
+  const _PhotoBand({super.key, required this.band, required this.name, required this.minHeight, this.large = false, this.onTap});
   final HomeBand band;
-  final String asset;
+
+  /// `hero` or `banner`: which bundled photos to use.
+  final String name;
   final double minHeight;
   final bool large;
   final VoidCallback? onTap;
 
+  static const interval = Duration(seconds: 7);
+
+  @override
+  State<_PhotoBand> createState() => _PhotoBandState();
+}
+
+class _PhotoBandState extends State<_PhotoBand> {
+  Timer? _timer;
+  int _index = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final rotate = widget.band.imageCount > 1 && !MediaQuery.disableAnimationsOf(context);
+    if (rotate && _timer == null) {
+      _timer = Timer.periodic(_PhotoBand.interval, (_) => _next());
+    } else if (!rotate) {
+      _timer?.cancel();
+      _timer = null;
+      _index = 0;
+    }
+  }
+
+  void _next() {
+    final count = widget.band.imageCount;
+    final next = (_index + 1) % count;
+    // Fetch the next photo first, so the fade never shows a blank. One that
+    // fails to load is shown as the brand colour rather than stopping the turn.
+    void show() {
+      if (mounted) setState(() => _index = next);
+    }
+
+    precacheImage(AssetImage(homePhotoAsset(widget.name, next + 1)), context, onError: (_, __) {}).then((_) => show(), onError: (Object _) => show());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final band = widget.band;
     final b = context.brand;
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
@@ -262,24 +309,36 @@ class _PhotoBand extends StatelessWidget {
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
-          onTap: onTap,
+          onTap: widget.onTap,
           child: Stack(
             children: [
               Positioned.fill(
-                child: onPhoto ? Image.asset(asset, fit: BoxFit.cover, excludeFromSemantics: true, errorBuilder: (_, __, ___) => plain) : plain,
+                child: onPhoto
+                    ? AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 900),
+                        layoutBuilder: (current, previous) => Stack(fit: StackFit.expand, children: [...previous, if (current != null) current]),
+                        child: Image.asset(
+                          homePhotoAsset(widget.name, _index + 1),
+                          key: ValueKey('${widget.name}-$_index'),
+                          fit: BoxFit.cover,
+                          excludeFromSemantics: true,
+                          errorBuilder: (_, __, ___) => plain,
+                        ),
+                      )
+                    : plain,
               ),
               if (onPhoto) Positioned.fill(child: ColoredBox(color: scheme.scrim.withValues(alpha: 0.45))),
               ConstrainedBox(
-                constraints: BoxConstraints(minHeight: minHeight, minWidth: double.infinity),
+                constraints: BoxConstraints(minHeight: widget.minHeight, minWidth: double.infinity),
                 child: Padding(
                   // The hero leaves room at the bottom for the search card over its edge.
-                  padding: EdgeInsets.fromLTRB(b.spacing.xl, b.spacing.xl, b.spacing.xl, large ? b.spacing.xl * 2 : b.spacing.xl),
+                  padding: EdgeInsets.fromLTRB(b.spacing.xl, b.spacing.xl, b.spacing.xl, widget.large ? b.spacing.xl * 2 : b.spacing.xl),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(band.title, style: (large ? text.headlineMedium : text.titleLarge)?.copyWith(color: ink)),
+                      Text(band.title, style: (widget.large ? text.headlineMedium : text.titleLarge)?.copyWith(color: ink)),
                       if (band.text != null) ...[
                         SizedBox(height: b.spacing.sm),
                         Text(band.text!, style: text.bodyLarge?.copyWith(color: ink)),

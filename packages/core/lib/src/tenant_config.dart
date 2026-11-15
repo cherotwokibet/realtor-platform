@@ -225,18 +225,28 @@ enum FirebaseEnv { dev, stage, prod }
 
 /// One photo band on the home page: the hero behind the search, or the
 /// promotion under it. The words are the realtor's (tenant file `home`).
-/// [hasImage] says the tenant file names a photo; `tenant prepare` then
-/// bundles it under a fixed name, and the band falls back to the brand
-/// colour when there is none.
+/// [imageCount] is how many photos the tenant file names (`images`, or one
+/// `image`); `tenant prepare` bundles them under fixed, numbered names, and
+/// the band falls back to the brand colour when there are none.
 class HomeBand {
-  const HomeBand({required this.title, this.text, this.hasImage = false});
+  const HomeBand({required this.title, this.text, this.imageCount = 0});
   final String title;
   final String? text;
-  final bool hasImage;
+  final int imageCount;
+
+  bool get hasImage => imageCount > 0;
+
+  /// Matches the tenant schema's limit.
+  static const maxImages = 8;
 
   static HomeBand? fromJson(Object? j) {
     if (j is! Map<String, Object?>) return null;
-    return HomeBand(title: _req<String>(j, 'title', 'home'), text: j['text'] as String?, hasImage: j['image'] is String);
+    final images = j['images'] is List ? (j['images'] as List).length : (j['image'] is String ? 1 : 0);
+    return HomeBand(
+      title: _req<String>(j, 'title', 'home'),
+      text: j['text'] as String?,
+      imageCount: images > maxImages ? maxImages : images,
+    );
   }
 }
 

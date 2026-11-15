@@ -463,6 +463,16 @@
               "type": "string",
               "pattern": "^brand/[a-z0-9-]+/.+\\.(jpg|jpeg|png|webp)$",
               "description": "A photo the realtor may use, at least 1600 px wide. `tenant prepare` resizes it. Leave out for a band in the brand colour."
+            },
+            "images": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "description": "Several photos, shown in turn with a slow cross-fade (one at a time for visitors who turned motion off). Use instead of `image`.",
+              "items": {
+                "type": "string",
+                "pattern": "^brand/[a-z0-9-]+/.+\\.(jpg|jpeg|png|webp)$"
+              }
             }
           }
         },
@@ -486,6 +496,16 @@
               "type": "string",
               "pattern": "^brand/[a-z0-9-]+/.+\\.(jpg|jpeg|png|webp)$",
               "description": "A photo the realtor may use, at least 1600 px wide. `tenant prepare` resizes it. Leave out for a band in the brand colour."
+            },
+            "images": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "description": "Several photos, shown in turn with a slow cross-fade (one at a time for visitors who turned motion off). Use instead of `image`.",
+              "items": {
+                "type": "string",
+                "pattern": "^brand/[a-z0-9-]+/.+\\.(jpg|jpeg|png|webp)$"
+              }
             }
           }
         }

@@ -73,4 +73,26 @@ void main() {
     final nav = find.byKey(const Key('top-nav'));
     expect(find.descendant(of: nav, matching: find.text('BnB')), demo.features.shortStay ? findsOneWidget : findsNothing);
   });
+
+  testWidgets('a band with several photos shows them in turn; with motion turned off, only the first', (tester) async {
+    Future<Finder> heroPhoto(int i) async => find.byKey(ValueKey('hero-$i'));
+    await pumpAt(tester, const Size(1600, 1000), tenantId: 'realtime-estates');
+    expect(await heroPhoto(0), findsOneWidget);
+    await tester.pump(const Duration(seconds: 7));
+    // Loading the next photo happens off the test's clock.
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
+    await tester.pumpAndSettle();
+    expect(await heroPhoto(1), findsOneWidget, reason: 'the second photo after one turn');
+
+    final tenant = TenantConfig.fromJson(jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>);
+    await tester.pumpWidget(MediaQuery(
+      data: const MediaQueryData(size: Size(1600, 1000), disableAnimations: true),
+      child: ProviderScope(key: UniqueKey(), overrides: [tenantProvider.overrideWithValue(tenant)], child: const RealtorApp()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 15));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
+    await tester.pumpAndSettle();
+    expect(await heroPhoto(0), findsOneWidget, reason: 'still the first photo');
+  });
 }
