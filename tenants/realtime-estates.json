@@ -109,11 +109,13 @@
   "home": {
     "hero": {
       "title": "Rent, buy or sell property in Kenya",
-      "text": "Apartments, houses and commercial spaces, hassle-free."
+      "text": "Apartments, houses and commercial spaces, hassle-free.",
+      "image": "brand/realtime-estates/home/hero.jpg"
     },
     "banner": {
       "title": "Sell your property faster with Realtime Estates",
-      "text": "Effective marketing, wider reach and expert guidance at your service."
+      "text": "Effective marketing, wider reach and expert guidance at your service.",
+      "image": "brand/realtime-estates/home/banner.jpg"
     }
   },
   "ops": {
