@@ -13,6 +13,7 @@ import 'account/push.dart';
 import 'home_screen.dart';
 import 'listing/listing_screen.dart';
 import 'nav.dart';
+import 'phone_nav.dart';
 import 'places/off_plan_screens.dart';
 import 'places/place_screens.dart';
 import 'providers.dart';
@@ -153,7 +154,6 @@ class _SectionShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sections = visibleSections(enabled, signedIn: ref.watch(customerProvider).value != null);
     final i = sections.indexWhere((s) => s.path == location);
-    final selected = i < 0 ? 0 : i;
     void go(int i) {
       // A note about one screen should not follow you to another tab.
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -171,12 +171,18 @@ class _SectionShell extends ConsumerWidget {
         );
 
     if (MediaQuery.sizeOf(context).width < wideLayoutFrom) {
+      final signedIn = ref.watch(customerProvider).value != null;
+      final tabs = phoneTabs(ref.watch(tenantProvider).features);
+      final at = tabs.indexWhere((t) => t.isAt(location));
       return backToSearch(Scaffold(
         body: child,
         bottomNavigationBar: NavigationBar(
-          selectedIndex: selected,
-          onDestinationSelected: go,
-          destinations: [for (final s in sections) NavigationDestination(icon: Icon(s.icon), label: s.label)],
+          selectedIndex: at < 0 ? 0 : at,
+          onDestinationSelected: (i) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            context.go(phoneTabTarget(tabs[i], signedIn: signedIn));
+          },
+          destinations: [for (final t in tabs) NavigationDestination(icon: Icon(t.icon), label: t.label)],
         ),
       ));
     }
@@ -217,15 +223,19 @@ class TopNav extends ConsumerWidget {
 
     Widget link(String label, String path, {required bool here}) => Padding(
           padding: EdgeInsets.symmetric(horizontal: b.spacing.xs),
+          // The page you are on sits in a soft pill, like a toggle.
           child: TextButton(
             onPressed: () => go(path),
+            style: TextButton.styleFrom(
+              backgroundColor: here ? b.primarySoft : null,
+              shape: const StadiumBorder(),
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.lg, vertical: b.spacing.md),
+            ),
             child: Text(
               label,
               style: text.titleSmall?.copyWith(
                 color: here ? scheme.primary : scheme.onSurface,
-                decoration: here ? TextDecoration.underline : null,
-                decorationColor: scheme.primary,
-                decorationThickness: 2,
+                fontWeight: here ? FontWeight.w700 : null,
               ),
             ),
           ),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_core/realtor_core.dart';
 
-import 'feature_flags_test.dart' show currentPath, pumpApp, tenantWith;
+import 'feature_flags_test.dart' show currentPath, menuLabel, pumpApp, tenantWith;
 
 void main() {
   testWidgets('typed search becomes filters, shown as chips that can be removed (P7-s01)', (tester) async {
@@ -42,7 +42,7 @@ void main() {
 
   testWidgets('Chat, still being built, says so plainly', (tester) async {
     await pumpApp(tester, tenantWith({}));
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Chat')));
+    await tester.tap(await menuLabel(tester, 'Chat'));
     await tester.pumpAndSettle();
     expect(find.text('Chat is coming soon.'), findsOneWidget);
     expect(find.textContaining('Phase'), findsNothing);

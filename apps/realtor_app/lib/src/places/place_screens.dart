@@ -32,7 +32,7 @@ class _PlaceScaffold extends ConsumerWidget {
           data: (rows) => rows.isEmpty
               ? [Text(emptyHomes, style: text.bodyMedium)]
               : [
-                  for (final l in rows) ...[ListingCard(listing: l), SizedBox(height: b.spacing.md)],
+                  ListingGrid(listings: rows),
                 ],
         ),
       ]),
@@ -40,8 +40,8 @@ class _PlaceScaffold extends ConsumerWidget {
   }
 }
 
-Widget _missing(BuildContext context, String what) =>
-    Scaffold(appBar: AppBar(leading: const AppBack()), body: Center(child: Text('This $what is not here any more.', style: Theme.of(context).textTheme.bodyLarge)));
+Widget _missing(BuildContext context, String what) => Scaffold(
+    appBar: AppBar(leading: const AppBack()), body: Center(child: Text('This $what is not here any more.', style: Theme.of(context).textTheme.bodyLarge)));
 
 /// `/area/<slug>`: the guide, typical rent, what is nearby and live homes.
 class AreaScreen extends ConsumerWidget {
@@ -110,8 +110,7 @@ class AgentScreen extends ConsumerWidget {
                     'Speaks $speaks',
                     if (a.responseMins != null) 'Usually replies within ${a.responseMins} min',
                     if (a.rating != null) 'Rated ${a.rating!.toStringAsFixed(1)} of 5',
-                  ]
-                      .join(' · '),
+                  ].join(' · '),
                   style: text.bodySmall?.copyWith(color: b.textMuted),
                 ),
                 SizedBox(height: b.spacing.md),

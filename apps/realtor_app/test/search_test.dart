@@ -12,15 +12,13 @@ import 'package:realtor_app/src/search/demo_search.dart';
 import 'package:realtor_app/src/search/results_screen.dart';
 import 'package:realtor_core/realtor_core.dart';
 
-TenantConfig tenant(String id) =>
-    TenantConfig.fromJson(jsonDecode(File('../../tenants/$id.json').readAsStringSync()) as Map<String, Object?>);
+TenantConfig tenant(String id) => TenantConfig.fromJson(jsonDecode(File('../../tenants/$id.json').readAsStringSync()) as Map<String, Object?>);
 
 Future<GoRouterHarness> open(WidgetTester tester, String location, {String tenantId = 'demo-homes', TenantConfig? as}) async {
   tester.view.physicalSize = const Size(412, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-      ProviderScope(overrides: [tenantProvider.overrideWithValue(as ?? tenant(tenantId))], child: const RealtorApp()));
+  await tester.pumpWidget(ProviderScope(overrides: [tenantProvider.overrideWithValue(as ?? tenant(tenantId))], child: const RealtorApp()));
   final h = GoRouterHarness(tester);
   h.go(location);
   await tester.pumpAndSettle();
@@ -39,8 +37,7 @@ void main() {
   group('DemoListingSearch', () {
     final s = DemoListingSearch();
     test('filters like the Typesense query', () async {
-      final r = await s.search(const ListingFilters(
-          purpose: Purpose.rent, areas: ['kilimani', 'kileleshwa'], minBeds: 2, maxPriceKES: 100000));
+      final r = await s.search(const ListingFilters(purpose: Purpose.rent, areas: ['kilimani', 'kileleshwa'], minBeds: 2, maxPriceKES: 100000));
       expect(r.hits.map((h) => h.id), ['demo-1']);
     });
     test('facets keep the other options visible', () async {
@@ -48,8 +45,7 @@ void main() {
       expect(r.facets['type']!.map((f) => f.value), containsAll(['apartment', 'bedsitter', 'hostel']));
     });
     test('radius and nearest', () async {
-      final r = await s.search(
-          const ListingFilters(purpose: Purpose.rent, near: GeoRadius(-1.221, 36.897, 2), sort: ListingSort.nearest));
+      final r = await s.search(const ListingFilters(purpose: Purpose.rent, near: GeoRadius(-1.221, 36.897, 2), sort: ListingSort.nearest));
       expect(r.hits.every((h) => h.area == 'kasarani'), isTrue);
       expect(r.found, 2);
     });
@@ -72,9 +68,13 @@ void main() {
     expect(find.text('1 home'), findsOneWidget);
   });
 
-  testWidgets('tapping a type chip changes the URL', (tester) async {
+  testWidgets('picking a type in the filters changes the URL', (tester) async {
     final h = await open(tester, '/rent');
-    await tester.tap(find.textContaining('Hostel ('));
+    await tester.ensureVisible(find.byKey(const Key('filter-type')));
+    await tester.tap(find.byKey(const Key('filter-type')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hostel').last);
+    await tester.tap(find.text('Show homes'));
     await tester.pumpAndSettle();
     expect(h.location, '/rent/hostels');
     expect(find.text('Student hostel bed, Kasarani'), findsOneWidget);
@@ -114,8 +114,7 @@ void main() {
 
   testWidgets('home WhatsApp button: hidden until a number exists, then opens wa.me', (tester) async {
     final json = jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>;
-    await tester.pumpWidget(ProviderScope(
-        overrides: [tenantProvider.overrideWithValue(TenantConfig.fromJson(json))], child: const RealtorApp()));
+    await tester.pumpWidget(ProviderScope(overrides: [tenantProvider.overrideWithValue(TenantConfig.fromJson(json))], child: const RealtorApp()));
     await tester.pumpAndSettle();
     expect(find.text('Enquire on WhatsApp'), findsNothing);
 

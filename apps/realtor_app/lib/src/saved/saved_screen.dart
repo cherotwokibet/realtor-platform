@@ -31,24 +31,24 @@ class SavedScreen extends ConsumerWidget {
               ]),
             )
           : saved.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text("Couldn't open your saved homes.", style: text.bodyMedium)),
-        data: (list) => list.isEmpty
-            ? Padding(
-                padding: EdgeInsets.all(b.spacing.xl),
-                child: Text(
-                  'Tap the heart on a home to keep it here. Saved homes stay on this phone; nothing is sent anywhere.',
-                  style: text.bodyMedium,
-                  textAlign: TextAlign.center,
-                ),
-              )
-            : ListView(
-                padding: EdgeInsets.all(b.spacing.gutter),
-                children: [
-                  for (final l in list) ...[ListingCard(listing: l), SizedBox(height: b.spacing.md)],
-                ],
-              ),
-      ),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text("Couldn't open your saved homes.", style: text.bodyMedium)),
+              data: (list) => list.isEmpty
+                  ? Padding(
+                      padding: EdgeInsets.all(b.spacing.xl),
+                      child: Text(
+                        'Tap the heart on a home to keep it here. Saved homes stay on this phone; nothing is sent anywhere.',
+                        style: text.bodyMedium,
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView(
+                      padding: EdgeInsets.all(b.spacing.gutter),
+                      children: [
+                        ListingGrid(listings: list),
+                      ],
+                    ),
+            ),
     );
   }
 }

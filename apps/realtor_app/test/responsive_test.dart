@@ -7,7 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_app/src/account/account_data.dart';
 import 'package:realtor_app/src/app.dart';
 import 'package:realtor_app/src/providers.dart';
+import 'package:realtor_app/src/saved/favourites.dart';
 import 'package:realtor_core/realtor_core.dart';
+
+import 'favourites_test.dart' show MemoryStore;
 
 Future<void> pumpAt(WidgetTester tester, Size size, {String tenantId = 'demo-homes'}) async {
   tester.view.physicalSize = size;
@@ -98,25 +101,52 @@ void main() {
     expect(await heroPhoto(0), findsOneWidget, reason: 'still the first photo');
   });
 
-  testWidgets('Saved joins the top bar and the bottom bar once signed in', (tester) async {
+  testWidgets('Saved joins the top bar once signed in; on phones its tab asks a visitor to sign in', (tester) async {
     final account = DemoAccount();
-    for (final (size, bar) in [(const Size(1600, 1000), find.byKey(const Key('top-nav'))), (const Size(412, 900), find.byType(NavigationBar))]) {
+    final tenant = TenantConfig.fromJson(jsonDecode(File('../../tenants/demo-homes.json').readAsStringSync()) as Map<String, Object?>);
+    Future<void> pump(Size size) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final tenant = TenantConfig.fromJson(jsonDecode(File('../../tenants/demo-homes.json').readAsStringSync()) as Map<String, Object?>);
       await tester.pumpWidget(ProviderScope(
         key: UniqueKey(),
-        overrides: [tenantProvider.overrideWithValue(tenant), demoAccountProvider.overrideWithValue(account)],
+        overrides: [
+          tenantProvider.overrideWithValue(tenant),
+          demoAccountProvider.overrideWithValue(account),
+          favouritesStoreProvider.overrideWithValue(MemoryStore()),
+        ],
         child: const RealtorApp(),
       ));
       await tester.pumpAndSettle();
-      expect(find.descendant(of: bar, matching: find.text('Saved')), findsNothing, reason: '$size signed out');
-      await account.signInWithGoogle();
-      await tester.pumpAndSettle();
-      expect(find.descendant(of: bar, matching: find.text('Saved')), findsOneWidget, reason: '$size signed in');
-      await account.signOut();
-      await tester.pumpAndSettle();
     }
+
+    await pump(const Size(1600, 1000));
+    final top = find.byKey(const Key('top-nav'));
+    expect(find.descendant(of: top, matching: find.text('Saved')), findsNothing, reason: 'wide, signed out');
+    await account.signInWithGoogle();
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: top, matching: find.text('Saved')), findsOneWidget, reason: 'wide, signed in');
+    await account.signOut();
+    await tester.pumpAndSettle();
+
+    await pump(const Size(412, 900));
+    final bar = find.byType(NavigationBar);
+    for (final label in ['Home', 'Search', 'Saved', 'Account']) {
+      expect(find.descendant(of: bar, matching: find.text(label)), findsOneWidget, reason: label);
+    }
+    await tester.tap(find.descendant(of: bar, matching: find.text('Saved')));
+    await tester.pumpAndSettle();
+    final router = ProviderScope.containerOf(tester.element(find.byType(RealtorApp))).read(routerProvider);
+    expect(router.state.uri.path, '/account', reason: 'signed out: sign in first');
+    await tester.tap(find.descendant(of: bar, matching: find.text('Search')));
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, '/rent', reason: 'Search opens Rent first');
+    await account.signInWithGoogle();
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: bar, matching: find.text('Saved')));
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, '/saved');
+    await account.signOut();
+    await tester.pumpAndSettle();
   });
 }

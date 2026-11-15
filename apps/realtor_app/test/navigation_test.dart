@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_app/src/app.dart';
 
-import 'feature_flags_test.dart' show currentPath, navLabel, pumpApp, tenantWith;
+import 'feature_flags_test.dart' show currentPath, menuLabel, navLabel, pumpApp, tenantWith;
 
 /// Back (the arrow, or the phone's back) goes where people expect (P4).
 void main() {
@@ -51,7 +51,7 @@ void main() {
 
   testWidgets('Off-plan → a project → back to the list', (tester) async {
     await pumpApp(tester, tenantWith({}));
-    await tester.tap(navLabel('Off-plan'));
+    await tester.tap(await menuLabel(tester, 'Off-plan'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sample Gardens'));
     await tester.pumpAndSettle();
