@@ -7,10 +7,13 @@ import 'search/purpose.dart';
 /// Sections with a [feature] exist only when the tenant has it on: no route,
 /// no menu entry, and deep links to them go home.
 class AppSection {
-  const AppSection(this.path, this.label, this.icon, {this.feature});
+  const AppSection(this.path, this.label, this.icon, {this.feature, this.signedInOnly = false});
   final String path, label;
   final IconData icon;
   final Feature? feature;
+
+  /// Shown in the navigation only to a signed-in customer (Saved).
+  final bool signedInOnly;
 
   bool enabledFor(Features f) => feature == null || f.isOn(feature!);
 }
@@ -18,7 +21,7 @@ class AppSection {
 const appSections = [
   AppSection('/', 'Search', Icons.search),
   AppSection('/off-plan', 'Off-plan', Icons.apartment_outlined, feature: Feature.offPlan),
-  AppSection('/saved', 'Saved', Icons.favorite_border),
+  AppSection('/saved', 'Saved', Icons.favorite_border, signedInOnly: true),
   AppSection('/chat', 'Chat', Icons.chat_bubble_outline, feature: Feature.chat),
   AppSection('/account', 'Account', Icons.person_outline),
 ];
@@ -36,3 +39,7 @@ String? redirectForDisabled(Features f, String location) {
   }
   return null;
 }
+
+/// The sections the navigation shows: Saved only once someone has signed in.
+List<AppSection> visibleSections(List<AppSection> enabled, {required bool signedIn}) =>
+    [for (final s in enabled) if (signedIn || !s.signedInOnly) s];

@@ -18,4 +18,10 @@ void main() {
     expect(enabledSections(only({})).map((s) => s.path), ['/', '/saved', '/account']);
     expect(enabledSections(only(Feature.values.toSet())).length, appSections.length);
   });
+
+  test('Saved is in the navigation only for signed-in customers', () {
+    final all = enabledSections(only({}));
+    expect(visibleSections(all, signedIn: false).map((s) => s.path), ['/', '/account']);
+    expect(visibleSections(all, signedIn: true).map((s) => s.path), ['/', '/saved', '/account']);
+  });
 }

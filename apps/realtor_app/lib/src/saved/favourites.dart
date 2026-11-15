@@ -2,8 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../account/account_data.dart';
 
 /// Saved homes (D18): kept on this device only, no account, nothing sent.
 /// A copy of each row is kept so the Saved list opens offline; the listing
@@ -55,7 +58,8 @@ class FavouritesNotifier extends AsyncNotifier<List<ListingSummary>> {
 
 final favouritesProvider = AsyncNotifierProvider<FavouritesNotifier, List<ListingSummary>>(FavouritesNotifier.new);
 
-/// The heart on a listing: saves or removes it on this device.
+/// The heart on a listing: saves or removes it on this device. Anyone can
+/// save; a signed-out visitor is told to sign in to see their saved homes.
 class FavouriteButton extends ConsumerWidget {
   const FavouriteButton({super.key, required this.listing});
   final ListingSummary listing;
@@ -67,7 +71,20 @@ class FavouriteButton extends ConsumerWidget {
       tooltip: saved ? 'Remove from saved' : 'Save this home',
       icon: Icon(saved ? Icons.favorite : Icons.favorite_border),
       color: saved ? Theme.of(context).colorScheme.primary : null,
-      onPressed: () => ref.read(favouritesProvider.notifier).toggle(listing),
+      onPressed: () async {
+        final messenger = ScaffoldMessenger.of(context);
+        final router = GoRouter.of(context);
+        await ref.read(favouritesProvider.notifier).toggle(listing);
+        // Saved is in the navigation only once signed in: say where saves go.
+        if (!saved && ref.read(customerProvider).value == null) {
+          messenger
+            ..hideCurrentSnackBar()
+            ..showSnackBar(SnackBar(
+              content: const Text('Saved on this device. Sign in to see your saved homes.'),
+              action: SnackBarAction(label: 'Sign in', onPressed: () => router.go('/account')),
+            ));
+        }
+      },
     );
   }
 }

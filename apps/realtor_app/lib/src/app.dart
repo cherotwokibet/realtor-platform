@@ -29,7 +29,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) => redirectForDisabled(features, state.uri.path),
     routes: [
       ShellRoute(
-        builder: (context, state, child) => _SectionShell(sections: sections, location: state.uri.path, child: child),
+        builder: (context, state, child) => _SectionShell(enabled: sections, location: state.uri.path, child: child),
         routes: [
           for (final s in sections)
             GoRoute(
@@ -143,14 +143,15 @@ class _PushRoutingState extends ConsumerState<_PushRouting> {
 
 /// Navigation built from the tenant's enabled sections: a bottom bar on
 /// phones, a top bar with centred content on tablets and desktop web.
-class _SectionShell extends StatelessWidget {
-  const _SectionShell({required this.sections, required this.location, required this.child});
-  final List<AppSection> sections;
+class _SectionShell extends ConsumerWidget {
+  const _SectionShell({required this.enabled, required this.location, required this.child});
+  final List<AppSection> enabled;
   final String location;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sections = visibleSections(enabled, signedIn: ref.watch(customerProvider).value != null);
     final i = sections.indexWhere((s) => s.path == location);
     final selected = i < 0 ? 0 : i;
     void go(int i) {
