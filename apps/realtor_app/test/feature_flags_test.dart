@@ -35,8 +35,14 @@ String currentPath(WidgetTester tester) {
   return container.read(routerProvider).state.uri.path;
 }
 
-Finder navLabel(String label) =>
-    find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+Finder navLabel(String label) => find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+
+/// Opens the phone menu (the hamburger on Home) and finds [label] in it.
+Future<Finder> menuLabel(WidgetTester tester, String label) async {
+  await tester.tap(find.byTooltip('Open navigation menu'));
+  await tester.pumpAndSettle();
+  return find.descendant(of: find.byKey(const Key('app-drawer')), matching: find.text(label));
+}
 
 // M-Pesa has no customer UI yet (payments come later, in the Functions); its
 // only gate was on the old placeholder card, so it is not checked here.
@@ -49,8 +55,8 @@ void main() {
     for (final label in ['Rent', 'Buy', 'BnB']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
-    expect(navLabel('Off-plan'), findsOneWidget);
-    expect(navLabel('Chat'), findsOneWidget);
+    expect(await menuLabel(tester, 'Off-plan'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('app-drawer')), matching: find.text('Chat')), findsOneWidget);
   });
 
   for (final f in [Feature.ads, Feature.aiSearch]) {
@@ -75,7 +81,9 @@ void main() {
   for (final (feature, label, path) in [(Feature.offPlan, 'Off-plan', '/off-plan'), (Feature.chat, 'Chat', '/chat')]) {
     testWidgets('turning off ${feature.name} removes its menu entry and route', (tester) async {
       await pumpApp(tester, tenantWith({feature: false}));
-      expect(navLabel(label), findsNothing);
+      expect(await menuLabel(tester, label), findsNothing);
+      Navigator.of(tester.element(find.byKey(const Key('app-drawer')))).pop();
+      await tester.pumpAndSettle();
       final container = ProviderScope.containerOf(tester.element(find.byType(RealtorApp)));
       container.read(routerProvider).go(path);
       await tester.pumpAndSettle();
@@ -84,7 +92,7 @@ void main() {
 
     testWidgets('with ${feature.name} on, $path opens', (tester) async {
       await pumpApp(tester, tenantWith({}));
-      await tester.tap(navLabel(label));
+      await tester.tap(await menuLabel(tester, label));
       await tester.pumpAndSettle();
       expect(currentPath(tester), path);
     });

@@ -225,7 +225,7 @@ class _SimilarState extends ConsumerState<_Similar> {
         children: [
           Text('Similar homes', style: Theme.of(context).textTheme.titleLarge),
           SizedBox(height: b.spacing.sm),
-          for (final s in similar) ...[ListingCard(listing: s, onOpen: () => _log('opened')), SizedBox(height: b.spacing.md)],
+          ListingGrid(listings: similar, onOpen: (_) => _log('opened')),
         ],
       ),
     );
@@ -311,8 +311,7 @@ class _PhotosState extends State<_Photos> {
               ),
             ),
             if (count > 1) ...[
-              if (_index > 0)
-                Positioned(left: b.spacing.sm, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_left, 'Previous photo', _index - 1))),
+              if (_index > 0) Positioned(left: b.spacing.sm, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_left, 'Previous photo', _index - 1))),
               if (_index < count - 1)
                 Positioned(right: b.spacing.sm, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_right, 'Next photo', _index + 1))),
               Positioned(
@@ -419,7 +418,8 @@ class _VideoDialogState extends State<_VideoDialog> {
                       ]),
                     ),
         ),
-        Positioned(top: 4, right: 4, child: IconButton.filledTonal(tooltip: 'Close', onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close))),
+        Positioned(
+            top: 4, right: 4, child: IconButton.filledTonal(tooltip: 'Close', onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close))),
       ]),
     );
   }

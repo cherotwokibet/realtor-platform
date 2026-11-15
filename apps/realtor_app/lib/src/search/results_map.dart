@@ -93,8 +93,7 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
       FlutterMap(
         options: _options(),
         children: [
-          if (ref.watch(mapTilesEnabledProvider))
-            TileLayer(urlTemplate: tenant.mapTiles, userAgentPackageName: tenant.androidId, maxZoom: 19),
+          if (ref.watch(mapTilesEnabledProvider)) TileLayer(urlTemplate: tenant.mapTiles, userAgentPackageName: tenant.androidId, maxZoom: 19),
           if (area.length >= 2)
             PolygonLayer(polygons: [
               Polygon(
@@ -118,7 +117,8 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
                 point: c,
                 width: 14,
                 height: 14,
-                child: DecoratedBox(decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle, border: Border.all(color: scheme.onPrimary, width: 2))),
+                child: DecoratedBox(
+                    decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle, border: Border.all(color: scheme.onPrimary, width: 2))),
               ),
           ]),
           SimpleAttributionWidget(source: Text(tenant.mapAttribution, style: text.labelSmall)),
@@ -148,7 +148,8 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
             Card(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: b.spacing.md, vertical: b.spacing.sm),
-                child: Text(_corners.length < 3 ? 'Tap the map to mark the corners (${_corners.length} of at least 3)' : '${_corners.length} corners', style: text.bodySmall),
+                child: Text(_corners.length < 3 ? 'Tap the map to mark the corners (${_corners.length} of at least 3)' : '${_corners.length} corners',
+                    style: text.bodySmall),
               ),
             ),
             FilledButton(onPressed: _corners.length >= 3 ? _search : null, child: const Text('Search this area')),
@@ -167,8 +168,7 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
           ],
         ]),
       ),
-      if (_selected != null)
-        Positioned(left: b.spacing.sm, right: b.spacing.sm, bottom: b.spacing.xl, child: ListingCard(listing: _selected!)),
+      if (_selected != null) Positioned(left: b.spacing.sm, right: b.spacing.sm, bottom: b.spacing.xl, child: ListingCard(listing: _selected!, compact: true)),
     ]);
   }
 }

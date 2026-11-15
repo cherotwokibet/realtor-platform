@@ -7,7 +7,9 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'package:go_router/go_router.dart';
 
+import 'account/account_data.dart';
 import 'nav.dart';
+import 'phone_nav.dart';
 import 'providers.dart';
 import 'search/purpose.dart';
 import 'search/recent_searches.dart';
@@ -79,7 +81,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       text,
       purpose: _purpose,
       areas: ref.read(areaNamesProvider).value ?? const {},
-      allowed: {for (final p in Purpose.values) if (features.isOn(p.feature)) p},
+      allowed: {
+        for (final p in Purpose.values)
+          if (features.isOn(p.feature)) p
+      },
     );
     context.push(parsed.filters.toUri().toString());
   }
@@ -91,11 +96,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.watch(areaNamesProvider);
     final b = context.brand;
     final text = Theme.of(context).textTheme;
-    final purposes = [for (final p in Purpose.values) if (tenant.features.isOn(p.feature)) p];
+    final purposes = [
+      for (final p in Purpose.values)
+        if (tenant.features.isOn(p.feature)) p
+    ];
     if (!purposes.contains(_purpose) && purposes.isNotEmpty) _purpose = purposes.first;
     if (_maxPrice != null && !_prices(_purpose).contains(_maxPrice)) _maxPrice = null;
     final whatsapp = tenant.whatsappLink('Hello ${tenant.name}, I am looking for a home.');
     final wide = MediaQuery.sizeOf(context).width >= wideLayoutFrom;
+    final signedIn = ref.watch(customerProvider).value != null;
     final hero = tenant.home.hero ?? HomeBand(title: tenant.tagline ?? tenant.name);
     final banner = tenant.home.banner;
     final listProperty = tenant.whatsappLink('Hello ${tenant.name}, I would like to list my property with you.');
@@ -175,11 +184,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Wide screens have the logo in the top navigation instead.
       appBar: wide
           ? null
+          // Phones: the menu on the left, the logo in the middle, the
+          // account on the right.
           : AppBar(
               toolbarHeight: 64,
               title: Image.asset(b.logoAsset, height: 48, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
-              centerTitle: false,
+              centerTitle: true,
+              actions: [
+                Padding(
+                  padding: EdgeInsets.only(right: b.spacing.sm),
+                  child: signedIn
+                      ? IconButton(tooltip: 'Account', icon: const Icon(Icons.person_outline), onPressed: () => context.go('/account'))
+                      : TextButton(key: const Key('home-login'), onPressed: () => context.go('/account'), child: const Text('Log in')),
+                ),
+              ],
             ),
+      drawer: wide ? null : const AppDrawer(),
       body: ListView(
         padding: EdgeInsets.all(b.spacing.gutter),
         children: [
@@ -506,14 +526,9 @@ class _Newest extends ConsumerWidget {
         ]),
         SizedBox(height: b.spacing.sm),
         // Three across on wide screens, one under another on phones.
-        LayoutBuilder(builder: (context, c) {
-          final cols = c.maxWidth >= 900 ? 3 : 1;
-          final gap = b.spacing.md;
-          final width = (c.maxWidth - gap * (cols - 1)) / cols;
-          return Wrap(spacing: gap, runSpacing: gap, children: [
-            for (final l in hits.take(cols == 1 ? 3 : 6)) SizedBox(width: width, child: ListingCard(listing: l, stacked: true)),
-          ]);
-        }),
+        LayoutBuilder(
+          builder: (context, c) => ListingGrid(listings: hits.take(c.maxWidth >= 960 ? 6 : 3).toList()),
+        ),
       ],
     );
   }
