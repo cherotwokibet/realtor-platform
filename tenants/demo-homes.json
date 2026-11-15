@@ -94,5 +94,15 @@
   "mpesa": {
     "shortcode": "secret://mpesa-shortcode",
     "type": "till"
+  },
+  "home": {
+    "hero": {
+      "title": "Find a home you will love",
+      "text": "Homes to rent and buy across Nairobi."
+    },
+    "banner": {
+      "title": "Have a property to let or sell?",
+      "text": "List it with us and reach people who are looking now."
+    }
   }
 }

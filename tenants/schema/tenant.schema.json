@@ -438,6 +438,59 @@
         }
       }
     },
+    "home": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Home page words and photos. `hero` sits behind the search; `banner` is the promotion under it (e.g. for owners who want to sell or let).",
+      "properties": {
+        "hero": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "title"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 90
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "image": {
+              "type": "string",
+              "pattern": "^brand/[a-z0-9-]+/.+\\.(jpg|jpeg|png|webp)$",
+              "description": "A photo the realtor may use, at least 1600 px wide. `tenant prepare` resizes it. Leave out for a band in the brand colour."
+            }
+          }
+        },
+        "banner": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "title"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 90
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "image": {
+              "type": "string",
+              "pattern": "^brand/[a-z0-9-]+/.+\\.(jpg|jpeg|png|webp)$",
+              "description": "A photo the realtor may use, at least 1600 px wide. `tenant prepare` resizes it. Leave out for a band in the brand colour."
+            }
+          }
+        }
+      }
+    },
     "map": {
       "type": "object",
       "additionalProperties": false,

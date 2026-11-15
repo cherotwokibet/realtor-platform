@@ -111,11 +111,15 @@ class ResultsScreen extends ConsumerWidget {
 
 /// A home in a list (results, saved), with its save heart.
 class ListingCard extends StatelessWidget {
-  const ListingCard({super.key, required this.listing, this.onOpen});
+  const ListingCard({super.key, required this.listing, this.onOpen, this.stacked = false});
   final ListingSummary listing;
 
   /// Called as the card opens its listing (e.g. to count a recommendation).
   final VoidCallback? onOpen;
+
+  /// Photo above the words whatever the width (grids); otherwise a wide
+  /// card puts the photo beside them.
+  final bool stacked;
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +127,29 @@ class ListingCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final l = listing;
     final beds = l.beds == 0 ? typeName(l.type) : '${l.beds} bed · ${l.baths} bath';
+    final words = Padding(
+      padding: EdgeInsets.all(b.spacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (l.verified) ...[const VerifiedBadge(), SizedBox(height: b.spacing.sm)],
+          Row(children: [Expanded(child: Text(l.title, style: text.titleMedium)), FavouriteButton(listing: l)]),
+          SizedBox(height: b.spacing.xs),
+          PriceText(l.priceKES, period: l.purpose.period, compact: l.purpose == Purpose.sale),
+          SizedBox(height: b.spacing.xs),
+          Text('$beds · ${areaName(l.area)}', style: text.bodySmall),
+        ],
+      ),
+    );
+    // The first photo, when the listing has one; a quiet tile if it fails to load.
+    final photo = l.thumb == null
+        ? null
+        : Image.network(
+            l.thumb!,
+            fit: BoxFit.cover,
+            semanticLabel: l.title,
+            errorBuilder: (_, __, ___) => ColoredBox(color: b.surfaceAlt, child: Icon(Icons.home_work_outlined, color: b.textMuted)),
+          );
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -130,20 +157,18 @@ class ListingCard extends StatelessWidget {
           onOpen?.call();
           context.push('/listing/${l.slug}');
         },
-        child: Padding(
-          padding: EdgeInsets.all(b.spacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (l.verified) ...[const VerifiedBadge(), SizedBox(height: b.spacing.sm)],
-              Row(children: [Expanded(child: Text(l.title, style: text.titleMedium)), FavouriteButton(listing: l)]),
-              SizedBox(height: b.spacing.xs),
-              PriceText(l.priceKES, period: l.purpose.period, compact: l.purpose == Purpose.sale),
-              SizedBox(height: b.spacing.xs),
-              Text('$beds · ${areaName(l.area)}', style: text.bodySmall),
-            ],
-          ),
-        ),
+        child: photo == null
+            ? words
+            : LayoutBuilder(
+                builder: (context, c) => stacked || c.maxWidth < 560
+                    ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [AspectRatio(aspectRatio: 16 / 10, child: photo), words])
+                    : IntrinsicHeight(
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          SizedBox(width: 240, child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 150), child: photo)),
+                          Expanded(child: words),
+                        ]),
+                      ),
+              ),
       ),
     );
   }

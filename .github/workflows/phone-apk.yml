@@ -44,6 +44,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Pinned: the version the code is built and tested with (3.50 deprecates
+          # package:flutter/material.dart; moving to material_ui is its own change).
+          flutter-version: 3.47.8
           cache: true
       - run: flutter pub get
       - name: Android folder + one flavor per tenant

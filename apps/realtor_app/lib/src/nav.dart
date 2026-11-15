@@ -4,6 +4,10 @@ import 'package:go_router/go_router.dart';
 /// Widest the content gets on tablets and desktop web; centred beyond it.
 const maxContentWidth = 1200.0;
 
+/// From this width (Material 3 "expanded") the app has a top navigation
+/// bar and no bottom bar.
+const wideLayoutFrom = 840.0;
+
 /// Back on every screen below the tabs: to the screen before, or Home when
 /// the screen was opened straight from a link and there is nothing behind it.
 class AppBack extends StatelessWidget {

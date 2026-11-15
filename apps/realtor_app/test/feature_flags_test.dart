@@ -19,6 +19,10 @@ TenantConfig tenantWith(Map<Feature, bool> changes) {
 }
 
 Future<void> pumpApp(WidgetTester tester, TenantConfig tenant) async {
+  // A phone-width window tall enough to build the whole home page.
+  tester.view.physicalSize = const Size(600, 2400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
   await tester.pumpWidget(ProviderScope(
     overrides: [tenantProvider.overrideWithValue(tenant)],
     child: const RealtorApp(),
@@ -42,7 +46,7 @@ void main() {
     for (final f in [Feature.ads, Feature.aiSearch]) {
       expect(find.byKey(FeatureGate.keyFor(f)), findsOneWidget, reason: f.name);
     }
-    for (final label in ['Rent', 'Buy', 'Short stay']) {
+    for (final label in ['Rent', 'Buy', 'BnB']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     expect(navLabel('Off-plan'), findsOneWidget);
@@ -61,7 +65,7 @@ void main() {
     expect(find.text('Featured'), findsNothing);
   });
 
-  for (final (feature, label) in [(Feature.sale, 'Buy'), (Feature.shortStay, 'Short stay')]) {
+  for (final (feature, label) in [(Feature.sale, 'Buy'), (Feature.shortStay, 'BnB')]) {
     testWidgets('turning off ${feature.name} removes the $label search', (tester) async {
       await pumpApp(tester, tenantWith({feature: false}));
       expect(find.text(label), findsNothing);

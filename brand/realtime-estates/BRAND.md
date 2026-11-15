@@ -1,18 +1,19 @@
 # Realtime Estates: logo use
 
-Source: `logo.ai` (sunset concept, vector) and `reference/original-roofline.png` (roofline concept, 2000 px). The roofline concept was traced to vector and recoloured to the app palette. The shapes and the Poppins wordmark are unchanged.
+Source: `logo.ai` (sunset concept, vector; `reference/logo-sunset.png` is its 2000 px export) and `reference/original-roofline.png` (roofline concept, 2000 px). The roofline concept was traced to vector and recoloured to the app palette. The shapes and the Poppins wordmark are unchanged.
 
 ## Which logo where
 
 | File | Use |
 |---|---|
-| `logo-stacked.svg` | Primary lockup on white: website footer, documents, letterhead, listing PDFs |
-| `logo-stacked-reverse.svg` | The same on maroon: splash screens, social posts, signage |
-| `logo-horizontal.svg` | App bar, web header, email signature (one line, no "LTD") |
+| `logo-sunset.svg` | **The main logo (client's choice, Nov 2026):** web header, app bar, admin, share pages, documents. Black roofs on a sunset, with the name and tagline |
+| `logo-stacked-reverse.svg` | Roofline lockup on maroon: splash screens, social posts, signage |
 | `logo-horizontal-reverse.svg` | Header on maroon, splash branding, WhatsApp share images |
-| `mark.svg` / `mark-reverse.svg` | Symbol only, where the name already appears or space is tight |
-| `favicon.svg` | Browser tabs and anywhere under 48 px. Roofs only, because "RTE" is unreadable that small |
-| `marketing/logo-sunset.svg` | Marketing only: billboards, flyers, merchandise. Too detailed for screens under 200 px, so never use it in the apps |
+| `mark.svg` / `mark-reverse.svg` | Symbol only: the app icon, and where the name already appears or space is tight |
+| `favicon.svg` | Browser tabs and anywhere under 48 px. Roofs only |
+| `logo-stacked.svg` / `logo-horizontal.svg` | The earlier roofline lockups on white, kept as the alternative |
+
+The sunset logo is detailed, so give it room: at least 56 px high in a header. It has no version for dark backgrounds, so on maroon keep using the reverse roofline files.
 
 The icons, splash screens, PWA images and share images are generated from these files: `node tools/tenant-cli/src/cli.ts icons realtime-estates`.
 
@@ -30,8 +31,8 @@ The original files used black where we now use maroon. This matches the app, whi
 ## Rules
 
 - **Clear space:** keep a margin around the logo equal to the height of the "RTE" letters.
-- **Minimum size:** stacked lockup 120 px wide, horizontal 140 px wide, mark 32 px wide. Below that, use the favicon.
-- **Don't:** recolour outside the palette above, add shadows or outlines, stretch, rotate, set the wordmark in another font, put the light version on photos (use the reverse version on a maroon band instead), or combine the sunset and roofline concepts.
+- **Minimum size:** sunset logo 90 px wide, roofline stacked lockup 120 px wide, horizontal 140 px wide, mark 32 px wide. Below that, use the favicon.
+- **Don't:** recolour outside the palette above, add shadows or outlines, stretch, rotate, set the wordmark in another font, or put the light version on photos (use the reverse version on a maroon band instead).
 - **The legal name** "Realtime Estates Ltd" appears on the stacked lockup and in documents. The horizontal lockup drops "LTD" for space.
 
 ## Platform notes (Oct 2026)

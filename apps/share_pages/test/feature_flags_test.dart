@@ -20,40 +20,46 @@ const stay = ShareListing(
   lng: 36.8029,
 );
 
-Future<shelf.Response> get(String path, String tenantId) => Future.value(
-      shareHandler(tenant(tenantId), InMemoryListingSource(const [flat, stay]))(shelf.Request('GET', Uri.parse('https://x$path'))),
+/// A tenant with short stays switched off (whatever its file says today).
+final TenantConfig noStays = () {
+  final t = tenant('realtime-estates');
+  return t.withFeatures(t.features.copyWith({Feature.shortStay: false}));
+}();
+
+Future<shelf.Response> get(String path, TenantConfig t) => Future.value(
+      shareHandler(t, InMemoryListingSource(const [flat, stay]))(shelf.Request('GET', Uri.parse('https://x$path'))),
     );
 
 void main() {
   setUpAll(Jaspr.initializeApp);
 
-  // realtime-estates has shortStay off, demo-homes has it on.
+  // demo-homes has shortStay on.
   test('a listing for a switched-off purpose is a 404; an enabled one is served', () async {
-    expect((await get('/listing/${stay.slug}', 'realtime-estates')).statusCode, 404);
-    expect((await get('/listing/${flat.slug}', 'realtime-estates')).statusCode, 200);
-    expect((await get('/listing/${stay.slug}', 'demo-homes')).statusCode, 200);
+    expect((await get('/listing/${stay.slug}', noStays)).statusCode, 404);
+    expect((await get('/listing/${flat.slug}', noStays)).statusCode, 200);
+    expect((await get('/listing/${stay.slug}', tenant('demo-homes'))).statusCode, 200);
   });
 
   test('its actions are 404s too, so nothing can be sent for it', () async {
-    final res = await shareHandler(tenant('realtime-estates'), InMemoryListingSource(const [stay]))(
+    final res = await shareHandler(noStays, InMemoryListingSource(const [stay]))(
       shelf.Request('GET', Uri.parse('https://x/go/whatsapp/${stay.slug}')),
     );
     expect(res.statusCode, 404);
   });
 
   test('home page and sitemap leave it out', () async {
-    final home = await (await get('/', 'realtime-estates')).readAsString();
+    final home = await (await get('/', noStays)).readAsString();
     expect(home, contains(flat.title));
     expect(home, isNot(contains(stay.title)));
-    final map = await (await get('/sitemap.xml', 'realtime-estates')).readAsString();
+    final map = await (await get('/sitemap.xml', noStays)).readAsString();
     expect(map, contains('/listing/${flat.slug}'));
     expect(map, isNot(contains(stay.slug)));
-    final demoMap = await (await get('/sitemap.xml', 'demo-homes')).readAsString();
+    final demoMap = await (await get('/sitemap.xml', tenant('demo-homes'))).readAsString();
     expect(demoMap, contains(stay.slug));
   });
 
   test('core: Features.allowsPurpose follows the switches', () {
-    final f = tenant('realtime-estates').features;
+    final f = noStays.features;
     expect(f.allowsPurpose(Purpose.rent), isTrue);
     expect(f.allowsPurpose(Purpose.shortStay), isFalse);
   });

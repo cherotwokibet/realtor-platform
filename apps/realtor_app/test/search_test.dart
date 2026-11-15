@@ -15,12 +15,12 @@ import 'package:realtor_core/realtor_core.dart';
 TenantConfig tenant(String id) =>
     TenantConfig.fromJson(jsonDecode(File('../../tenants/$id.json').readAsStringSync()) as Map<String, Object?>);
 
-Future<GoRouterHarness> open(WidgetTester tester, String location, {String tenantId = 'demo-homes'}) async {
+Future<GoRouterHarness> open(WidgetTester tester, String location, {String tenantId = 'demo-homes', TenantConfig? as}) async {
   tester.view.physicalSize = const Size(412, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
-      ProviderScope(overrides: [tenantProvider.overrideWithValue(tenant(tenantId))], child: const RealtorApp()));
+      ProviderScope(overrides: [tenantProvider.overrideWithValue(as ?? tenant(tenantId))], child: const RealtorApp()));
   final h = GoRouterHarness(tester);
   h.go(location);
   await tester.pumpAndSettle();
@@ -91,8 +91,9 @@ void main() {
   });
 
   testWidgets('a purpose the tenant does not offer goes home', (tester) async {
-    // Realtime Estates has shortStay off.
-    final h = await open(tester, '/short-stay', tenantId: 'realtime-estates');
+    final json = jsonDecode(File('../../tenants/demo-homes.json').readAsStringSync()) as Map<String, Object?>;
+    (json['features'] as Map<String, Object?>)['shortStay'] = false;
+    final h = await open(tester, '/short-stay', as: TenantConfig.fromJson(json));
     expect(h.location, '/');
   });
 

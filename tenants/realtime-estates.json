@@ -8,14 +8,14 @@
   "brand": {
     "logo": {
       "source": "brand/realtime-estates/logo.ai",
-      "primary": "brand/realtime-estates/logo-stacked.svg",
+      "primary": "brand/realtime-estates/logo-sunset.svg",
       "onDark": "brand/realtime-estates/logo-stacked-reverse.svg",
-      "horizontal": "brand/realtime-estates/logo-horizontal.svg",
+      "horizontal": "brand/realtime-estates/logo-sunset.svg",
       "horizontalOnDark": "brand/realtime-estates/logo-horizontal-reverse.svg",
       "mark": "brand/realtime-estates/mark.svg",
       "markOnDark": "brand/realtime-estates/mark-reverse.svg",
       "favicon": "brand/realtime-estates/favicon.svg",
-      "alt": "brand/realtime-estates/marketing/logo-sunset.svg"
+      "alt": "brand/realtime-estates/logo-stacked.svg"
     },
     "appIcon": "brand/realtime-estates/mark-reverse.svg",
     "colors": {
@@ -95,7 +95,7 @@
   "features": {
     "sale": true,
     "rent": true,
-    "shortStay": false,
+    "shortStay": true,
     "offPlan": false,
     "mpesa": false,
     "ads": false,
@@ -105,6 +105,16 @@
   "mpesa": {
     "shortcode": "secret://mpesa-shortcode",
     "type": "paybill"
+  },
+  "home": {
+    "hero": {
+      "title": "Rent, buy or sell property in Kenya",
+      "text": "Apartments, houses and commercial spaces, hassle-free."
+    },
+    "banner": {
+      "title": "Sell your property faster with Realtime Estates",
+      "text": "Effective marketing, wider reach and expert guidance at your service."
+    }
   },
   "ops": {
     "alertEmails": ["kibetboniface@gmail.com"]

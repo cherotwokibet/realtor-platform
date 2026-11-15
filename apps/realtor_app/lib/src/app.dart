@@ -142,15 +142,12 @@ class _PushRoutingState extends ConsumerState<_PushRouting> {
 }
 
 /// Navigation built from the tenant's enabled sections: a bottom bar on
-/// phones, a side rail with centred content on tablets and desktop web.
+/// phones, a top bar with centred content on tablets and desktop web.
 class _SectionShell extends StatelessWidget {
   const _SectionShell({required this.sections, required this.location, required this.child});
   final List<AppSection> sections;
   final String location;
   final Widget child;
-
-  /// Material 3 "expanded" window class starts here.
-  static const wideFrom = 840.0;
 
   @override
   Widget build(BuildContext context) {
@@ -172,7 +169,7 @@ class _SectionShell extends StatelessWidget {
           child: page,
         );
 
-    if (MediaQuery.sizeOf(context).width < wideFrom) {
+    if (MediaQuery.sizeOf(context).width < wideLayoutFrom) {
       return backToSearch(Scaffold(
         body: child,
         bottomNavigationBar: NavigationBar(
@@ -183,26 +180,87 @@ class _SectionShell extends StatelessWidget {
       ));
     }
     return backToSearch(Scaffold(
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: selected,
-            onDestinationSelected: go,
-            labelType: NavigationRailLabelType.all,
-            destinations: [
-              for (final s in sections) NavigationRailDestination(icon: Icon(s.icon), label: Text(s.label)),
-            ],
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: maxContentWidth), child: child),
-            ),
-          ),
-        ],
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(TopNav.height),
+        child: TopNav(sections: sections, location: location),
+      ),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: maxContentWidth), child: child),
       ),
     ));
+  }
+}
+
+/// Wide screens (desktop web, tablets): the logo, Home, one link for each
+/// way to search the tenant offers (Rent, Buy, BnB), the other sections,
+/// and the account on the right.
+class TopNav extends ConsumerWidget {
+  const TopNav({super.key, required this.sections, required this.location});
+  final List<AppSection> sections;
+  final String location;
+
+  static const height = 80.0;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tenant = ref.watch(tenantProvider);
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final signedIn = ref.watch(customerProvider).value != null;
+    void go(String path) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      context.go(path);
+    }
+
+    Widget link(String label, String path, {required bool here}) => Padding(
+          padding: EdgeInsets.symmetric(horizontal: b.spacing.xs),
+          child: TextButton(
+            onPressed: () => go(path),
+            child: Text(
+              label,
+              style: text.titleSmall?.copyWith(
+                color: here ? scheme.primary : scheme.onSurface,
+                decoration: here ? TextDecoration.underline : null,
+                decorationColor: scheme.primary,
+                decorationThickness: 2,
+              ),
+            ),
+          ),
+        );
+    bool under(String path) => location == path || location.startsWith('$path/');
+    return Material(
+      key: const Key('top-nav'),
+      color: scheme.surface,
+      shape: Border(bottom: BorderSide(color: Theme.of(context).dividerTheme.color ?? scheme.outlineVariant)),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: maxContentWidth),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: b.spacing.gutter),
+            child: Row(children: [
+              InkWell(
+                onTap: () => go('/'),
+                child: Image.asset(b.logoAsset, height: 60, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
+              ),
+              SizedBox(width: b.spacing.lg),
+              link('Home', '/', here: location == '/'),
+              for (final p in Purpose.values)
+                if (tenant.features.isOn(p.feature)) link(p.label, '/${p.pathSegment}', here: under('/${p.pathSegment}')),
+              for (final s in sections)
+                if (s.path != '/' && s.path != '/account') link(s.label, s.path, here: under(s.path)),
+              const Spacer(),
+              OutlinedButton.icon(
+                onPressed: () => go('/account'),
+                icon: const Icon(Icons.person_outline),
+                label: Text(signedIn ? 'Account' : 'Log in / Sign up'),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
   }
 }
 
