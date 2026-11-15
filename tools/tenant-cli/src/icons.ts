@@ -112,21 +112,35 @@ export async function generateIcons(root: string, tenant: any): Promise<IconRepo
   return { outDir, files };
 }
 
-/** Home page photo bands (tenant file `home`), under fixed names the app knows. */
-export const HOME_BANDS = { hero: 'home-hero.webp', banner: 'home-banner.webp' } as const;
+/** Home page photo bands (tenant file `home`). */
+export const HOME_BANDS = ['hero', 'banner'] as const;
+
+/** Most photos a band rotates through. */
+export const MAX_HOME_PHOTOS = 8;
+
+/** A band's n-th photo (1-based), under the fixed name the app knows. */
+export const homePhotoFile = (band: string, n: number) => `home-${band}-${n}.webp`;
+
+/** A band's photos in order: `images`, or the single `image`. */
+export function homePhotos(band: any): string[] {
+  return (band?.images ?? (band?.image ? [band.image] : [])).slice(0, MAX_HOME_PHOTOS);
+}
 
 /**
  * The tenant's home page photos, resized for the web (1600 px wide at most,
- * WebP), into [outDir]. Returns the files written; none when the tenant
- * names no photos, and the app then draws the bands in the brand colour.
+ * WebP), into [outDir] as home-<band>-<n>.webp. Returns the files written;
+ * none when the tenant names no photos, and the app then draws the bands in
+ * the brand colour.
  */
 export async function writeHomeImages(root: string, tenant: any, outDir: string): Promise<string[]> {
   const written: string[] = [];
-  for (const [band, file] of Object.entries(HOME_BANDS)) {
-    const src: string | undefined = tenant.home?.[band]?.image;
-    if (!src) continue;
-    await sharp(join(root, src)).rotate().resize({ width: 1600, withoutEnlargement: true }).webp({ quality: 72 }).toFile(join(outDir, file));
-    written.push(file);
+  for (const band of HOME_BANDS) {
+    const photos = homePhotos(tenant.home?.[band]);
+    for (let i = 0; i < photos.length; i++) {
+      const file = homePhotoFile(band, i + 1);
+      await sharp(join(root, photos[i])).rotate().resize({ width: 1600, withoutEnlargement: true }).webp({ quality: 72 }).toFile(join(outDir, file));
+      written.push(file);
+    }
   }
   return written;
 }

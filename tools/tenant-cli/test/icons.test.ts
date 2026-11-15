@@ -51,13 +51,16 @@ for (const id of ['realtime-estates', 'demo-homes']) {
   });
 }
 
-test('home page photos are resized to WebP under fixed names; none named, none written', async () => {
+test('home page photos are resized to WebP under fixed, numbered names; none named, none written', async () => {
   const root = mkdtempSync(join(tmpdir(), 'home-'));
   mkdirSync(join(root, 'brand', 'x', 'home'), { recursive: true });
-  await sharp({ create: { width: 3000, height: 1200, channels: 3, background: { r: 30, g: 60, b: 90 } } }).jpeg().toFile(join(root, 'brand/x/home/hero.jpg'));
+  for (const f of ['hero.jpg', 'b1.jpg', 'b2.jpg']) {
+    await sharp({ create: { width: 3000, height: 1200, channels: 3, background: { r: 30, g: 60, b: 90 } } }).jpeg().toFile(join(root, 'brand/x/home', f));
+  }
   const out = mkdtempSync(join(tmpdir(), 'home-out-'));
-  assert.deepEqual(await writeHomeImages(root, { home: { hero: { title: 't', image: 'brand/x/home/hero.jpg' }, banner: { title: 'b' } } }, out), ['home-hero.webp']);
-  const meta = await sharp(join(out, 'home-hero.webp')).metadata();
+  const tenant = { home: { hero: { title: 't', image: 'brand/x/home/hero.jpg' }, banner: { title: 'b', images: ['brand/x/home/b1.jpg', 'brand/x/home/b2.jpg'] } } };
+  assert.deepEqual(await writeHomeImages(root, tenant, out), ['home-hero-1.webp', 'home-banner-1.webp', 'home-banner-2.webp']);
+  const meta = await sharp(join(out, 'home-hero-1.webp')).metadata();
   assert.equal(meta.format, 'webp');
   assert.equal(meta.width, 1600);
   assert.deepEqual(await writeHomeImages(root, {}, out), []);

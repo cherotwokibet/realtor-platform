@@ -97,7 +97,10 @@ void main() {
       final withPhoto = TenantConfig.fromJson(json);
       expect(withPhoto.home.hero!.hasImage, isTrue);
       expect(withPhoto.home.hero!.text, isNull);
+      expect(withPhoto.home.hero!.imageCount, 1);
       expect(withPhoto.withFeatures(withPhoto.features).home.hero!.title, 'Welcome');
+      (json['home'] as Map<String, Object?>)['hero'] = {'title': 'Welcome', 'images': ['brand/x/home/1.jpg', 'brand/x/home/2.jpg', 'brand/x/home/3.jpg']};
+      expect(TenantConfig.fromJson(json).home.hero!.imageCount, 3);
     });
 
     test('a tenant file without `home` has no bands', () {
