@@ -4,11 +4,14 @@ import 'package:go_router/go_router.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
+import '../account/account_data.dart';
 import '../account/account_screen.dart';
 import '../ad_slot.dart';
+import '../app.dart' show TopNav;
 import '../nav.dart';
 import '../providers.dart';
 import '../saved/favourites.dart';
+import '../sections.dart';
 import 'filters_sheet.dart';
 import 'purpose.dart';
 import 'results_map.dart';
@@ -33,13 +36,38 @@ class ResultsScreen extends ConsumerWidget {
     final result = ref.watch(searchResultsProvider(filters));
     final onMap = ref.watch(resultsOnMapProvider);
     void change(ListingFilters f) => _go(context, f);
+    final wide = MediaQuery.sizeOf(context).width >= wideLayoutFrom;
+    final b = context.brand;
+    // The page's width, centred; the scrolling area itself spans the window.
+    Widget page(Widget child) => Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: maxContentWidth), child: child),
+        );
+    final barHeight = 48 + b.spacing.sm * 2 + 1;
+    final bar = Material(
+      color: Theme.of(context).colorScheme.surface,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        page(SearchBarRow(filters: filters, onChange: change)),
+        const Divider(height: 1),
+      ]),
+    );
+    final tenant = ref.watch(tenantProvider);
+    final menu = !wide
+        ? const SizedBox.shrink()
+        : SizedBox(
+            height: TopNav.height,
+            child: TopNav(
+              sections: visibleSections(enabledSections(tenant.features), signedIn: ref.watch(customerProvider).value != null),
+              location: '/${filters.purpose.pathSegment}',
+            ),
+          );
 
     return Scaffold(
       // Phones switch list and map with one pill over the results, where a
       // thumb reaches it; wide screens have the button at the end of the
       // search bar. Both as the big property portals do.
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: MediaQuery.sizeOf(context).width >= wideLayoutFrom
+      floatingActionButton: wide
           ? null
           : FloatingActionButton.extended(
               key: const Key('map-toggle'),
@@ -49,29 +77,72 @@ class ResultsScreen extends ConsumerWidget {
               onPressed: () => ref.read(resultsOnMapProvider.notifier).set(!onMap),
             ),
       body: SafeArea(
-        child: Column(children: [
-          SearchBarRow(filters: filters, onChange: change),
-          const Divider(height: 1),
-          Expanded(
-            child: result.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Search is not available right now.', style: text.bodyMedium)),
-              data: (r) => onMap
-                  ? Column(children: [
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: context.brand.spacing.gutter),
-                        child: _ActiveFilters(filters: filters, onChange: change),
+        child: wide && !onMap
+            // Wide screens: one page that scrolls, as a web page does. The
+            // top menu scrolls away, the search bar stays, and the homes
+            // and the column beside them move together.
+            // The scrollbar is always shown, at the window's edge.
+            ? Scrollbar(
+                thumbVisibility: true,
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: CustomScrollView(
+                    key: const Key('results-page'),
+                    primary: true,
+                    slivers: [
+                      SliverToBoxAdapter(child: menu),
+                      SliverPersistentHeader(pinned: true, delegate: _PinnedBar(height: barHeight, child: bar)),
+                      result.when(
+                        loading: () => const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator())),
+                        error: (e, _) => SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(child: Text('Search is not available right now.', style: text.bodyMedium)),
+                        ),
+                        data: (r) => SliverToBoxAdapter(child: page(_ResultsList(filters: filters, result: r, onChange: change, scrolls: false))),
                       ),
-                      SizedBox(height: context.brand.spacing.sm),
-                      Expanded(child: ResultsMap(hits: r.hits, filters: filters, onChange: change)),
-                    ])
-                  : _ResultsList(filters: filters, result: r, onChange: change),
-            ),
-          ),
-        ]),
+                    ],
+                  ),
+                ),
+              )
+            : Column(children: [
+                if (wide) menu,
+                bar,
+                Expanded(
+                  child: page(result.when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('Search is not available right now.', style: text.bodyMedium)),
+                    data: (r) => onMap
+                        ? Column(children: [
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: context.brand.spacing.gutter),
+                              child: _ActiveFilters(filters: filters, onChange: change),
+                            ),
+                            SizedBox(height: context.brand.spacing.sm),
+                            Expanded(child: ResultsMap(hits: r.hits, filters: filters, onChange: change)),
+                          ])
+                        : _ResultsList(filters: filters, result: r, onChange: change),
+                  )),
+                ),
+              ]),
       ),
     );
   }
+}
+
+/// Keeps the search bar at the top of a page that scrolls under it.
+class _PinnedBar extends SliverPersistentHeaderDelegate {
+  const _PinnedBar({required this.height, required this.child});
+  final double height;
+  final Widget child;
+
+  @override
+  double get minExtent => height;
+  @override
+  double get maxExtent => height;
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => SizedBox.expand(child: child);
+  @override
+  bool shouldRebuild(_PinnedBar old) => old.height != height || old.child != child;
 }
 
 const _keep = Object();
@@ -220,7 +291,8 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
       ),
     );
     final drops = [
-      drop(f.types.isEmpty ? (wide ? 'Property type' : 'Type') : f.types.map(typeName).join(', '), f.types.isNotEmpty, FilterSection.type, const Key('filter-type')),
+      drop(f.types.isEmpty ? (wide ? 'Property type' : 'Type') : f.types.map(typeName).join(', '), f.types.isNotEmpty, FilterSection.type,
+          const Key('filter-type')),
       drop(f.minBeds == null ? (wide ? 'Bedrooms' : 'Beds') : '${f.minBeds}+ beds', f.minBeds != null, FilterSection.beds, const Key('filter-beds')),
       drop(priceLabel(), f.minPriceKES != null || f.maxPriceKES != null, FilterSection.price, const Key('filter-price')),
       drop(more == 0 ? 'More Filters' : 'More Filters ($more)', more > 0, FilterSection.more, const Key('filter-more'), icon: Icons.tune),
@@ -270,8 +342,11 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
 /// column beside it for alerts and adverts. Narrower: cards one or two
 /// across, with an advert after every few homes.
 class _ResultsList extends ConsumerWidget {
-  const _ResultsList({required this.filters, required this.result, required this.onChange});
+  const _ResultsList({required this.filters, required this.result, required this.onChange, this.scrolls = true});
   final ListingFilters filters;
+
+  /// False when the page around it does the scrolling (wide screens).
+  final bool scrolls;
   final SearchResult result;
   final ValueChanged<ListingFilters> onChange;
 
@@ -324,23 +399,26 @@ class _ResultsList extends ConsumerWidget {
     // Room at the bottom for the Map pill on phones.
     const bottom = 96.0;
 
+    Widget list(EdgeInsets padding, List<Widget> children) => scrolls
+        ? ListView(padding: padding, children: children)
+        : Padding(padding: padding, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children));
+
     return LayoutBuilder(builder: (context, c) {
       if (c.maxWidth >= 960) {
         return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.md, b.spacing.md, bottom),
-              children: [
-                ...header,
-                if (r.hits.isEmpty) empty,
-                for (final l in r.hits) ...[ListingCard(listing: l, layout: CardLayout.wide), gap],
-              ],
-            ),
+            child: list(EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.md, b.spacing.md, bottom), [
+              ...header,
+              if (r.hits.isEmpty) empty,
+              for (final l in r.hits) ...[ListingCard(listing: l, layout: CardLayout.wide), gap],
+            ]),
           ),
           // Beside the homes, not among them: alerts, then the advert space.
           SizedBox(
             width: 320,
             child: SingleChildScrollView(
+              // Scrolls by itself only when the page does not (it never does on wide screens).
+              physics: scrolls ? null : const NeverScrollableScrollPhysics(),
               padding: EdgeInsets.fromLTRB(b.spacing.md, b.spacing.md, b.spacing.gutter, bottom),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Card(
@@ -361,12 +439,15 @@ class _ResultsList extends ConsumerWidget {
       }
       final cols = c.maxWidth >= 600 ? 2 : 1;
       final features = ref.watch(tenantProvider).features;
-      final purposes = [for (final p in Purpose.values) if (features.isOn(p.feature)) p];
+      final purposes = [
+        for (final p in Purpose.values)
+          if (features.isOn(p.feature)) p
+      ];
       // Whole rows between adverts: five homes on a phone, six when two across.
       final chunk = cols == 1 ? AdSlot.every : AdSlot.every + 1;
-      return ListView(
-        padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.md, b.spacing.gutter, bottom),
-        children: [
+      return list(
+        EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.md, b.spacing.gutter, bottom),
+        [
           // Phones have no top menu, so Rent, Buy and BnB switch here.
           if (purposes.length > 1 && MediaQuery.sizeOf(context).width < wideLayoutFrom) ...[
             SegmentedButton<Purpose>(
@@ -407,8 +488,7 @@ class ListingGrid extends StatelessWidget {
       final cols = c.maxWidth >= 960 ? 3 : (c.maxWidth >= 600 ? 2 : 1);
       final width = (c.maxWidth - gap * (cols - 1)) / cols;
       return Wrap(spacing: gap, runSpacing: gap, children: [
-        for (final l in listings)
-          SizedBox(width: width, child: ListingCard(listing: l, onOpen: onOpen == null ? null : () => onOpen!(l))),
+        for (final l in listings) SizedBox(width: width, child: ListingCard(listing: l, onOpen: onOpen == null ? null : () => onOpen!(l))),
       ]);
     });
   }

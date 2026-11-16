@@ -91,7 +91,17 @@ void main() {
       await tester.drag(find.text('Home 1'), const Offset(0, -300));
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(find.text('Home 1')).dy, lessThan(was.dy), reason: 'the list scrolled');
-      expect(tester.getTopLeft(bar), before);
+      if (size == phone) {
+        expect(tester.getTopLeft(bar), before);
+      } else {
+        // The whole page scrolls: the top menu goes, the bar stops at the top.
+        expect(tester.getTopLeft(bar).dy, 0);
+        expect(find.byKey(const Key('top-nav')).hitTestable(), findsNothing);
+        // One scroll for the page: the homes and the column beside them move together.
+        expect(find.descendant(of: find.byKey(const Key('results-page')), matching: find.byType(ListView)), findsNothing);
+        expect(tester.getTopLeft(find.byType(AdSlot).first).dy, lessThan(was.dy + 200));
+        expect(tester.getSize(find.byKey(const Key('results-page'))).width, size.width, reason: 'the scrollbar is at the window edge');
+      }
       for (final key in ['filter-location', 'filter-type', 'filter-beds', 'filter-price', 'filter-more']) {
         expect(find.byKey(Key(key)), findsOneWidget, reason: key);
       }
