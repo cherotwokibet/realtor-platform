@@ -26,10 +26,16 @@ enum Purpose {
   }
 }
 
-enum ListingSort { newest, priceAsc, priceDesc, nearest }
+/// [newest] is the default ("Popular" in the app): featured homes first,
+/// then the newest. [latest] is strictly newest first.
+enum ListingSort { newest, latest, priceAsc, priceDesc, nearest }
+
+/// Highest bedroom and bathroom choices; they mean "this many or more".
+const maxBedsChoice = 8, maxBathsChoice = 6;
 
 const _sortParam = {
   ListingSort.newest: 'newest',
+  ListingSort.latest: 'latest',
   ListingSort.priceAsc: 'price-asc',
   ListingSort.priceDesc: 'price-desc',
   ListingSort.nearest: 'nearest',
@@ -80,7 +86,10 @@ class ListingFilters {
     this.verifiedFirst = false,
     this.furnished,
     this.floorPlan = false,
+    this.video = false,
     this.tour = false,
+    this.beds = const [],
+    this.baths = const [],
     this.near,
     this.polygon = const [],
     this.sort = ListingSort.newest,
@@ -99,8 +108,13 @@ class ListingFilters {
   /// true: furnished only; false: unfurnished only; null: either.
   final bool? furnished;
 
-  /// Only homes with a floor plan; only homes with a video or 360° tour.
-  final bool floorPlan, tour;
+  /// Only homes with a floor plan, a video tour, a 360° tour.
+  final bool floorPlan, video, tour;
+
+  /// Exact bedroom and bathroom counts, any of them (Beds & Baths). The
+  /// highest choice ([maxBedsChoice], [maxBathsChoice]) means that many or
+  /// more. Empty: any. [minBeds] is the older "2+" form, still read from links.
+  final List<int> beds, baths;
   final GeoRadius? near;
 
   /// Draw-an-area search (P3-s04): 3 to [maxPolygonPoints] corners, implicitly closed.
@@ -121,6 +135,8 @@ class ListingFilters {
     List<GeoPoint>? polygon,
     ListingSort? sort,
     int? page,
+    List<int>? beds,
+    List<int>? baths,
   }) =>
       ListingFilters(
         purpose: purpose ?? this.purpose,
@@ -135,7 +151,10 @@ class ListingFilters {
         verifiedFirst: verifiedFirst,
         furnished: furnished,
         floorPlan: floorPlan,
+        video: video,
         tour: tour,
+        beds: beds ?? this.beds,
+        baths: baths ?? this.baths,
         near: near,
         polygon: polygon ?? this.polygon,
         sort: sort ?? this.sort,
@@ -162,7 +181,10 @@ class ListingFilters {
       if (verifiedFirst) 'vfirst': '1',
       if (furnished != null) 'furnished': furnished! ? '1' : '0',
       if (floorPlan) 'plan': '1',
+      if (video) 'video': '1',
       if (tour) 'tour': '1',
+      if (beds.isNotEmpty) 'bd': beds.join(','),
+      if (baths.isNotEmpty) 'ba': baths.join(','),
       if (near != null) 'near': '${near!.lat},${near!.lng},${near!.km}',
       if (polygon.isNotEmpty) 'poly': polygon.map((p) => '${p.lat},${p.lng}').join('~'),
       if (sort != ListingSort.newest) 'sort': _sortParam[sort]!,
@@ -198,6 +220,12 @@ class ListingFilters {
       return v != null && v >= 0 ? v : null;
     }
 
+    // Distinct counts in order, 1 up to [max]; anything else is dropped.
+    List<int> counts(String k, int max) {
+      final xs = {for (final s in (p[k] ?? '').split(',')) if (int.tryParse(s.trim()) case final v? when v >= 1 && v <= max) v}.toList()..sort();
+      return xs;
+    }
+
     GeoRadius? near;
     final n = (p['near'] ?? '').split(',').map(double.tryParse).toList();
     if (n.length == 3 && n.every((x) => x != null) && n[0]!.abs() <= 90 && n[1]!.abs() <= 180 && n[2]! > 0 && n[2]! <= 100) {
@@ -223,7 +251,10 @@ class ListingFilters {
       verifiedFirst: p['vfirst'] == '1',
       furnished: switch (p['furnished']) { '1' => true, '0' => false, _ => null },
       floorPlan: p['plan'] == '1',
+      video: p['video'] == '1',
       tour: p['tour'] == '1',
+      beds: counts('bd', maxBedsChoice),
+      baths: counts('ba', maxBathsChoice),
       near: near,
       polygon: polygon.length >= 3 && polygon.length <= maxPolygonPoints ? polygon : const [],
       sort: sort == ListingSort.nearest && near == null ? ListingSort.newest : sort,

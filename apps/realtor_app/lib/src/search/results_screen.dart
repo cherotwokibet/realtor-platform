@@ -10,6 +10,7 @@ import '../ad_slot.dart';
 import '../app.dart' show TopNav;
 import '../nav.dart';
 import '../providers.dart';
+import '../phone_nav.dart';
 import '../saved/favourites.dart';
 import '../sections.dart';
 import 'filters_sheet.dart';
@@ -41,9 +42,11 @@ class ResultsScreen extends ConsumerWidget {
     // The page's width, centred; the scrolling area itself spans the window.
     Widget page(Widget child) => Align(
           alignment: Alignment.topCenter,
-          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: maxContentWidth), child: child),
+          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: resultsContentWidth), child: child),
         );
-    final barHeight = 48 + b.spacing.sm * 2 + 1;
+    // Wide: one row of 48. Phones: the 44 location box over the 36 pills.
+    // (A back arrow, when there is a screen behind, makes the first row 48.)
+    final barHeight = wide ? 48 + b.spacing.sm * 2 + 1 : (context.canPop() ? 48 : 44) + 36 + b.spacing.sm * 3 + 1;
     final bar = Material(
       color: Theme.of(context).colorScheme.surface,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -64,8 +67,8 @@ class ResultsScreen extends ConsumerWidget {
 
     return Scaffold(
       // Phones switch list and map with one pill over the results, where a
-      // thumb reaches it; wide screens have the button at the end of the
-      // search bar. Both as the big property portals do.
+      // thumb reaches it; wide screens have List | Map over the homes. Both
+      // as the big property portals do.
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: wide
           ? null
@@ -76,21 +79,24 @@ class ResultsScreen extends ConsumerWidget {
               label: Text(onMap ? 'List' : 'Map'),
               onPressed: () => ref.read(resultsOnMapProvider.notifier).set(!onMap),
             ),
+      drawer: wide ? null : const AppDrawer(),
       body: SafeArea(
-        child: wide && !onMap
-            // Wide screens: one page that scrolls, as a web page does. The
+        child: !onMap
+            // One page that scrolls, as a web page does. The
             // top menu scrolls away, the search bar stays, and the homes
             // and the column beside them move together.
             // The scrollbar is always shown, at the window's edge.
             ? Scrollbar(
-                thumbVisibility: true,
+                // Always shown at the window's edge on wide screens.
+                thumbVisibility: wide,
                 child: ScrollConfiguration(
                   behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                   child: CustomScrollView(
                     key: const Key('results-page'),
                     primary: true,
                     slivers: [
-                      SliverToBoxAdapter(child: menu),
+                      // The top menu scrolls away with the page and is back at the top.
+                      if (wide) SliverToBoxAdapter(child: menu) else const PhoneTopBar(),
                       SliverPersistentHeader(pinned: true, delegate: _PinnedBar(height: barHeight, child: bar)),
                       result.when(
                         loading: () => const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator())),
@@ -104,6 +110,7 @@ class ResultsScreen extends ConsumerWidget {
                   ),
                 ),
               )
+            // The map fills the screen under the bar.
             : Column(children: [
                 if (wide) menu,
                 bar,
@@ -111,16 +118,17 @@ class ResultsScreen extends ConsumerWidget {
                   child: page(result.when(
                     loading: () => const Center(child: CircularProgressIndicator()),
                     error: (e, _) => Center(child: Text('Search is not available right now.', style: text.bodyMedium)),
-                    data: (r) => onMap
-                        ? Column(children: [
-                            Padding(
-                              padding: EdgeInsets.symmetric(horizontal: context.brand.spacing.gutter),
-                              child: _ActiveFilters(filters: filters, onChange: change),
-                            ),
-                            SizedBox(height: context.brand.spacing.sm),
-                            Expanded(child: ResultsMap(hits: r.hits, filters: filters, onChange: change)),
-                          ])
-                        : _ResultsList(filters: filters, result: r, onChange: change),
+                    data: (r) => Column(children: [
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.md, b.spacing.gutter, 0),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          if (wide) ListHeading(filters: filters, found: r.found, onChange: change),
+                          _ActiveFilters(filters: filters, onChange: change),
+                        ]),
+                      ),
+                      SizedBox(height: context.brand.spacing.sm),
+                      Expanded(child: ResultsMap(hits: r.hits, filters: filters, onChange: change)),
+                    ]),
                   )),
                 ),
               ]),
@@ -160,14 +168,18 @@ ListingFilters _edit(
   bool? verifiedFirst,
   Object? furnished = _keep,
   bool? floorPlan,
+  bool? video,
   bool? tour,
+  List<int>? beds,
+  List<int>? baths,
+  List<String>? types,
   List<GeoPoint>? polygon,
   ListingSort? sort,
 }) =>
     ListingFilters(
       purpose: f.purpose,
       q: identical(q, _keep) ? f.q : q as String?,
-      types: f.types,
+      types: types ?? f.types,
       areas: areas ?? f.areas,
       minBeds: identical(minBeds, _keep) ? f.minBeds : minBeds as int?,
       minPriceKES: identical(minPrice, _keep) ? f.minPriceKES : minPrice as int?,
@@ -177,7 +189,10 @@ ListingFilters _edit(
       verifiedFirst: verifiedFirst ?? f.verifiedFirst,
       furnished: identical(furnished, _keep) ? f.furnished : furnished as bool?,
       floorPlan: floorPlan ?? f.floorPlan,
+      video: video ?? f.video,
       tour: tour ?? f.tour,
+      beds: beds ?? f.beds,
+      baths: baths ?? f.baths,
       near: f.near,
       polygon: polygon ?? f.polygon,
       sort: sort ?? f.sort,
@@ -190,11 +205,14 @@ ListingFilters _withPurpose(ListingFilters f, Purpose p) => ListingFilters(
       q: f.q,
       areas: f.areas,
       minBeds: f.minBeds,
+      beds: f.beds,
+      baths: f.baths,
       amenities: f.amenities,
       verifiedOnly: f.verifiedOnly,
       verifiedFirst: f.verifiedFirst,
       furnished: f.furnished,
       floorPlan: f.floorPlan,
+      video: f.video,
       tour: f.tour,
       near: f.near,
       polygon: f.polygon,
@@ -247,21 +265,36 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
     final scheme = Theme.of(context).colorScheme;
     final wide = MediaQuery.sizeOf(context).width >= wideLayoutFrom;
     final f = widget.filters;
-    final more = [f.furnished != null, f.amenities.isNotEmpty, f.verifiedFirst, f.verifiedOnly, f.floorPlan, f.tour].where((x) => x).length;
+    final more = [f.amenities.where((a) => a != 'furnished').isNotEmpty, f.floorPlan, f.video, f.tour].where((x) => x).length;
+    final roomTypes = {for (final (t, _) in filterRoomTypes) t};
+    final rooms = [
+      for (final (t, label) in filterRoomTypes)
+        if (f.types.contains(t)) label
+    ];
+    String count(int n, int max) => n == max ? '$n+' : '$n';
+    final bedsBaths = [
+      if (rooms.isNotEmpty || f.beds.isNotEmpty) '${[...rooms, ...f.beds.map((n) => count(n, maxBedsChoice))].join(', ')} beds',
+      if (f.beds.isEmpty && rooms.isEmpty && f.minBeds != null) '${f.minBeds}+ beds',
+      if (f.baths.isNotEmpty) '${f.baths.map((n) => count(n, maxBathsChoice)).join(', ')} baths',
+    ].join(' · ');
+    final otherTypes = f.types.where((t) => !roomTypes.contains(t)).toList();
+    // Everything the filters button covers, for its badge.
+    final all = [otherTypes.isNotEmpty, bedsBaths.isNotEmpty, f.minPriceKES != null || f.maxPriceKES != null].where((x) => x).length + more;
     String priceLabel() => switch ((f.minPriceKES, f.maxPriceKES)) {
           (null, null) => 'Price',
           (final min?, null) => 'From ${formatKes(min, compact: true)}',
           (null, final max?) => 'Up to ${formatKes(max, compact: true)}',
           (final min?, final max?) => '${formatKes(min, compact: true)}–${formatKes(max, compact: true)}',
         };
-    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm));
+    final squared = RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm));
     Widget drop(String label, bool active, FilterSection section, Key key, {IconData icon = Icons.arrow_drop_down}) => Builder(
           builder: (anchor) => OutlinedButton(
             key: key,
             style: OutlinedButton.styleFrom(
-              shape: shape,
-              minimumSize: const Size(0, 48),
-              padding: wide ? null : EdgeInsets.symmetric(horizontal: b.spacing.sm),
+              minimumSize: wide ? const Size(0, 48) : const Size(0, 36),
+              padding: wide ? null : EdgeInsets.only(left: b.spacing.md, right: b.spacing.sm),
+              shape: wide ? squared : const StadiumBorder(),
+              textStyle: wide ? null : Theme.of(context).textTheme.labelLarge,
               foregroundColor: active ? scheme.primary : scheme.onSurface,
               backgroundColor: active ? b.primarySoft : null,
               side: active ? BorderSide(color: scheme.primary) : null,
@@ -274,6 +307,8 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
             ]),
           ),
         );
+    // The same height, corners and border as the buttons beside it.
+    final edge = OutlineInputBorder(borderRadius: BorderRadius.circular(b.radiusSm), borderSide: BorderSide(color: scheme.outline));
     final location = SizedBox(
       height: 48,
       child: TextField(
@@ -281,57 +316,76 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
         controller: _location,
         textInputAction: TextInputAction.search,
         onSubmitted: (_) => _search(),
+        expands: true,
+        maxLines: null,
+        textAlignVertical: TextAlignVertical.center,
         decoration: InputDecoration(
           hintText: 'Area, estate or location',
-          isDense: true,
+          filled: false,
           contentPadding: EdgeInsets.symmetric(horizontal: b.spacing.md),
-          prefixIcon: const Icon(Icons.place_outlined),
+          border: edge,
+          enabledBorder: edge,
+          focusedBorder: edge.copyWith(borderSide: BorderSide(color: scheme.primary, width: 2)),
+          prefixIcon: Icon(Icons.place_outlined, color: scheme.primary),
           suffixIcon: IconButton(tooltip: 'Search', icon: const Icon(Icons.search), onPressed: _search),
         ),
       ),
     );
     final drops = [
-      drop(f.types.isEmpty ? (wide ? 'Property type' : 'Type') : f.types.map(typeName).join(', '), f.types.isNotEmpty, FilterSection.type,
-          const Key('filter-type')),
-      drop(f.minBeds == null ? (wide ? 'Bedrooms' : 'Beds') : '${f.minBeds}+ beds', f.minBeds != null, FilterSection.beds, const Key('filter-beds')),
+      drop(otherTypes.isEmpty ? 'Property type' : otherTypes.map(typeName).join(', '), otherTypes.isNotEmpty, FilterSection.type, const Key('filter-type')),
+      drop(bedsBaths.isEmpty ? 'Beds & Baths' : bedsBaths, bedsBaths.isNotEmpty, FilterSection.bedsBaths, const Key('filter-beds')),
       drop(priceLabel(), f.minPriceKES != null || f.maxPriceKES != null, FilterSection.price, const Key('filter-price')),
       drop(more == 0 ? 'More Filters' : 'More Filters ($more)', more > 0, FilterSection.more, const Key('filter-more'), icon: Icons.tune),
     ];
     final gap = SizedBox(width: b.spacing.sm);
-    final onMap = ref.watch(resultsOnMapProvider);
     return Material(
       key: const Key('filter-bar'),
       color: scheme.surface,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: b.spacing.gutter, vertical: b.spacing.sm),
+        // Wide: the same 24 edges as the homes and the column beside them.
+        padding: EdgeInsets.symmetric(horizontal: wide ? 24 : b.spacing.gutter, vertical: b.spacing.sm),
         child: wide
             ? Row(children: [
                 Expanded(child: location),
-                for (final d in drops) ...[gap, d],
-                gap,
-                Tooltip(
-                  message: onMap ? 'List' : 'Map',
-                  child: FilledButton.icon(
-                    key: const Key('map-toggle'),
-                    style: FilledButton.styleFrom(minimumSize: const Size(0, 48), shape: const StadiumBorder()),
-                    onPressed: () => ref.read(resultsOnMapProvider.notifier).set(!onMap),
-                    iconAlignment: IconAlignment.end,
-                    icon: Icon(onMap ? Icons.view_list : Icons.map, size: 20),
-                    label: Text(onMap ? 'List' : 'Map'),
-                  ),
-                ),
+                // A long choice ("Studio, 2, 3 beds · 6+ baths") shortens with "…".
+                for (final d in drops) ...[gap, ConstrainedBox(constraints: const BoxConstraints(maxWidth: 200), child: d)],
               ])
+            // Phones, as on the big portals: the location box, then one
+            // row of small pills that scrolls sideways, the filters button
+            // first. Each pill opens its sheet; the filters button opens all.
             : Column(mainAxisSize: MainAxisSize.min, children: [
                 Row(children: [
                   if (context.canPop()) const AppBack(),
-                  Expanded(child: location),
+                  Expanded(child: SizedBox(height: 44, child: location)),
                 ]),
                 SizedBox(height: b.spacing.sm),
-                // All four fit a phone's width: the first three share what More Filters leaves.
-                Row(children: [
-                  for (final d in drops.take(3)) ...[Expanded(child: d), gap],
-                  drops.last,
-                ]),
+                SizedBox(
+                  height: 36,
+                  child: SingleChildScrollView(
+                    key: const Key('filter-pills'),
+                    scrollDirection: Axis.horizontal,
+                    child: Row(children: [
+                      Builder(
+                        builder: (anchor) => Badge(
+                          isLabelVisible: all > 0,
+                          label: Text('$all'),
+                          child: IconButton.outlined(
+                            key: const Key('filter-all'),
+                            tooltip: 'Filters',
+                            constraints: const BoxConstraints.tightFor(width: 44, height: 36),
+                            padding: EdgeInsets.zero,
+                            style: IconButton.styleFrom(shape: const StadiumBorder(), side: BorderSide(color: b.borderStrong)),
+                            icon: Icon(Icons.tune, size: 18, color: scheme.primary),
+                            onPressed: () => _open(anchor, FilterSection.all),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: b.spacing.sm),
+                      VerticalDivider(width: 1, indent: 6, endIndent: 6, color: b.borderStrong),
+                      for (final d in drops.take(3)) ...[gap, d],
+                    ]),
+                  ),
+                ),
               ]),
       ),
     );
@@ -356,39 +410,9 @@ class _ResultsList extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     final ads = AdSlot.enabledFor(ref.watch(tenantProvider));
     final r = result;
-    final where = filters.areas.length == 1 ? ' in ${areaName(filters.areas.single)}' : '';
-    final what = filters.types.length == 1 ? '${typeName(filters.types.single)}s' : 'Homes';
-    const sorts = [(ListingSort.newest, 'Newest'), (ListingSort.priceAsc, 'Price: low to high'), (ListingSort.priceDesc, 'Price: high to low')];
-    final sortName = sorts.where((s) => s.$1 == filters.sort).map((s) => s.$2).firstOrNull ?? 'Nearest';
     final gap = SizedBox(height: b.spacing.md);
     final header = <Widget>[
-      Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: b.spacing.md,
-        runSpacing: b.spacing.sm,
-        children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text('$what ${filters.purpose.heading}$where', style: text.titleLarge),
-            Text('${r.found} ${r.found == 1 ? 'home' : 'homes'}', style: text.labelLarge),
-          ]),
-          PopupMenuButton<ListingSort>(
-            tooltip: 'Sort',
-            initialValue: filters.sort,
-            onSelected: (s) => onChange(_edit(filters, sort: s)),
-            itemBuilder: (_) => [for (final (value, label) in sorts) PopupMenuItem(value: value, child: Text(label))],
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: b.spacing.sm),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.swap_vert, size: 20),
-                SizedBox(width: b.spacing.xs),
-                Text(sortName, style: text.labelLarge),
-                const Icon(Icons.arrow_drop_down, size: 20),
-              ]),
-            ),
-          ),
-        ],
-      ),
+      ListHeading(filters: filters, found: r.found, onChange: onChange),
       _ActiveFilters(filters: filters, onChange: onChange),
       gap,
     ];
@@ -407,7 +431,7 @@ class _ResultsList extends ConsumerWidget {
       if (c.maxWidth >= 960) {
         return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
-            child: list(EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.md, b.spacing.md, bottom), [
+            child: list(EdgeInsets.fromLTRB(24, b.spacing.md, 0, bottom), [
               ...header,
               if (r.hits.isEmpty) empty,
               for (final l in r.hits) ...[ListingCard(listing: l, layout: CardLayout.wide), gap],
@@ -415,11 +439,11 @@ class _ResultsList extends ConsumerWidget {
           ),
           // Beside the homes, not among them: alerts, then the advert space.
           SizedBox(
-            width: 320,
+            width: 300 + 25 + 24,
             child: SingleChildScrollView(
               // Scrolls by itself only when the page does not (it never does on wide screens).
               physics: scrolls ? null : const NeverScrollableScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(b.spacing.md, b.spacing.md, b.spacing.gutter, bottom),
+              padding: EdgeInsets.fromLTRB(25, b.spacing.md, 24, bottom),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Card(
                   child: Padding(
@@ -472,6 +496,140 @@ class _ResultsList extends ConsumerWidget {
         ],
       );
     });
+  }
+}
+
+/// Over the homes, as on the big portals: the heading and the count, then
+/// All / Furnished / Unfurnished, the order, and List | Map on wide screens.
+class ListHeading extends ConsumerWidget {
+  const ListHeading({super.key, required this.filters, required this.found, required this.onChange});
+  final ListingFilters filters;
+  final int found;
+  final ValueChanged<ListingFilters> onChange;
+
+  /// The orders offered; "verified" is Popular with verified homes first.
+  static const orders = [
+    ('popular', 'Popular'),
+    ('latest', 'Newest'),
+    ('low', 'Lowest price'),
+    ('high', 'Highest price'),
+    ('verified', 'Verified homes first')
+  ];
+
+  static String orderOf(ListingFilters f) => f.verifiedFirst
+      ? 'verified'
+      : switch (f.sort) { ListingSort.latest => 'latest', ListingSort.priceAsc => 'low', ListingSort.priceDesc => 'high', _ => 'popular' };
+
+  static ListingFilters withOrder(ListingFilters f, String order) => _edit(
+        f,
+        verifiedFirst: order == 'verified',
+        sort: switch (order) { 'latest' => ListingSort.latest, 'low' => ListingSort.priceAsc, 'high' => ListingSort.priceDesc, _ => ListingSort.newest },
+      );
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.brand;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final f = filters;
+    final wide = MediaQuery.sizeOf(context).width >= wideLayoutFrom;
+    final onMap = ref.watch(resultsOnMapProvider);
+    final where = f.areas.length == 1 ? ' in ${areaName(f.areas.single)}' : '';
+    final what = f.types.length == 1 ? '${typeName(f.types.single)}s' : 'Homes';
+    final order = orderOf(f);
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm));
+    // Furnished is stored as a feature in older links; the choice reads both.
+    final furnished = f.furnished ?? (f.amenities.contains('furnished') ? true : null);
+    void furnish(bool? value) => onChange(_edit(f, furnished: value, amenities: [...f.amenities]..remove('furnished')));
+    Widget choice(String label, bool? value) {
+      final on = furnished == value;
+      return ChoiceChip(
+        key: Key('furnished-${value ?? 'all'}'),
+        label: Text(label),
+        selected: on,
+        showCheckmark: false,
+        shape: shape,
+        side: BorderSide(color: on ? scheme.primary : b.borderStrong),
+        selectedColor: b.primarySoft,
+        labelStyle: text.labelLarge?.copyWith(color: on ? scheme.primary : null),
+        onSelected: (_) => furnish(value),
+      );
+    }
+
+    final sort = PopupMenuButton<String>(
+      key: const Key('sort'),
+      tooltip: 'Order',
+      initialValue: order,
+      onSelected: (o) => onChange(withOrder(f, o)),
+      itemBuilder: (_) => [for (final (value, label) in orders) PopupMenuItem(value: value, child: Text(label))],
+      child: Container(
+        height: 40,
+        padding: EdgeInsets.symmetric(horizontal: b.spacing.md),
+        decoration: BoxDecoration(border: Border.all(color: b.borderStrong), borderRadius: BorderRadius.circular(b.radiusSm)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.sort, size: 18),
+          SizedBox(width: b.spacing.sm),
+          Text(orders.firstWhere((o) => o.$1 == order).$2, style: text.labelLarge),
+          const Icon(Icons.arrow_drop_down, size: 20),
+        ]),
+      ),
+    );
+    final view = SegmentedButton<bool>(
+      key: const Key('map-toggle'),
+      showSelectedIcon: false,
+      style: SegmentedButton.styleFrom(shape: shape, visualDensity: VisualDensity.compact),
+      segments: const [
+        ButtonSegment(value: false, icon: Icon(Icons.view_list_outlined, size: 18), label: Text('List')),
+        ButtonSegment(value: true, icon: Icon(Icons.map_outlined, size: 18), label: Text('Map')),
+      ],
+      selected: {onMap},
+      onSelectionChanged: (s) => ref.read(resultsOnMapProvider.notifier).set(s.first),
+    );
+    final title = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      Text('$what ${f.purpose.heading}$where', style: text.titleLarge),
+      Text('$found ${found == 1 ? 'home' : 'homes'}', style: text.labelLarge?.copyWith(color: b.textMuted)),
+    ]);
+    final furnishing = wide
+        ? Row(mainAxisSize: MainAxisSize.min, children: [
+            choice('All', null),
+            SizedBox(width: b.spacing.sm),
+            choice('Furnished', true),
+            SizedBox(width: b.spacing.sm),
+            choice('Unfurnished', false),
+          ])
+        // Phones: one switch across the width, as the portals' apps have it.
+        : SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<int>(
+              key: const Key('furnishing'),
+              showSelectedIcon: false,
+              style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact),
+              segments: const [
+                ButtonSegment(value: 0, label: Text('All')),
+                ButtonSegment(value: 1, label: Text('Furnished')),
+                ButtonSegment(value: 2, label: Text('Unfurnished')),
+              ],
+              selected: {furnished == null ? 0 : (furnished ? 1 : 2)},
+              onSelectionChanged: (s) => furnish(switch (s.first) { 1 => true, 2 => false, _ => null }),
+            ),
+          );
+    // Wide: furnishing on the left, the order and List | Map on the right.
+    // Phones: the order beside the heading, furnishing under it.
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (wide) title else Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: title), sort]),
+      SizedBox(height: b.spacing.md),
+      // Both ends of the row when they fit; the order under furnishing when not.
+      Wrap(
+        key: const Key('list-heading'),
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        runSpacing: b.spacing.sm,
+        children: [
+          furnishing,
+          if (wide) Row(mainAxisSize: MainAxisSize.min, children: [sort, SizedBox(width: b.spacing.sm), view]),
+        ],
+      ),
+    ]);
   }
 }
 
@@ -594,7 +752,8 @@ class ListingCard extends ConsumerWidget {
               child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 SizedBox(
                   width: 320,
-                  child: Stack(fit: StackFit.expand, children: [PhotoCarousel(photos: photos, label: l.title), if (badge != null) badge]),
+                  child: Stack(
+                      fit: StackFit.expand, children: [PhotoCarousel(photos: photos, label: l.title, videoPoster: l.videoPoster), if (badge != null) badge]),
                 ),
                 Expanded(
                   child: Padding(
@@ -625,7 +784,7 @@ class ListingCard extends ConsumerWidget {
               AspectRatio(
                 aspectRatio: 16 / 10,
                 child: Stack(fit: StackFit.expand, children: [
-                  PhotoCarousel(photos: photos, label: l.title),
+                  PhotoCarousel(photos: photos, label: l.title, videoPoster: l.videoPoster),
                   if (badge != null) badge,
                   Positioned(
                     right: b.spacing.xs,
@@ -655,20 +814,29 @@ class ListingCard extends ConsumerWidget {
   }
 }
 
-/// A card's photos: swipe on a phone, or use the arrows; dots show where you
-/// are. Tapping a photo opens the home, like the rest of the card.
+/// A card's photos, and its video last: swipe on a phone or use the
+/// arrows; dots show where you are. It has no end: after the last comes the
+/// first again. Tapping opens the home, like the rest of the card.
 class PhotoCarousel extends StatefulWidget {
-  const PhotoCarousel({super.key, required this.photos, required this.label});
+  const PhotoCarousel({super.key, required this.photos, required this.label, this.videoPoster});
   final List<String> photos;
   final String label;
+
+  /// A frame of the home's video, shown last with a play mark.
+  final String? videoPoster;
 
   @override
   State<PhotoCarousel> createState() => _PhotoCarouselState();
 }
 
 class _PhotoCarouselState extends State<PhotoCarousel> {
-  final _pages = PageController();
-  int _at = 0;
+  // Far from page 0 in both directions, so swiping back from the first
+  // photo reaches the last, and on from the last reaches the first.
+  static const _loops = 10000;
+  late final _pages = PageController(initialPage: _count * _loops);
+  late int _page = _count * _loops;
+
+  int get _count => widget.photos.length + (widget.videoPoster == null ? 0 : 1);
 
   @override
   void dispose() {
@@ -676,25 +844,41 @@ class _PhotoCarouselState extends State<PhotoCarousel> {
     super.dispose();
   }
 
-  void _move(int by) => _pages.animateToPage(_at + by, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+  void _move(int by) => _pages.animateToPage(_page + by, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
 
   @override
   Widget build(BuildContext context) {
     final b = context.brand;
     final scheme = Theme.of(context).colorScheme;
-    final n = widget.photos.length;
+    final n = _count;
     final placeholder = ColoredBox(
       color: b.surfaceAlt,
       child: Center(child: Icon(Icons.home_work_outlined, size: 40, color: b.textMuted)),
     );
     if (n == 0) return placeholder;
-    Widget photo(int i) => Image.network(
+    final photos = widget.photos.length;
+    Widget slide(int i) {
+      if (i < photos) {
+        return Image.network(
           widget.photos[i],
           fit: BoxFit.cover,
           semanticLabel: n == 1 ? widget.label : '${widget.label}, photo ${i + 1} of $n',
           errorBuilder: (_, __, ___) => placeholder,
         );
-    if (n == 1) return photo(0);
+      }
+      return Stack(fit: StackFit.expand, children: [
+        Image.network(widget.videoPoster!, fit: BoxFit.cover, semanticLabel: '${widget.label}, video', errorBuilder: (_, __, ___) => placeholder),
+        Center(
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: scheme.scrim.withValues(alpha: 0.55), shape: BoxShape.circle),
+            child: Padding(padding: EdgeInsets.all(b.spacing.sm), child: Icon(Icons.play_arrow, size: 36, color: scheme.surface)),
+          ),
+        ),
+      ]);
+    }
+
+    if (n == 1) return slide(0);
+    final at = _page % n;
     Widget arrow(IconData icon, String tip, int by) => Material(
           color: scheme.surface.withValues(alpha: 0.9),
           shape: const CircleBorder(),
@@ -710,25 +894,29 @@ class _PhotoCarouselState extends State<PhotoCarousel> {
       PageView.builder(
         key: const Key('photo-carousel'),
         controller: _pages,
-        itemCount: n,
-        onPageChanged: (i) => setState(() => _at = i),
-        itemBuilder: (_, i) => photo(i),
+        onPageChanged: (i) => setState(() => _page = i),
+        itemBuilder: (_, i) => slide(i % n),
       ),
-      if (_at > 0) Positioned(left: b.spacing.xs, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_left, 'Previous photo', -1))),
-      if (_at < n - 1) Positioned(right: b.spacing.xs, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_right, 'Next photo', 1))),
+      Positioned(left: b.spacing.xs, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_left, 'Previous photo', -1))),
+      Positioned(right: b.spacing.xs, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_right, 'Next photo', 1))),
       Positioned(
         left: 0,
         right: 0,
         bottom: b.spacing.sm,
         child: ExcludeSemantics(
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          child: Row(key: Key('photo-dots-$at'), mainAxisAlignment: MainAxisAlignment.center, children: [
             for (var i = 0; i < n; i++)
-              Container(
-                width: i == _at ? 8 : 6,
-                height: i == _at ? 8 : 6,
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                decoration: BoxDecoration(shape: BoxShape.circle, color: scheme.surface.withValues(alpha: i == _at ? 1 : 0.6)),
-              ),
+              i == photos
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 1),
+                      child: Icon(Icons.play_arrow, size: i == at ? 12 : 10, color: scheme.surface.withValues(alpha: i == at ? 1 : 0.6)),
+                    )
+                  : Container(
+                      width: i == at ? 8 : 6,
+                      height: i == at ? 8 : 6,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: scheme.surface.withValues(alpha: i == at ? 1 : 0.6)),
+                    ),
           ]),
         ),
       ),
@@ -817,14 +1005,16 @@ class _ActiveFilters extends StatelessWidget {
     final chips = <(String, ListingFilters)>[
       for (final a in f.areas) (areaName(a), _edit(f, areas: [...f.areas]..remove(a))),
       if (f.minBeds != null) ('${f.minBeds}+ bed', _edit(f, minBeds: null)),
+      for (final n in f.beds) ('${n == maxBedsChoice ? '$n+' : n} bed', _edit(f, beds: [...f.beds]..remove(n))),
+      for (final n in f.baths) ('${n == maxBathsChoice ? '$n+' : n} bath', _edit(f, baths: [...f.baths]..remove(n))),
       if (f.minPriceKES != null) ('from ${formatKes(f.minPriceKES!)}', _edit(f, minPrice: null)),
       if (f.maxPriceKES != null) ('up to ${formatKes(f.maxPriceKES!)}', _edit(f, maxPrice: null)),
-      if (f.furnished != null) (f.furnished! ? 'furnished' : 'unfurnished', _edit(f, furnished: null)),
-      for (final a in f.amenities) (a.replaceAll('-', ' '), _edit(f, amenities: [...f.amenities]..remove(a))),
-      if (f.verifiedFirst) ('verified first', _edit(f, verifiedFirst: false)),
+      for (final a in f.amenities)
+        if (a != 'furnished') (a.replaceAll('-', ' '), _edit(f, amenities: [...f.amenities]..remove(a))),
       if (f.verifiedOnly) ('verified only', _edit(f, verifiedOnly: false)),
       if (f.floorPlan) ('floor plan', _edit(f, floorPlan: false)),
-      if (f.tour) ('video or tour', _edit(f, tour: false)),
+      if (f.video) ('video tour', _edit(f, video: false)),
+      if (f.tour) ('360° tour', _edit(f, tour: false)),
       if (f.q != null) ('"${f.q}"', _edit(f, q: null)),
       if (f.polygon.isNotEmpty) ('Drawn area', _edit(f, polygon: const [])),
     ];

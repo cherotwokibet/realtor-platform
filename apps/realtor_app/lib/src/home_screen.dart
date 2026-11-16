@@ -7,7 +7,6 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'package:go_router/go_router.dart';
 
-import 'account/account_data.dart';
 import 'ad_slot.dart';
 import 'nav.dart';
 import 'phone_nav.dart';
@@ -105,7 +104,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (_maxPrice != null && !_prices(_purpose).contains(_maxPrice)) _maxPrice = null;
     final whatsapp = tenant.whatsappLink('Hello ${tenant.name}, I am looking for a home.');
     final wide = MediaQuery.sizeOf(context).width >= wideLayoutFrom;
-    final signedIn = ref.watch(customerProvider).value != null;
     final hero = tenant.home.hero ?? HomeBand(title: tenant.tagline ?? tenant.name);
     final banner = tenant.home.banner;
     final listProperty = tenant.whatsappLink('Hello ${tenant.name}, I would like to list my property with you.');
@@ -183,52 +181,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       // Wide screens have the logo in the top navigation instead.
-      appBar: wide
-          ? null
-          // Phones: the menu on the left, the logo in the middle, the
-          // account on the right.
-          : AppBar(
-              toolbarHeight: 64,
-              title: Image.asset(b.logoAsset, height: 48, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
-              centerTitle: true,
-              actions: [
-                Padding(
-                  padding: EdgeInsets.only(right: b.spacing.sm),
-                  child: signedIn
-                      ? IconButton(tooltip: 'Account', icon: const Icon(Icons.person_outline), onPressed: () => context.go('/account'))
-                      : TextButton(key: const Key('home-login'), onPressed: () => context.go('/account'), child: const Text('Log in')),
-                ),
-              ],
-            ),
       drawer: wide ? null : const AppDrawer(),
-      body: ListView(
-        padding: EdgeInsets.all(b.spacing.gutter),
-        children: [
-          _PhotoBand(key: const Key('home-hero'), band: hero, name: 'hero', minHeight: wide ? 220 : 120, large: true),
-          // The search sits over the bottom edge of the photo.
-          Transform.translate(
-            offset: Offset(0, -b.spacing.xl),
-            child: Padding(padding: EdgeInsets.symmetric(horizontal: wide ? b.spacing.xl : b.spacing.sm), child: searchCard),
-          ),
-          // Wide screens show the promotion first, as a second photo band;
-          // phones show the property types first, so they stay on the first screen.
-          if (wide) ...promo,
-          ...types,
-          const RecentSearches(),
-          if (!wide) ...[SizedBox(height: b.spacing.xl), ...promo],
-          FeatureGate(
-            feature: Feature.ads,
-            child: Padding(
-              padding: EdgeInsets.only(top: b.spacing.xl),
-              child: const AdSlot(),
+      // Phones: the top bar scrolls away with the page and is back at the top.
+      body: CustomScrollView(slivers: [
+        if (!wide) const PhoneTopBar(),
+        SliverPadding(
+          padding: EdgeInsets.all(b.spacing.gutter),
+          sliver: SliverList.list(children: [
+            _PhotoBand(key: const Key('home-hero'), band: hero, name: 'hero', minHeight: wide ? 220 : 120, large: true),
+            // The search sits over the bottom edge of the photo.
+            Transform.translate(
+              offset: Offset(0, -b.spacing.xl),
+              child: Padding(padding: EdgeInsets.symmetric(horizontal: wide ? b.spacing.xl : b.spacing.sm), child: searchCard),
             ),
-          ),
-          SizedBox(height: b.spacing.xl),
-          _Newest(purpose: _purpose, onSeeAll: () => _search()),
-          SizedBox(height: b.spacing.xl),
-          _Footer(purposes: purposes),
-        ],
-      ),
+            // Wide screens show the promotion first, as a second photo band;
+            // phones show the property types first, so they stay on the first screen.
+            if (wide) ...promo,
+            ...types,
+            const RecentSearches(),
+            if (!wide) ...[SizedBox(height: b.spacing.xl), ...promo],
+            FeatureGate(
+              feature: Feature.ads,
+              child: Padding(
+                padding: EdgeInsets.only(top: b.spacing.xl),
+                child: const AdSlot(),
+              ),
+            ),
+            SizedBox(height: b.spacing.xl),
+            _Newest(purpose: _purpose, onSeeAll: () => _search()),
+            SizedBox(height: b.spacing.xl),
+            _Footer(purposes: purposes),
+          ]),
+        ),
+      ]),
       // In-app chat lives in its own section when on; otherwise WhatsApp handoff.
       bottomNavigationBar: !tenant.features.chat && whatsapp != null
           ? SafeArea(

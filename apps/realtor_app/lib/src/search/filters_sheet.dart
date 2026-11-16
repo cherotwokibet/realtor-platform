@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
+import '../providers.dart';
 import 'purpose.dart';
 
-/// Which part of the filters a button on the results bar opens. [more] is
-/// "More Filters": furnishing, features, amenities, verified, floor plans
-/// and tours. The purpose and the location have their own controls in the bar.
-enum FilterSection { type, beds, price, more }
+/// Which dropdown of the results bar is open. [more] is "More Filters":
+/// viewing options, and features and amenities. [all] is every one of them
+/// in one sheet (the filters button on phones). Furnishing, the sort and
+/// verified-first sit over the list instead; the location has its own box.
+enum FilterSection { type, bedsBaths, price, more, all }
 
 /// Property types offered in the filters, most asked-for first, with icons.
 const filterTypes = <(String, IconData)>[
@@ -25,19 +28,18 @@ const filterTypes = <(String, IconData)>[
   ('commercial', Icons.storefront_outlined),
 ];
 
-/// Features of the home itself; the same words typed search understands.
-/// (Furnished has its own All / Furnished / Unfurnished choice.)
-const filterFeatures = <(String, String)>[
-  ('balcony', 'Balcony'),
-  ('garden', 'Garden'),
-  ('parking', 'Parking'),
-];
+/// Room types that are their own "bedroom" count, offered first under Beds.
+const filterRoomTypes = <(String, String)>[('single-room', 'Single room'), ('studio', 'Studio'), ('bedsitter', 'Bedsitter')];
 
-/// What the building or compound offers.
+/// Features and amenities people filter by; the same words typed search
+/// understands. (Furnished is the All / Furnished / Unfurnished choice over the list.)
 const filterAmenities = <(String, String)>[
+  ('parking', 'Parking'),
   ('security', 'Security'),
   ('borehole', 'Borehole'),
   ('wifi', 'Wi-Fi'),
+  ('balcony', 'Balcony'),
+  ('garden', 'Garden'),
   ('lift', 'Lift'),
   ('gym', 'Gym'),
   ('swimming-pool', 'Swimming pool'),
@@ -59,18 +61,47 @@ const filterAmenities = <(String, String)>[
 /// The text a location box shows for [f].
 String locationText(ListingFilters f) => [...f.areas.map(areaName), if (f.q != null) f.q!].join(', ');
 
-/// Opens one part of the filters and returns the new filters, or null when
-/// it was closed without "Show homes". On wide screens it drops down from
-/// the button that opened it ([anchor]); on phones it is a bottom sheet.
+/// "2000" shows as "2,000" while it is typed.
+class ThousandsFormatter extends TextInputFormatter {
+  const ThousandsFormatter();
+
+  static String format(String digits) {
+    final d = digits.replaceAll(RegExp(r'[^0-9]'), '').replaceFirst(RegExp(r'^0+(?=\d)'), '');
+    final out = StringBuffer();
+    for (var i = 0; i < d.length; i++) {
+      if (i > 0 && (d.length - i) % 3 == 0) out.write(',');
+      out.write(d[i]);
+    }
+    return out.toString();
+  }
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final text = format(newValue.text);
+    // Keep the cursor after the same number of digits.
+    final digitsBefore = newValue.text.substring(0, newValue.selection.end.clamp(0, newValue.text.length)).replaceAll(RegExp(r'[^0-9]'), '').length;
+    var at = 0, seen = 0;
+    while (at < text.length && seen < digitsBefore) {
+      if (text[at] != ',') seen++;
+      at++;
+    }
+    return TextEditingValue(text: text, selection: TextSelection.collapsed(offset: at));
+  }
+}
+
+/// Opens one dropdown of the results bar and returns the new filters, or
+/// null when it was closed without "Done". On wide screens it drops down from
+/// the button that opened it ([anchor]), as on the big portals; on phones it
+/// is a bottom sheet.
 Future<ListingFilters?> showFiltersSheet(BuildContext context, ListingFilters filters, {required FilterSection section, BuildContext? anchor}) {
   final screen = MediaQuery.sizeOf(context);
   final box = anchor?.findRenderObject();
   if (screen.width >= 840 && box is RenderBox && box.hasSize) {
     final at = box.localToGlobal(Offset.zero) & box.size;
-    final width = section == FilterSection.more ? 440.0 : 380.0;
+    final width = switch (section) { FilterSection.type => 380.0, FilterSection.more => 360.0, _ => 340.0 };
     // More Filters sits at the right end of the bar, so it opens leftwards.
     final left = (section == FilterSection.more ? at.right - width : at.left).clamp(8.0, screen.width - width - 8);
-    final top = at.bottom + 6;
+    final top = at.bottom + 4;
     return showDialog<ListingFilters>(
       context: context,
       barrierColor: Colors.transparent,
@@ -80,16 +111,16 @@ Future<ListingFilters?> showFiltersSheet(BuildContext context, ListingFilters fi
           top: top,
           width: width,
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: screen.height - top - 16),
+            constraints: BoxConstraints(maxHeight: (screen.height - top - 16).clamp(200.0, 560.0)),
             child: Material(
               key: const Key('filter-popover'),
-              elevation: 8,
+              elevation: 6,
               clipBehavior: Clip.antiAlias,
-              borderRadius: BorderRadius.circular(context.brand.radiusMd),
-              child: Padding(
-                padding: EdgeInsets.only(top: context.brand.spacing.md),
-                child: FiltersSheet(initial: filters, section: section),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(context.brand.radiusSm),
+                side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
               ),
+              child: FiltersSheet(initial: filters, section: section, popover: true),
             ),
           ),
         ),
@@ -108,9 +139,13 @@ Future<ListingFilters?> showFiltersSheet(BuildContext context, ListingFilters fi
 }
 
 class FiltersSheet extends ConsumerStatefulWidget {
-  const FiltersSheet({super.key, required this.initial, required this.section});
+  const FiltersSheet({super.key, required this.initial, required this.section, this.popover = false});
   final ListingFilters initial;
   final FilterSection section;
+
+  /// Dropped down from its button on a wide screen: no title or close
+  /// button, as a menu would have none.
+  final bool popover;
 
   @override
   ConsumerState<FiltersSheet> createState() => _FiltersSheetState();
@@ -118,14 +153,18 @@ class FiltersSheet extends ConsumerStatefulWidget {
 
 class _FiltersSheetState extends ConsumerState<FiltersSheet> {
   late Set<String> _types = {...widget.initial.types};
-  late int? _minBeds = widget.initial.minBeds;
-  late final _min = TextEditingController(text: widget.initial.minPriceKES?.toString() ?? '');
-  late final _max = TextEditingController(text: widget.initial.maxPriceKES?.toString() ?? '');
-  late bool? _furnished = widget.initial.furnished ?? (widget.initial.amenities.contains('furnished') ? true : null);
+  // An older "2+" link reads as 2 and every count above it.
+  late Set<int> _beds = {
+    ...widget.initial.beds,
+    if (widget.initial.beds.isEmpty && widget.initial.minBeds != null)
+      for (var n = widget.initial.minBeds!.clamp(1, maxBedsChoice); n <= maxBedsChoice; n++) n,
+  };
+  late Set<int> _baths = {...widget.initial.baths};
+  late final _min = TextEditingController(text: ThousandsFormatter.format(widget.initial.minPriceKES?.toString() ?? ''));
+  late final _max = TextEditingController(text: ThousandsFormatter.format(widget.initial.maxPriceKES?.toString() ?? ''));
   late Set<String> _amenities = {...widget.initial.amenities}..remove('furnished');
-  late bool _verifiedFirst = widget.initial.verifiedFirst;
-  late bool _verifiedOnly = widget.initial.verifiedOnly;
   late bool _floorPlan = widget.initial.floorPlan;
+  late bool _video = widget.initial.video;
   late bool _tour = widget.initial.tour;
 
   @override
@@ -137,25 +176,36 @@ class _FiltersSheetState extends ConsumerState<FiltersSheet> {
 
   FilterSection get _section => widget.section;
 
+  bool _covers(FilterSection s) => _section == s || _section == FilterSection.all;
+
   void _reset() => setState(() {
-        switch (_section) {
-          case FilterSection.type:
-            _types = {};
-          case FilterSection.beds:
-            _minBeds = null;
-          case FilterSection.price:
-            _min.clear();
-            _max.clear();
-          case FilterSection.more:
-            _furnished = null;
-            _amenities = {};
-            _verifiedFirst = _verifiedOnly = _floorPlan = _tour = false;
+        for (final s in FilterSection.values) {
+          if (s != FilterSection.all && _covers(s)) _resetOne(s);
         }
       });
 
+  void _resetOne(FilterSection section) {
+    switch (section) {
+      case FilterSection.type:
+        _types = {};
+      case FilterSection.bedsBaths:
+        _types.removeAll([for (final (t, _) in filterRoomTypes) t]);
+        _beds = {};
+        _baths = {};
+      case FilterSection.price:
+        _min.clear();
+        _max.clear();
+      case FilterSection.more:
+        _amenities = {};
+        _floorPlan = _video = _tour = false;
+      case FilterSection.all:
+        break;
+    }
+  }
+
   static int? _kes(String s) => int.tryParse(s.replaceAll(RegExp(r'[^0-9]'), ''));
 
-  /// The filters with this section's choices; the rest stay as they were.
+  /// The filters with this dropdown's choices; the rest stay as they were.
   ListingFilters _result() {
     final f = widget.initial;
     var min = _kes(_min.text), max = _kes(_max.text);
@@ -163,16 +213,23 @@ class _FiltersSheetState extends ConsumerState<FiltersSheet> {
     return ListingFilters(
       purpose: f.purpose,
       q: f.q,
-      types: [..._types],
+      types: [
+        for (final (t, _) in filterTypes)
+          if (_types.contains(t)) t
+      ],
       areas: f.areas,
-      minBeds: _minBeds,
+      // Beds & Baths replaces an older "2+" choice.
+      minBeds: _covers(FilterSection.bedsBaths) ? null : f.minBeds,
+      beds: _beds.toList()..sort(),
+      baths: _baths.toList()..sort(),
       minPriceKES: min,
       maxPriceKES: max,
-      amenities: [..._amenities],
-      verifiedOnly: _verifiedOnly,
-      verifiedFirst: _verifiedFirst,
-      furnished: _furnished,
+      amenities: [if (f.amenities.contains('furnished')) 'furnished', ..._amenities],
+      verifiedOnly: f.verifiedOnly,
+      verifiedFirst: f.verifiedFirst,
+      furnished: f.furnished,
       floorPlan: _floorPlan,
+      video: _video,
       tour: _tour,
       near: f.near,
       polygon: f.polygon,
@@ -184,132 +241,144 @@ class _FiltersSheetState extends ConsumerState<FiltersSheet> {
   Widget build(BuildContext context) {
     final b = context.brand;
     final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     final period = widget.initial.purpose.period;
-    Widget heading(String s) => Padding(
-          padding: EdgeInsets.only(top: b.spacing.lg, bottom: b.spacing.sm),
-          child: Text(s, style: text.titleSmall),
+    var first = true;
+    Widget heading(String s) {
+      final top = first ? 0.0 : b.spacing.lg;
+      first = false;
+      return Padding(padding: EdgeInsets.only(top: top, bottom: b.spacing.sm), child: Text(s, style: text.titleSmall));
+    }
+
+    // Pills as the portals draw them: outlined, filled softly once picked.
+    Widget pill(String label, bool on, ValueChanged<bool> onTap, {Key? key}) => FilterChip(
+          key: key,
+          label: Text(label),
+          selected: on,
+          showCheckmark: false,
+          shape: const StadiumBorder(),
+          side: BorderSide(color: on ? scheme.primary : b.borderStrong),
+          selectedColor: b.primarySoft,
+          labelStyle: text.bodyMedium?.copyWith(color: on ? scheme.primary : null, fontWeight: on ? FontWeight.w600 : null),
+          onSelected: (v) => setState(() => onTap(v)),
         );
-    Widget chips(List<(String, String)> options) => Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [
-          for (final (key, label) in options)
-            FilterChip(
-              label: Text(label),
-              selected: _amenities.contains(key),
-              onSelected: (on) => setState(() => on ? _amenities.add(key) : _amenities.remove(key)),
+    Widget pills(List<Widget> xs) => Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: xs);
+    String count(int n, int max) => n == max ? '$n+' : '$n';
+    Widget priceField(String label, String hint, TextEditingController c, Key key) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: text.labelMedium?.copyWith(color: b.textMuted)),
+            SizedBox(height: b.spacing.xs),
+            TextField(
+              key: key,
+              controller: c,
+              keyboardType: TextInputType.number,
+              inputFormatters: const [ThousandsFormatter()],
+              decoration: InputDecoration(hintText: hint, isDense: true),
             ),
-        ]);
-    Widget tick(String label, bool value, ValueChanged<bool> onChanged, {String? note}) => CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          controlAffinity: ListTileControlAffinity.leading,
-          title: Text(label),
-          subtitle: note == null ? null : Text(note),
-          value: value,
-          onChanged: (v) => setState(() => onChanged(v ?? false)),
+          ]),
         );
     final title = switch (_section) {
       FilterSection.type => 'Property type',
-      FilterSection.beds => 'Bedrooms',
+      FilterSection.bedsBaths => 'Beds & Baths',
       FilterSection.price => period == null ? 'Price (KES)' : 'Price a $period (KES)',
       FilterSection.more => 'More filters',
+      FilterSection.all => 'Filters',
     };
 
-    final sections = switch (_section) {
-      FilterSection.type => <Widget>[
-          Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [
-            for (final (type, icon) in filterTypes)
-              _TypeTile(
-                label: typeName(type),
-                icon: icon,
-                selected: _types.contains(type),
-                onTap: () => setState(() => _types.contains(type) ? _types.remove(type) : _types.add(type)),
-              ),
-          ]),
-        ],
-      FilterSection.beds => <Widget>[
-          Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [
-            for (final (value, label) in const [(null, 'Any'), (1, '1+'), (2, '2+'), (3, '3+'), (4, '4+'), (5, '5+')])
-              ChoiceChip(
-                label: Text(label),
-                selected: _minBeds == value,
-                showCheckmark: false,
-                onSelected: (_) => setState(() => _minBeds = value),
-              ),
-          ]),
-        ],
-      FilterSection.price => <Widget>[
-          Row(children: [
-            Expanded(
-              child: TextField(
-                key: const Key('filter-min-price'),
-                controller: _min,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Minimum', hintText: '0'),
-              ),
-            ),
-            Padding(padding: EdgeInsets.symmetric(horizontal: b.spacing.sm), child: const Text('–')),
-            Expanded(
-              child: TextField(
-                key: const Key('filter-max-price'),
-                controller: _max,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Maximum', hintText: 'Any'),
-              ),
-            ),
-          ]),
-        ],
-      FilterSection.more => <Widget>[
-          Text('Furnishing', style: text.titleSmall),
-          SizedBox(height: b.spacing.sm),
-          SegmentedButton<bool?>(
-            key: const Key('filter-furnished'),
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: null, label: Text('All')),
-              ButtonSegment(value: true, label: Text('Furnished')),
-              ButtonSegment(value: false, label: Text('Unfurnished')),
+    List<Widget> part(FilterSection section) => switch (section) {
+          FilterSection.type => <Widget>[
+              if (_section == FilterSection.all) heading('Property type'),
+              Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [
+                for (final (type, icon) in filterTypes)
+                  _TypeTile(
+                    label: typeName(type),
+                    icon: icon,
+                    selected: _types.contains(type),
+                    onTap: () => setState(() => _types.contains(type) ? _types.remove(type) : _types.add(type)),
+                  ),
+              ]),
             ],
-            selected: {_furnished},
-            onSelectionChanged: (s) => setState(() => _furnished = s.first),
-          ),
-          heading('Features'),
-          chips(filterFeatures),
-          heading('Amenities'),
-          chips(filterAmenities),
-          heading('Verified homes'),
-          tick('Verified homes first', _verifiedFirst, (v) => _verifiedFirst = v, note: 'Homes our agents re-confirmed in the last 30 days, at the top.'),
-          tick('Verified homes only', _verifiedOnly, (v) => _verifiedOnly = v),
-          heading('Floor plans and virtual tours'),
-          tick('Has a floor plan', _floorPlan, (v) => _floorPlan = v),
-          tick('Has a video or virtual tour', _tour, (v) => _tour = v),
-        ],
-    };
+          FilterSection.bedsBaths => <Widget>[
+              heading('Beds'),
+              pills([
+                for (final (type, label) in filterRoomTypes) pill(label, _types.contains(type), (on) => on ? _types.add(type) : _types.remove(type)),
+                for (var n = 1; n <= maxBedsChoice; n++)
+                  pill(count(n, maxBedsChoice), _beds.contains(n), (on) => on ? _beds.add(n) : _beds.remove(n), key: Key('beds-$n')),
+              ]),
+              heading('Baths'),
+              pills([
+                for (var n = 1; n <= maxBathsChoice; n++)
+                  pill(count(n, maxBathsChoice), _baths.contains(n), (on) => on ? _baths.add(n) : _baths.remove(n), key: Key('baths-$n')),
+              ]),
+            ],
+          FilterSection.price => <Widget>[
+              if (widget.popover || _section == FilterSection.all)
+                heading(_section == FilterSection.all ? (period == null ? 'Price (KES)' : 'Price a $period (KES)') : title),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                priceField('Minimum', '0', _min, const Key('filter-min-price')),
+                SizedBox(width: b.spacing.md),
+                priceField('Maximum', 'Any', _max, const Key('filter-max-price')),
+              ]),
+            ],
+          FilterSection.more => <Widget>[
+              heading('Viewing options'),
+              pills([
+                pill('Floor plans', _floorPlan, (v) => _floorPlan = v),
+                pill('Video tours', _video, (v) => _video = v),
+                pill('360° tours', _tour, (v) => _tour = v),
+              ]),
+              heading('Features & Amenities'),
+              pills([
+                for (final (key, label) in filterAmenities) pill(label, _amenities.contains(key), (on) => on ? _amenities.add(key) : _amenities.remove(key))
+              ]),
+            ],
+          FilterSection.all => const <Widget>[],
+        };
+    final sections = _section == FilterSection.all
+        ? [
+            for (final s in [FilterSection.type, FilterSection.bedsBaths, FilterSection.price, FilterSection.more]) ...part(s)
+          ]
+        : part(_section);
+    // The whole sheet says how many homes its choices find, as the portals do.
+    final found = _section == FilterSection.all ? ref.watch(searchResultsProvider(_result())).value?.found : null;
 
+    final pad = widget.popover ? b.spacing.md : b.spacing.gutter;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: b.spacing.gutter),
-          child: Row(children: [
-            Expanded(child: Text(title, style: text.titleMedium)),
-            IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-          ]),
-        ),
+        if (!widget.popover)
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: pad),
+            child: Row(children: [
+              Expanded(child: Text(title, style: text.titleMedium)),
+              IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+            ]),
+          ),
         Flexible(
           child: ListView(
             shrinkWrap: true,
-            padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.sm, b.spacing.gutter, b.spacing.lg),
+            padding: EdgeInsets.fromLTRB(pad, widget.popover ? b.spacing.md : b.spacing.sm, pad, b.spacing.md),
             children: sections,
           ),
         ),
-        const Divider(height: 1),
         Padding(
-          padding: EdgeInsets.all(b.spacing.md),
+          padding: EdgeInsets.fromLTRB(pad, b.spacing.sm, pad, pad),
           child: Row(children: [
-            Expanded(child: OutlinedButton(onPressed: _reset, child: const Text('Reset'))),
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(foregroundColor: scheme.primary, side: BorderSide(color: scheme.primary)),
+                onPressed: _reset,
+                child: const Text('Reset'),
+              ),
+            ),
             SizedBox(width: b.spacing.md),
             Expanded(
-              flex: 2,
-              child: FilledButton(onPressed: () => Navigator.pop(context, _result()), child: const Text('Show homes')),
+              flex: _section == FilterSection.all ? 2 : 1,
+              child: FilledButton(
+                key: const Key('filters-done'),
+                onPressed: () => Navigator.pop(context, _result()),
+                child: Text(found == null ? 'Done' : 'See $found ${found == 1 ? 'home' : 'homes'}'),
+              ),
             ),
           ]),
         ),

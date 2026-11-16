@@ -74,7 +74,7 @@ void main() {
     await tester.tap(find.byKey(const Key('filter-type')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hostel').last);
-    await tester.tap(find.text('Show homes'));
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
     expect(h.location, '/rent/hostels');
     expect(find.text('Student hostel bed, Kasarani'), findsOneWidget);

@@ -39,7 +39,7 @@ void main() {
       expect(find.descendant(of: nav, matching: find.text(label)), findsOneWidget, reason: label);
     }
     expect(find.descendant(of: nav, matching: find.text('Saved')), findsNothing, reason: 'only for signed-in customers');
-    final list = tester.getSize(find.byType(ListView).first);
+    final list = tester.getSize(find.byType(CustomScrollView).first);
     expect(list.width, lessThanOrEqualTo(1200));
 
     // The wide home page: the realtor's two bands.

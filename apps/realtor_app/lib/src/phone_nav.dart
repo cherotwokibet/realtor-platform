@@ -40,6 +40,45 @@ List<PhoneTab> phoneTabs(Features f) {
 /// Where a tab goes: Saved asks a signed-out visitor to sign in first.
 String phoneTabTarget(PhoneTab tab, {required bool signedIn}) => tab.path == '/saved' && !signedIn ? '/account' : tab.path;
 
+/// The phone's top bar, as a sliver: the menu on the left, the logo in the
+/// middle, and Log in on the right (Saved once signed in). It scrolls away
+/// with the page and comes back only at the top, so the page gets the room.
+class PhoneTopBar extends ConsumerWidget {
+  const PhoneTopBar({super.key});
+
+  static const height = 64.0;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tenant = ref.watch(tenantProvider);
+    final b = context.brand;
+    final signedIn = ref.watch(customerProvider).value != null;
+    return SliverAppBar(
+      key: const Key('phone-top-bar'),
+      toolbarHeight: height,
+      primary: false,
+      automaticallyImplyLeading: false,
+      leading: Builder(
+        builder: (context) => IconButton(
+          tooltip: 'Open navigation menu',
+          icon: const Icon(Icons.menu),
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        ),
+      ),
+      title: Image.asset(b.logoAsset, height: 48, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
+      centerTitle: true,
+      actions: [
+        Padding(
+          padding: EdgeInsets.only(right: b.spacing.sm),
+          child: signedIn
+              ? TextButton.icon(key: const Key('top-saved'), onPressed: () => context.go('/saved'), icon: const Icon(Icons.favorite_border), label: const Text('Saved'))
+              : TextButton(key: const Key('home-login'), onPressed: () => context.go('/account'), child: const Text('Log in')),
+        ),
+      ],
+    );
+  }
+}
+
 /// The phone menu behind the hamburger: every way in, including the
 /// sections that have no bottom tab (Off-plan, Chat) and the site pages.
 class AppDrawer extends ConsumerWidget {
