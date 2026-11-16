@@ -640,16 +640,15 @@ class _PhotoCarouselState extends State<PhotoCarousel> {
   }
 }
 
-/// Call, WhatsApp and Email for a home, in that order. Call and WhatsApp
-/// show once the realtor's numbers are set; Email always can.
+/// Call, WhatsApp and Email for a home, in that order; on phone cards just
+/// Call and WhatsApp, side by side. Call and WhatsApp show once the
+/// realtor's numbers are set; until then Email stands in.
 class ContactButtons extends ConsumerWidget {
   const ContactButtons({super.key, required this.listing, this.expand = false});
   final ListingSummary listing;
 
   /// Fill the width (cards on phones) instead of hugging the labels.
   final bool expand;
-
-  static const _whatsappKey = Key('contact-whatsapp');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -687,24 +686,24 @@ class ContactButtons extends ConsumerWidget {
         ),
       if (whatsapp != null)
         FilledButton.icon(
-          key: _whatsappKey,
           style: solid(b.success, onGreen),
           onPressed: () => tap('whatsapp', whatsapp),
           icon: const WhatsAppIcon(size: 20),
           label: const Text('WhatsApp', maxLines: 1, softWrap: false),
         ),
-      FilledButton.icon(
-        style: solid(b.primarySoft, scheme.primary),
-        onPressed: () => open(Uri(scheme: 'mailto', path: tenant.email, queryParameters: {'subject': l.title, 'body': ask})),
-        icon: const Icon(Icons.mail_outline, size: 18),
-        label: const Text('Email'),
-      ),
+      // Phones show Call and WhatsApp only; Email stays while there are no numbers to show.
+      if (!expand || !tenant.hasContactNumbers)
+        FilledButton.icon(
+          style: solid(b.primarySoft, scheme.primary),
+          onPressed: () => open(Uri(scheme: 'mailto', path: tenant.email, queryParameters: {'subject': l.title, 'body': ask})),
+          icon: const Icon(Icons.mail_outline, size: 18),
+          label: const Text('Email'),
+        ),
     ];
     return Row(children: [
       for (final (i, button) in buttons.indexed) ...[
         if (i > 0) SizedBox(width: b.spacing.sm),
-        // WhatsApp has the longest word, so it gets a little more of the row.
-        if (expand) Expanded(flex: button.key == _whatsappKey ? 4 : 3, child: button) else button,
+        if (expand) Expanded(child: button) else button,
       ],
     ]);
   }

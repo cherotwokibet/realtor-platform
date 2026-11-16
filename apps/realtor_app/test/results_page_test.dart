@@ -154,7 +154,7 @@ void main() {
   });
 
   for (final size in [phone, desktop]) {
-    testWidgets('a card has photos to flick through, the heart top right, and Call, WhatsApp, Email in that order ($size)', (tester) async {
+    testWidgets('a card has photos to flick through, the heart top right, and Call, WhatsApp (and Email when wide) in that order ($size)', (tester) async {
       final opened = await pump(tester, size, [
         home(1, photos: ['https://example.com/a.jpg', 'https://example.com/b.jpg', 'https://example.com/c.jpg']),
       ]);
@@ -169,16 +169,19 @@ void main() {
       expect(find.byTooltip('Next photo'), findsNothing, reason: 'the last of three photos');
       expect(location(tester), '/rent', reason: 'moving through photos does not open the home');
 
-      final x = [for (final label in ['Call', 'WhatsApp', 'Email']) tester.getCenter(find.descendant(of: card, matching: find.text(label))).dx];
+      // Phones: Call and WhatsApp only. Wide screens add Email, last.
+      final labels = size == phone ? ['Call', 'WhatsApp'] : ['Call', 'WhatsApp', 'Email'];
+      final x = [for (final label in labels) tester.getCenter(find.descendant(of: card, matching: find.text(label))).dx];
       expect(x, orderedEquals([...x]..sort()));
+      if (size == phone) expect(find.descendant(of: card, matching: find.text('Email')), findsNothing);
       final heart = tester.getCenter(find.descendant(of: card, matching: find.byTooltip('Save this home')));
       final box = tester.getRect(card);
       expect(box.right - heart.dx, lessThan(48));
       expect(heart.dy - box.top, lessThan(48));
 
-      await tester.tap(find.descendant(of: card, matching: find.text('Email')));
+      await tester.tap(find.descendant(of: card, matching: find.text('Call')));
       await tester.pump();
-      expect(opened.single.scheme, 'mailto');
+      expect(opened.single.scheme, 'tel');
       expect(location(tester), '/rent', reason: 'a contact button does not open the home');
     });
   }
