@@ -63,3 +63,12 @@ Without `MPESA_ENV`, the payment functions are not deployed at all, so deploys n
 
 - Deposits and featured-ad fees will use the same start, callback and reconcile path, each with its own amount rules.
 - Receipts by SMS or email need a sender, which is external set-up.
+
+## Featured-ad fees (D20)
+
+A manager can pay to feature a live listing, instead of using the manual switch.
+
+- **Price.** Set `FEATURED_PER_DAY_KES=<whole shillings>` in `functions/.env.<project-id>` (next to `MPESA_ENV`) and redeploy functions. Unset or 0 means the callable refuses and only the manual "Feature" switch works.
+- **Start.** `payments-startFeaturedPayment` (owner or manager only) takes `listingId`, `days` (1 to 90) and the payer's `phone`. The amount is days x the daily price, worked out on the server. It writes `payments/featured-ad_<listingId>_<ms>` as pending and prompts that phone. Another tap within 2 minutes for the same listing, days and phone reuses the prompt.
+- **Settle.** When the payment is **paid** (callback or the 5-minute reconciliation), the listing's `featuredUntil` moves out by the paid days, counted from the end of any featuring still running. A failed, cancelled or wrong-amount payment features nothing. If the listing stopped being live before the money arrived, the payment is paid but carries a note "refund by hand".
+- **Not yet.** The admin button for it, deposits, and SMS/email receipts.

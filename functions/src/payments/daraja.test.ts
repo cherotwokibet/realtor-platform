@@ -96,7 +96,7 @@ test('query: result codes, and "still being processed" is pending', async () => 
 
 test('config: off unless MPESA_ENV is set; checks the shortcode and type', () => {
   assert.equal(mpesaConfig({}), null);
-  assert.deepEqual(mpesaConfig({ MPESA_ENV: 'sandbox', MPESA_SHORTCODE: '174379' }), { env: 'sandbox', shortcode: '174379', type: 'paybill' });
+  assert.deepEqual(mpesaConfig({ MPESA_ENV: 'sandbox', MPESA_SHORTCODE: '174379' }), { env: 'sandbox', shortcode: '174379', type: 'paybill', featuredPerDayKES: null });
   assert.throws(() => mpesaConfig({ MPESA_ENV: 'live', MPESA_SHORTCODE: '174379' }), /sandbox or production/);
   assert.throws(() => mpesaConfig({ MPESA_ENV: 'sandbox', MPESA_SHORTCODE: 'secret://x' }), /5 to 7 digit/);
   assert.throws(() => mpesaConfig({ MPESA_ENV: 'sandbox', MPESA_SHORTCODE: '174379', MPESA_TYPE: 'bank' }), /paybill or till/);

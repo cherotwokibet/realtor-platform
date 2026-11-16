@@ -48,7 +48,7 @@ import { updateAgentResponseTimes } from './api/response';
 import { REGION, verificationExpiry } from './listing-rules';
 import { callbackUrl, type MpesaConfig, mpesaConfig } from './payments/config';
 import { parseStkCallback } from './payments/daraja';
-import { type PaymentDeps, reconcilePayments, recordStkCallback, startViewingPayment } from './payments/payments';
+import { type PaymentDeps, reconcilePayments, recordStkCallback, startFeaturedPayment, startViewingPayment } from './payments/payments';
 
 initializeApp();
 
@@ -200,9 +200,12 @@ function paymentFunctions(cfg: MpesaConfig) {
   const deps = (): PaymentDeps => ({
     daraja: { ...cfg, consumerKey: key.value(), consumerSecret: secret.value(), passkey: passkey.value() },
     callbackUrl: callbackUrl(process.env.GCLOUD_PROJECT ?? '', REGION),
+    featuredPerDayKES: cfg.featuredPerDayKES,
   });
   return {
     startViewingPayment: onCall({ secrets }, (req) => startViewingPayment(getFirestore(), req.data, deps())),
+    // Managers pay for featuring a live listing (D20); featured once M-Pesa confirms.
+    startFeaturedPayment: onCall({ secrets }, (req) => startFeaturedPayment(getFirestore(), callerFrom(req.auth), req.data, deps())),
     // The share pages' twin (D16): only their service account may invoke it.
     shareStartViewingPayment: onRequest(
       { secrets, invoker: sharePagesInvoker(process.env.GCLOUD_PROJECT ?? 'local') },

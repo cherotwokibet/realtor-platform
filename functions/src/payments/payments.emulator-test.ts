@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import type { DarajaConfig } from './daraja';
-import { type PaymentDeps, reconcilePayments, recordStkCallback, startViewingPayment } from './payments';
+import { type PaymentDeps, reconcilePayments, recordStkCallback, startFeaturedPayment, startViewingPayment } from './payments';
 
 let db: Firestore;
 const now = new Date('2026-11-03T09:00:00Z');
@@ -46,7 +46,7 @@ before(() => {
 });
 
 beforeEach(async () => {
-  for (const c of ['payments', 'viewings', 'config']) {
+  for (const c of ['payments', 'viewings', 'config', 'listings']) {
     const all = await db.collection(c).get();
     await Promise.all(all.docs.map((d) => d.ref.delete()));
   }
@@ -54,6 +54,8 @@ beforeEach(async () => {
   const base = { listingId: 'listing-001', agentId: 'agent-wanjiku', slot: now, client: { name: 'Amina', phone: '+254712345678' }, paymentId: null, createdAt: now };
   await db.collection('viewings').doc('v-fee').set({ ...base, status: 'requested', feeKES: 500 });
   await db.collection('viewings').doc('v-free').set({ ...base, status: 'requested', feeKES: 0 });
+  await db.collection('listings').doc('l-live').set({ status: 'live', title: 'Kilimani 2BR', featuredUntil: null });
+  await db.collection('listings').doc('l-draft').set({ status: 'draft', title: 'Draft', featuredUntil: null });
   await db.collection('viewings').doc('v-gone').set({ ...base, status: 'cancelled', feeKES: 500 });
 });
 
@@ -162,5 +164,81 @@ describe('reconcilePayments', () => {
     const dayLater = fakeDaraja({ '/mpesa/stkpushquery/v1/query': [{ errorCode: '500.001.1001' }] });
     await reconcilePayments(db, dayLater.deps, new Date(now.getTime() + 25 * 3_600_000));
     assert.equal((await payment('stuck')).status, 'failed');
+  });
+});
+
+describe('startFeaturedPayment (D20)', () => {
+  const manager = { uid: 'u1', role: 'manager' as const, agentId: null };
+  const agent = { uid: 'u2', role: 'agent' as const, agentId: 'agent-wanjiku' };
+  const input = { listingId: 'l-live', days: 7, phone: '+254712345678' };
+  const withPrice = (d: PaymentDeps): PaymentDeps => ({ ...d, featuredPerDayKES: 300 });
+  const featuredUntil = async () => (await db.collection('listings').doc('l-live').get()).get('featuredUntil')?.toDate() as Date | undefined ?? null;
+  const only = async () => (await db.collection('payments').where('purpose', '==', 'featured-ad').get()).docs;
+
+  test('price is days x the per-day price; the listing is featured only after payment settles', async () => {
+    const d = fakeDaraja();
+    const r = await startFeaturedPayment(db, manager, { ...input, amountKES: 1 }, withPrice(d.deps), now);
+    assert.equal(r.amountKES, 2100);
+    const [doc] = await only();
+    const p = doc!.data();
+    assert.equal(p.amountKES, 2100);
+    assert.equal(p.days, 7);
+    assert.equal(await featuredUntil(), null, 'not featured while pending');
+    assert.equal(await recordStkCallback(db, paidCallback('ws_CO_1', 2100), p.callbackToken, now), 'recorded');
+    assert.equal((await featuredUntil())?.toISOString(), '2026-11-10T09:00:00.000Z');
+    assert.equal(await recordStkCallback(db, paidCallback('ws_CO_1', 2100), p.callbackToken, now), 'ignored');
+    assert.equal((await featuredUntil())?.toISOString(), '2026-11-10T09:00:00.000Z', 'a repeat callback adds nothing');
+  });
+
+  test('paid days add to featuring that is still running', async () => {
+    const d = fakeDaraja();
+    await db.collection('listings').doc('l-live').update({ featuredUntil: new Date('2026-11-05T09:00:00Z') });
+    await startFeaturedPayment(db, manager, input, withPrice(d.deps), now);
+    const [doc] = await only();
+    await recordStkCallback(db, paidCallback('ws_CO_1', 2100), doc!.get('callbackToken'), now);
+    assert.equal((await featuredUntil())?.toISOString(), '2026-11-12T09:00:00.000Z');
+  });
+
+  test('a failed or wrong-amount payment features nothing', async () => {
+    const d = fakeDaraja();
+    await startFeaturedPayment(db, manager, input, withPrice(d.deps), now);
+    const [doc] = await only();
+    await recordStkCallback(db, paidCallback('ws_CO_1', 1), doc!.get('callbackToken'), now);
+    assert.equal(await featuredUntil(), null);
+    assert.equal((await only())[0]!.get('status'), 'failed');
+  });
+
+  test('a listing taken down before payment lands is not featured and the payment says so', async () => {
+    const d = fakeDaraja();
+    await startFeaturedPayment(db, manager, input, withPrice(d.deps), now);
+    await db.collection('listings').doc('l-live').update({ status: 'archived' });
+    const [doc] = await only();
+    await recordStkCallback(db, paidCallback('ws_CO_1', 2100), doc!.get('callbackToken'), now);
+    assert.equal(await featuredUntil(), null);
+    const p = (await only())[0]!;
+    assert.equal(p.get('status'), 'paid');
+    assert.match(p.get('reason'), /refund by hand/);
+  });
+
+  test('refuses non-managers, no price, M-Pesa off, a listing that is not live, bad days', async () => {
+    const d = fakeDaraja();
+    await rejectsWith(startFeaturedPayment(db, agent, input, withPrice(d.deps), now), 'permission-denied');
+    await rejectsWith(startFeaturedPayment(db, manager, input, d.deps, now), 'failed-precondition');
+    await rejectsWith(startFeaturedPayment(db, manager, { ...input, listingId: 'l-draft' }, withPrice(d.deps), now), 'failed-precondition');
+    await rejectsWith(startFeaturedPayment(db, manager, { ...input, listingId: 'nope' }, withPrice(d.deps), now), 'failed-precondition');
+    await rejectsWith(startFeaturedPayment(db, manager, { ...input, days: 0 }, withPrice(d.deps), now), 'invalid-argument');
+    await rejectsWith(startFeaturedPayment(db, manager, { ...input, days: 91 }, withPrice(d.deps), now), 'invalid-argument');
+    await db.collection('config').doc('tenant').set({ features: { mpesa: false } });
+    await rejectsWith(startFeaturedPayment(db, manager, input, withPrice(d.deps), now), 'failed-precondition');
+    assert.deepEqual(d.calls, [], 'Daraja never called');
+    assert.equal((await only()).length, 0);
+  });
+
+  test('a second tap within 2 minutes reuses the push', async () => {
+    const d = fakeDaraja();
+    const a = await startFeaturedPayment(db, manager, input, withPrice(d.deps), now);
+    const b = await startFeaturedPayment(db, manager, input, withPrice(d.deps), new Date(now.getTime() + 60_000));
+    assert.equal(a.paymentId, b.paymentId);
+    assert.equal(d.calls.filter((c) => c.endsWith('processrequest')).length, 1);
   });
 });

@@ -143,6 +143,9 @@ export const payment = z.object({
   receipt: z.string().nullable(),
   /** The viewing a viewing fee is for. */
   viewingId: docId.optional(),
+  /** Featured-ad fee (D20): days bought, and the manager who paid. */
+  days: z.number().int().min(1).optional(),
+  requestedBy: z.string().nullable().optional(),
   merchantRequestId: z.string().nullable().optional(),
   /** Random, per payment: the callback URL carries it, so only Safaricom's callback for this push settles it. */
   callbackToken: z.string().optional(),
