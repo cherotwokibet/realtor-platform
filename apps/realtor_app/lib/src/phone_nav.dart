@@ -56,13 +56,22 @@ class PhoneTopBar extends ConsumerWidget {
     return SliverAppBar(
       key: const Key('phone-top-bar'),
       toolbarHeight: height,
+      leadingWidth: 64,
       primary: false,
       automaticallyImplyLeading: false,
       leading: Builder(
-        builder: (context) => IconButton(
-          tooltip: 'Open navigation menu',
-          icon: const Icon(Icons.menu),
-          onPressed: () => Scaffold.of(context).openDrawer(),
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(left: b.spacing.sm),
+          // The menu in a soft round, so it reads as a button.
+          child: Center(
+            child: IconButton.filledTonal(
+              constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+              tooltip: 'Open navigation menu',
+              style: IconButton.styleFrom(backgroundColor: b.surfaceAlt, foregroundColor: Theme.of(context).colorScheme.onSurface),
+              icon: const Icon(Icons.menu),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+          ),
         ),
       ),
       title: Image.asset(b.logoAsset, height: 48, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
@@ -70,32 +79,23 @@ class PhoneTopBar extends ConsumerWidget {
       actions: [
         Padding(
           padding: EdgeInsets.only(right: b.spacing.sm),
-          // An outlined pill in the brand colour, so it stands out from the logo.
+          // A solid pill in the brand colour, as Property Finder has it.
           child: Builder(builder: (context) {
-            final scheme = Theme.of(context).colorScheme;
-            final style = OutlinedButton.styleFrom(
-              foregroundColor: scheme.primary,
-              side: BorderSide(color: scheme.primary, width: 1.5),
+            final style = FilledButton.styleFrom(
               shape: const StadiumBorder(),
-              padding: EdgeInsets.symmetric(horizontal: b.spacing.md),
-              minimumSize: const Size(0, 40),
-              textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.lg),
+              minimumSize: const Size(0, 44),
+              textStyle: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
             );
             return signedIn
-                ? OutlinedButton.icon(
+                ? FilledButton.icon(
                     key: const Key('top-saved'),
                     style: style,
                     onPressed: () => context.go('/saved'),
                     icon: const Icon(Icons.favorite_border, size: 20),
                     label: const Text('Saved'),
                   )
-                : OutlinedButton.icon(
-                    key: const Key('home-login'),
-                    style: style,
-                    onPressed: () => context.go('/account'),
-                    icon: const Icon(Icons.person, size: 20),
-                    label: const Text('Log in'),
-                  );
+                : FilledButton(key: const Key('home-login'), style: style, onPressed: () => context.go('/account'), child: const Text('Log in'));
           }),
         ),
       ],
