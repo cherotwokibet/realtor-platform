@@ -98,7 +98,7 @@
     "shortStay": true,
     "offPlan": false,
     "mpesa": false,
-    "ads": false,
+    "ads": true,
     "aiSearch": false,
     "chat": false
   },

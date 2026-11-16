@@ -76,3 +76,21 @@ test('counter-only writes (views, leads, taps) do not re-sync search', () => {
   assert.equal(searchRelevantChange(undefined, l), true, 'created');
   assert.equal(searchRelevantChange(l, undefined), true, 'deleted');
 });
+
+test('More Filters: furnishing, floor plans, tours and verified-first reach the query; cards get their photos', () => {
+  const by = String(toSearchParams({ purpose: 'rent', furnished: false, floorPlan: true, tour: true, verifiedFirst: true }).filter_by);
+  assert.match(by, /amenities:!=\[`furnished`\]/);
+  assert.match(by, /hasFloorPlan:=true/);
+  assert.match(by, /hasTour:=true/);
+  assert.match(String(toSearchParams({ purpose: 'rent', furnished: true }).filter_by), /amenities:=\[`furnished`\]/);
+  assert.match(String(toSearchParams({ purpose: 'rent', verifiedFirst: true, sort: 'price-asc' }).sort_by), /^verified:desc,priceKES:asc$/);
+
+  const photo = (n: number) => ({ kind: 'photo', variants: { thumb: `t${n}`, card: `c${n}` }, blurhash: 'b' });
+  const doc = toSearchDoc('l1', {
+    status: 'live', title: 'T', slug: 't', purpose: 'rent', type: 'apartment', beds: 1, baths: 1, priceKES: 1, area: 'a', geo: { lat: 0, lng: 0 },
+    media: [...[1, 2, 3, 4, 5, 6, 7].map(photo), { kind: 'floor-plan', variants: { full: 'f' } }],
+  })!;
+  assert.deepEqual(doc.photos, ['c1', 'c2', 'c3', 'c4', 'c5', 'c6']);
+  assert.equal(doc.hasFloorPlan, true);
+  assert.equal(doc.hasTour, false);
+});

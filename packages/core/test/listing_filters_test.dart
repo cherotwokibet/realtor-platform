@@ -66,4 +66,23 @@ void main() {
     expect(f.page, 4);
     expect(f.copyWith(minBeds: 2).page, 1);
   });
+
+  test('furnishing, floor plan, tour and verified-first round-trip (More Filters)', () {
+    const f = ListingFilters(purpose: Purpose.rent, areas: ['kilimani'], furnished: false, floorPlan: true, tour: true, verifiedFirst: true);
+    expect(f.toUri().toString(), '/rent/kilimani?vfirst=1&furnished=0&plan=1&tour=1');
+    final back = ListingFilters.fromUri(f.toUri())!;
+    expect(back, f);
+    expect((back.furnished, back.floorPlan, back.tour, back.verifiedFirst), (false, true, true, true));
+    expect(ListingFilters.fromUri(Uri.parse('/rent?furnished=1'))!.furnished, isTrue);
+    expect(ListingFilters.fromUri(Uri.parse('/rent?furnished=maybe'))!.furnished, isNull);
+    // Changing another filter keeps them.
+    expect(f.copyWith(minBeds: 2).furnished, isFalse);
+  });
+
+  test('a saved home keeps its photos for the card carousel', () {
+    const l = ListingSummary(id: 'a', slug: 'a', title: 'A', purpose: Purpose.rent, type: 'apartment', beds: 1, baths: 1, priceKES: 1, area: 'x', lat: 0, lng: 0, photos: ['p1', 'p2'], hasFloorPlan: true);
+    final back = ListingSummary.fromJson(l.toJson())!;
+    expect(back.photos, ['p1', 'p2']);
+    expect((back.hasFloorPlan, back.hasTour), (true, false));
+  });
 }

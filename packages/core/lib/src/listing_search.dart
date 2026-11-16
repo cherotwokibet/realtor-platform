@@ -19,7 +19,13 @@ class ListingSummary {
     this.amenities = const [],
     this.thumb,
     this.blurhash,
+    this.photos = const [],
+    this.hasFloorPlan = false,
+    this.hasTour = false,
   });
+
+  /// How many photos a card's carousel carries.
+  static const maxCardPhotos = 6;
 
   final String id, slug, title, type, area;
   final Purpose purpose;
@@ -28,6 +34,13 @@ class ListingSummary {
   final bool verified, featured;
   final List<String> amenities;
   final String? thumb, blurhash;
+
+  /// The first few photos at card size, for the card's carousel. Empty on
+  /// rows saved before cards had one; [thumb] stands in then.
+  final List<String> photos;
+
+  /// Has a floor plan; has a video or a 360° tour.
+  final bool hasFloorPlan, hasTour;
 
   /// For keeping a copy on the device (saved homes).
   Map<String, Object?> toJson() => {
@@ -46,6 +59,9 @@ class ListingSummary {
         'amenities': amenities,
         if (thumb != null) 'thumb': thumb,
         if (blurhash != null) 'blurhash': blurhash,
+        if (photos.isNotEmpty) 'photos': photos,
+        if (hasFloorPlan) 'hasFloorPlan': true,
+        if (hasTour) 'hasTour': true,
       };
 
   /// Null when [j] isn't a saved row (an older or damaged copy).
@@ -68,6 +84,9 @@ class ListingSummary {
         amenities: [for (final a in (j['amenities'] as List?) ?? const []) '$a'],
         thumb: j['thumb'] as String?,
         blurhash: j['blurhash'] as String?,
+        photos: [for (final p in (j['photos'] as List?) ?? const []) '$p'],
+        hasFloorPlan: j['hasFloorPlan'] == true,
+        hasTour: j['hasTour'] == true,
       );
     } on Object {
       return null;

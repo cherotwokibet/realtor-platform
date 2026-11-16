@@ -8,6 +8,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 import 'package:go_router/go_router.dart';
 
 import 'account/account_data.dart';
+import 'ad_slot.dart';
 import 'nav.dart';
 import 'phone_nav.dart';
 import 'providers.dart';
@@ -219,14 +220,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             feature: Feature.ads,
             child: Padding(
               padding: EdgeInsets.only(top: b.spacing.xl),
-              child: Card(
-                color: b.primarySoft,
-                child: ListTile(
-                  leading: const Icon(Icons.campaign_outlined),
-                  title: Text('Featured', style: text.labelSmall),
-                  subtitle: Text('Promoted listings appear here', style: text.bodyMedium),
-                ),
-              ),
+              child: const AdSlot(),
             ),
           ),
           SizedBox(height: b.spacing.xl),

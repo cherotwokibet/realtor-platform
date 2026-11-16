@@ -41,6 +41,9 @@ void main() {
     final s = summaryFromDoc('l1', listing('flat-1'), bucket: 'p-media', now: now);
     expect((s.slug, s.purpose, s.priceKES, s.verified, s.featured, s.blurhash), ('flat-1', Purpose.rent, 50000, true, false, 'LKO2'));
     expect(s.thumb, 'https://firebasestorage.googleapis.com/v0/b/p-media/o/media%2Flistings%2Fx%2Fa%2Fthumb.webp?alt=media');
+    // The card carousel gets card-size photos; the video counts as a tour.
+    expect(s.photos, ['https://firebasestorage.googleapis.com/v0/b/p-media/o/media%2Flistings%2Fx%2Fa%2Fcard.webp?alt=media']);
+    expect((s.hasTour, s.hasFloorPlan), (true, false));
     final lapsed = summaryFromDoc('l1', {...listing('flat-1'), 'expiresAt': Timestamp.fromDate(now.subtract(const Duration(days: 1)))}, bucket: 'b', now: now);
     expect(lapsed.verified, isFalse);
   });

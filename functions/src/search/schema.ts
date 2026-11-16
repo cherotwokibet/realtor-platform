@@ -29,6 +29,9 @@ export function listingsSchema(tenantId: string): CollectionCreateSchema {
       { name: 'featured', type: 'bool' },
       { name: 'thumb', type: 'string', index: false, optional: true },
       { name: 'blurhash', type: 'string', index: false, optional: true },
+      { name: 'photos', type: 'string[]', index: false, optional: true },
+      { name: 'hasFloorPlan', type: 'bool', optional: true },
+      { name: 'hasTour', type: 'bool', optional: true },
       { name: 'updatedAt', type: 'int64' },
     ],
     default_sorting_field: 'updatedAt',
@@ -53,6 +56,11 @@ export interface SearchDoc {
   featured: boolean;
   thumb?: string;
   blurhash?: string;
+  /** Card-size copies of the first few photos, for the card's carousel. */
+  photos?: string[];
+  hasFloorPlan: boolean;
+  /** Has a video or a 360° tour. */
+  hasTour: boolean;
   updatedAt: number;
 }
 
@@ -64,7 +72,13 @@ export function toSearchDoc(id: string, l: Record<string, any> | undefined, now 
   if (!l || l.status !== 'live') return null;
   const expires = millis(l.expiresAt);
   const featuredUntil = millis(l.featuredUntil);
-  const photo = (l.media ?? []).find((m: any) => m.kind === 'photo');
+  const media: any[] = l.media ?? [];
+  const photo = media.find((m: any) => m.kind === 'photo');
+  const cards = media
+    .filter((m: any) => m.kind === 'photo')
+    .slice(0, 6)
+    .map((m: any) => m.variants?.card ?? m.variants?.thumb)
+    .filter((p: unknown) => typeof p === 'string');
   return {
     id,
     title: l.title,
@@ -82,6 +96,9 @@ export function toSearchDoc(id: string, l: Record<string, any> | undefined, now 
     verified: millis(l.verifiedAt) !== null && expires !== null && expires > now.getTime(),
     featured: featuredUntil !== null && featuredUntil > now.getTime(),
     ...(photo ? { thumb: photo.variants.thumb, blurhash: photo.blurhash } : {}),
+    ...(cards.length ? { photos: cards } : {}),
+    hasFloorPlan: media.some((m: any) => m.kind === 'floor-plan'),
+    hasTour: media.some((m: any) => m.kind === 'video' || m.kind === 'tour-360'),
     updatedAt: millis(l.updatedAt) ?? now.getTime(),
   };
 }
@@ -97,6 +114,13 @@ export interface ListingFilters {
   maxPriceKES?: number;
   amenities?: string[];
   verifiedOnly?: boolean;
+  /** Verified homes sort above the rest, whatever the sort. */
+  verifiedFirst?: boolean;
+  /** true: furnished only; false: unfurnished only. */
+  furnished?: boolean;
+  floorPlan?: boolean;
+  /** Only homes with a video or a 360° tour. */
+  tour?: boolean;
   /** Radius search around a point, in km. */
   near?: { lat: number; lng: number; km: number };
   /** Draw-an-area search (P3-s04): 3 to 20 corners, implicitly closed. */
@@ -117,6 +141,9 @@ export function toSearchParams(f: ListingFilters): SearchParams<SearchDoc> {
   if (f.minPriceKES != null || f.maxPriceKES != null)
     by.push(`priceKES:[${Math.trunc(f.minPriceKES ?? 0)}..${Math.trunc(f.maxPriceKES ?? 10_000_000_000)}]`);
   if (f.verifiedOnly) by.push('verified:=true');
+  if (f.furnished != null) by.push(`amenities:${f.furnished ? '=' : '!='}${list(['furnished'])}`);
+  if (f.floorPlan) by.push('hasFloorPlan:=true');
+  if (f.tour) by.push('hasTour:=true');
   if (f.near) by.push(`location:(${f.near.lat}, ${f.near.lng}, ${f.near.km} km)`);
   if (f.polygon && f.polygon.length >= 3 && f.polygon.length <= 20 && f.polygon.every((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)))
     by.push(`location:(${f.polygon.map((p) => `${p.lat}, ${p.lng}`).join(', ')})`);
@@ -136,7 +163,7 @@ export function toSearchParams(f: ListingFilters): SearchParams<SearchDoc> {
     filter_by: by.join(' && '),
     facet_by: 'type,beds,area,amenities,verified,priceKES',
     facet_stats_fields: 'priceKES',
-    sort_by: sort,
+    sort_by: f.verifiedFirst ? `verified:desc,${sort}` : sort,
     num_typos: 2,
     page: Math.max(1, f.page ?? 1),
     per_page: Math.min(50, Math.max(1, f.perPage ?? 20)),
