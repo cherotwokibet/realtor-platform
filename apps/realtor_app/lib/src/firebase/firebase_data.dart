@@ -28,9 +28,15 @@ ListingVideo? videoFromMedia(Object? m, String bucket) {
 /// check holds (P6-s02); featured until `featuredUntil` (P5-s02).
 ListingSummary summaryFromDoc(String id, Map<String, Object?> d, {required String bucket, required DateTime now}) {
   final geo = (d['geo'] as Map?) ?? const {};
-  final photos = [
+  final media = [
     for (final m in (d['media'] as List<Object?>?) ?? const [])
-      if (m is Map && m['kind'] == 'photo') m,
+      if (m is Map) m,
+  ];
+  final photos = [for (final m in media) if (m['kind'] == 'photo') m];
+  // Card-size copies of the first few photos, for the card's carousel.
+  final cards = [
+    for (final m in photos.take(ListingSummary.maxCardPhotos))
+      if (((m['variants'] as Map?)?['card'] ?? (m['variants'] as Map?)?['thumb']) case final String path) mediaUrl(bucket, path),
   ];
   final expires = _time(d['expiresAt']), featured = _time(d['featuredUntil']);
   final thumb = photos.isEmpty ? null : (photos.first['variants'] as Map?)?['thumb'] as String?;
@@ -51,6 +57,9 @@ ListingSummary summaryFromDoc(String id, Map<String, Object?> d, {required Strin
     amenities: [for (final a in (d['amenities'] as List<Object?>?) ?? const []) '$a'],
     thumb: thumb == null ? null : mediaUrl(bucket, thumb),
     blurhash: photos.isEmpty ? null : photos.first['blurhash'] as String?,
+    photos: cards,
+    hasFloorPlan: media.any((m) => m['kind'] == 'floor-plan'),
+    hasTour: media.any((m) => m['kind'] == 'video' || m['kind'] == 'tour-360'),
   );
 }
 

@@ -24,6 +24,8 @@ class DemoListingSearch implements ListingSearch {
       default:
         hits.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));
     }
+    // Dart's list sort is not stable, so keep the order above within each group.
+    if (f.verifiedFirst) hits.setAll(0, [...hits.where((l) => l.verified), ...hits.where((l) => !l.verified)]);
     // Like Typesense facets with the facet's own filter relaxed, so the
     // other options stay visible next to the selected one.
     List<FacetCount> facet(String Function(ListingSummary) key, ListingFilters relaxed) {
@@ -57,6 +59,9 @@ class DemoListingSearch implements ListingSearch {
         // Amenities are typed freely in admin ("Parking"); match any case.
         f.amenities.every((a) => l.amenities.any((x) => x.toLowerCase() == a.toLowerCase())) &&
         (!f.verifiedOnly || l.verified) &&
+        (f.furnished == null || f.furnished == l.amenities.any((x) => x.toLowerCase() == 'furnished')) &&
+        (!f.floorPlan || l.hasFloorPlan) &&
+        (!f.tour || l.hasTour) &&
         (f.near == null || _km(f.near!, l) <= f.near!.km) &&
         (f.polygon.isEmpty || pointInPolygon(GeoPoint(l.lat, l.lng), f.polygon)) &&
         words.every(text.contains);

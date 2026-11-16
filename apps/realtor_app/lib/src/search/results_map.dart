@@ -168,7 +168,7 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
           ],
         ]),
       ),
-      if (_selected != null) Positioned(left: b.spacing.sm, right: b.spacing.sm, bottom: b.spacing.xl, child: ListingCard(listing: _selected!, compact: true)),
+      if (_selected != null) Positioned(left: b.spacing.sm, right: b.spacing.sm, bottom: b.spacing.xl, child: ListingCard(listing: _selected!, layout: CardLayout.compact)),
     ]);
   }
 }

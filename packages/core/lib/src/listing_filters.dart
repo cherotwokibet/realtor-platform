@@ -77,6 +77,10 @@ class ListingFilters {
     this.maxPriceKES,
     this.amenities = const [],
     this.verifiedOnly = false,
+    this.verifiedFirst = false,
+    this.furnished,
+    this.floorPlan = false,
+    this.tour = false,
     this.near,
     this.polygon = const [],
     this.sort = ListingSort.newest,
@@ -88,6 +92,15 @@ class ListingFilters {
   final List<String> types, areas, amenities;
   final int? minBeds, minPriceKES, maxPriceKES;
   final bool verifiedOnly;
+
+  /// Verified homes sort above the rest, whatever the sort.
+  final bool verifiedFirst;
+
+  /// true: furnished only; false: unfurnished only; null: either.
+  final bool? furnished;
+
+  /// Only homes with a floor plan; only homes with a video or 360° tour.
+  final bool floorPlan, tour;
   final GeoRadius? near;
 
   /// Draw-an-area search (P3-s04): 3 to [maxPolygonPoints] corners, implicitly closed.
@@ -119,6 +132,10 @@ class ListingFilters {
         maxPriceKES: maxPriceKES ?? this.maxPriceKES,
         amenities: amenities ?? this.amenities,
         verifiedOnly: verifiedOnly ?? this.verifiedOnly,
+        verifiedFirst: verifiedFirst,
+        furnished: furnished,
+        floorPlan: floorPlan,
+        tour: tour,
         near: near,
         polygon: polygon ?? this.polygon,
         sort: sort ?? this.sort,
@@ -142,6 +159,10 @@ class ListingFilters {
       if (maxPriceKES != null) 'max': '$maxPriceKES',
       if (amenities.isNotEmpty) 'amenities': amenities.join(','),
       if (verifiedOnly) 'verified': '1',
+      if (verifiedFirst) 'vfirst': '1',
+      if (furnished != null) 'furnished': furnished! ? '1' : '0',
+      if (floorPlan) 'plan': '1',
+      if (tour) 'tour': '1',
       if (near != null) 'near': '${near!.lat},${near!.lng},${near!.km}',
       if (polygon.isNotEmpty) 'poly': polygon.map((p) => '${p.lat},${p.lng}').join('~'),
       if (sort != ListingSort.newest) 'sort': _sortParam[sort]!,
@@ -199,6 +220,10 @@ class ListingFilters {
       maxPriceKES: nat('max'),
       amenities: csv('amenities', _slug.hasMatch),
       verifiedOnly: p['verified'] == '1',
+      verifiedFirst: p['vfirst'] == '1',
+      furnished: switch (p['furnished']) { '1' => true, '0' => false, _ => null },
+      floorPlan: p['plan'] == '1',
+      tour: p['tour'] == '1',
       near: near,
       polygon: polygon.length >= 3 && polygon.length <= maxPolygonPoints ? polygon : const [],
       sort: sort == ListingSort.nearest && near == null ? ListingSort.newest : sort,
