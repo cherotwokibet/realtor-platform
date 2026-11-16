@@ -70,9 +70,33 @@ class PhoneTopBar extends ConsumerWidget {
       actions: [
         Padding(
           padding: EdgeInsets.only(right: b.spacing.sm),
-          child: signedIn
-              ? TextButton.icon(key: const Key('top-saved'), onPressed: () => context.go('/saved'), icon: const Icon(Icons.favorite_border), label: const Text('Saved'))
-              : TextButton(key: const Key('home-login'), onPressed: () => context.go('/account'), child: const Text('Log in')),
+          // An outlined pill in the brand colour, so it stands out from the logo.
+          child: Builder(builder: (context) {
+            final scheme = Theme.of(context).colorScheme;
+            final style = OutlinedButton.styleFrom(
+              foregroundColor: scheme.primary,
+              side: BorderSide(color: scheme.primary, width: 1.5),
+              shape: const StadiumBorder(),
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.md),
+              minimumSize: const Size(0, 40),
+              textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+            );
+            return signedIn
+                ? OutlinedButton.icon(
+                    key: const Key('top-saved'),
+                    style: style,
+                    onPressed: () => context.go('/saved'),
+                    icon: const Icon(Icons.favorite_border, size: 20),
+                    label: const Text('Saved'),
+                  )
+                : OutlinedButton.icon(
+                    key: const Key('home-login'),
+                    style: style,
+                    onPressed: () => context.go('/account'),
+                    icon: const Icon(Icons.person, size: 20),
+                    label: const Text('Log in'),
+                  );
+          }),
         ),
       ],
     );
