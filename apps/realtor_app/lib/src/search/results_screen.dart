@@ -537,99 +537,157 @@ class ListHeading extends ConsumerWidget {
     final where = f.areas.length == 1 ? ' in ${areaName(f.areas.single)}' : '';
     final what = f.types.length == 1 ? '${typeName(f.types.single)}s' : 'Homes';
     final order = orderOf(f);
-    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm));
     // Furnished is stored as a feature in older links; the choice reads both.
     final furnished = f.furnished ?? (f.amenities.contains('furnished') ? true : null);
     void furnish(bool? value) => onChange(_edit(f, furnished: value, amenities: [...f.amenities]..remove('furnished')));
-    Widget choice(String label, bool? value) {
-      final on = furnished == value;
-      return ChoiceChip(
-        key: Key('furnished-${value ?? 'all'}'),
-        label: Text(label),
-        selected: on,
-        showCheckmark: false,
-        shape: shape,
-        side: BorderSide(color: on ? scheme.primary : b.borderStrong),
-        selectedColor: b.primarySoft,
-        labelStyle: text.labelLarge?.copyWith(color: on ? scheme.primary : null),
-        onSelected: (_) => furnish(value),
-      );
-    }
 
+    // The order. Phones: plain coloured words with the sort mark on the
+    // heading's line. Wide: a bordered dropdown beside List | Map.
     final sort = PopupMenuButton<String>(
       key: const Key('sort'),
       tooltip: 'Order',
       initialValue: order,
       onSelected: (o) => onChange(withOrder(f, o)),
       itemBuilder: (_) => [for (final (value, label) in orders) PopupMenuItem(value: value, child: Text(label))],
-      child: Container(
-        height: 40,
-        padding: EdgeInsets.symmetric(horizontal: b.spacing.md),
-        decoration: BoxDecoration(border: Border.all(color: b.borderStrong), borderRadius: BorderRadius.circular(b.radiusSm)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.sort, size: 18),
-          SizedBox(width: b.spacing.sm),
-          Text(orders.firstWhere((o) => o.$1 == order).$2, style: text.labelLarge),
-          const Icon(Icons.arrow_drop_down, size: 20),
+      child: wide
+          ? Container(
+              height: 44,
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.md),
+              decoration: BoxDecoration(border: Border.all(color: b.borderStrong), borderRadius: BorderRadius.circular(b.radiusSm)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.sort, size: 18),
+                SizedBox(width: b.spacing.sm),
+                Text(orders.firstWhere((o) => o.$1 == order).$2, style: text.labelLarge),
+                SizedBox(width: b.spacing.sm),
+                const Icon(Icons.arrow_drop_down, size: 20),
+              ]),
+            )
+          : Padding(
+              padding: EdgeInsets.all(b.spacing.xs),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.sort, size: 20, color: scheme.primary),
+                SizedBox(width: b.spacing.xs),
+                Text(orders.firstWhere((o) => o.$1 == order).$2, style: text.titleSmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+    );
+    final view = GroupedChoice<bool>(
+      key: const Key('map-toggle'),
+      value: onMap,
+      options: const [(false, 'List', Icons.view_list_outlined), (true, 'Map', Icons.map_outlined)],
+      onChanged: (v) => ref.read(resultsOnMapProvider.notifier).set(v),
+    );
+    // Wide: three separate buttons, the chosen one tinted. Phones: one group.
+    Widget chip(String label, bool? value) {
+      final on = furnished == value;
+      return OutlinedButton(
+        key: Key('furnished-${value ?? 'all'}'),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 44),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
+          backgroundColor: on ? b.primarySoft : null,
+          foregroundColor: on ? scheme.primary : scheme.onSurface,
+          side: BorderSide(color: on ? scheme.primary : b.borderStrong),
+        ),
+        onPressed: () => furnish(value),
+        child: Text(label),
+      );
+    }
+
+    final furnishing = GroupedChoice<bool?>(
+      key: const Key('furnishing'),
+      value: furnished,
+      expand: true,
+      options: const [(null, 'All', null), (true, 'Furnished', null), (false, 'Unfurnished', null)],
+      keyOf: (v) => Key('furnished-${v ?? 'all'}'),
+      onChanged: furnish,
+    );
+    // The heading with the order on its line, then furnishing (and List |
+    // Map on wide screens), as on the big portals.
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        Expanded(child: Text('$what ${f.purpose.heading}$where', style: text.titleLarge)),
+        if (!wide) sort,
+      ]),
+      Text('$found ${found == 1 ? 'home' : 'homes'}', style: text.labelLarge?.copyWith(color: b.textMuted)),
+      SizedBox(height: b.spacing.md),
+      wide
+          // Both ends of the row when they fit; the order under furnishing when not.
+          ? Wrap(
+              key: const Key('list-heading'),
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: b.spacing.sm,
+              children: [
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  chip('All', null),
+                  SizedBox(width: b.spacing.sm),
+                  chip('Furnished', true),
+                  SizedBox(width: b.spacing.sm),
+                  chip('Unfurnished', false),
+                ]),
+                Row(mainAxisSize: MainAxisSize.min, children: [sort, SizedBox(width: b.spacing.sm), view]),
+              ],
+            )
+          : KeyedSubtree(key: const Key('list-heading'), child: furnishing),
+    ]);
+  }
+}
+
+/// Options in one bordered group, the chosen one filled softly, as the
+/// portals draw All / Furnished / Unfurnished and List / Map.
+class GroupedChoice<T> extends StatelessWidget {
+  const GroupedChoice({super.key, required this.value, required this.options, required this.onChanged, this.expand = false, this.keyOf});
+  final T value;
+  final List<(T, String, IconData?)> options;
+  final ValueChanged<T> onChanged;
+
+  /// Share the width equally instead of hugging the words.
+  final bool expand;
+  final Key Function(T)? keyOf;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    Widget option(T v, String label, IconData? icon) {
+      final on = v == value;
+      final ink = on ? scheme.primary : b.textMuted;
+      return Semantics(
+        selected: on,
+        button: true,
+        child: Material(
+          key: keyOf?.call(v),
+          color: on ? b.primarySoft : Colors.transparent,
+          borderRadius: BorderRadius.circular(b.radiusSm),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(b.radiusSm),
+            onTap: () => onChanged(v),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.md, vertical: b.spacing.sm),
+              child: Row(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [
+                if (icon != null) ...[Icon(icon, size: 18, color: ink), SizedBox(width: b.spacing.xs)],
+                Flexible(
+                  child: Text(label,
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: text.labelLarge?.copyWith(color: ink, fontWeight: on ? FontWeight.w600 : null)),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return DecoratedBox(
+      decoration: BoxDecoration(border: Border.all(color: b.borderStrong), borderRadius: BorderRadius.circular(b.radiusSm)),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min, children: [
+          for (final (v, label, icon) in options) expand ? Expanded(child: option(v, label, icon)) : option(v, label, icon),
         ]),
       ),
     );
-    final view = SegmentedButton<bool>(
-      key: const Key('map-toggle'),
-      showSelectedIcon: false,
-      style: SegmentedButton.styleFrom(shape: shape, visualDensity: VisualDensity.compact),
-      segments: const [
-        ButtonSegment(value: false, icon: Icon(Icons.view_list_outlined, size: 18), label: Text('List')),
-        ButtonSegment(value: true, icon: Icon(Icons.map_outlined, size: 18), label: Text('Map')),
-      ],
-      selected: {onMap},
-      onSelectionChanged: (s) => ref.read(resultsOnMapProvider.notifier).set(s.first),
-    );
-    final title = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-      Text('$what ${f.purpose.heading}$where', style: text.titleLarge),
-      Text('$found ${found == 1 ? 'home' : 'homes'}', style: text.labelLarge?.copyWith(color: b.textMuted)),
-    ]);
-    final furnishing = wide
-        ? Row(mainAxisSize: MainAxisSize.min, children: [
-            choice('All', null),
-            SizedBox(width: b.spacing.sm),
-            choice('Furnished', true),
-            SizedBox(width: b.spacing.sm),
-            choice('Unfurnished', false),
-          ])
-        // Phones: one switch across the width, as the portals' apps have it.
-        : SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<int>(
-              key: const Key('furnishing'),
-              showSelectedIcon: false,
-              style: SegmentedButton.styleFrom(visualDensity: VisualDensity.compact),
-              segments: const [
-                ButtonSegment(value: 0, label: Text('All')),
-                ButtonSegment(value: 1, label: Text('Furnished')),
-                ButtonSegment(value: 2, label: Text('Unfurnished')),
-              ],
-              selected: {furnished == null ? 0 : (furnished ? 1 : 2)},
-              onSelectionChanged: (s) => furnish(switch (s.first) { 1 => true, 2 => false, _ => null }),
-            ),
-          );
-    // Wide: furnishing on the left, the order and List | Map on the right.
-    // Phones: the order beside the heading, furnishing under it.
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (wide) title else Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: title), sort]),
-      SizedBox(height: b.spacing.md),
-      // Both ends of the row when they fit; the order under furnishing when not.
-      Wrap(
-        key: const Key('list-heading'),
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        runSpacing: b.spacing.sm,
-        children: [
-          furnishing,
-          if (wide) Row(mainAxisSize: MainAxisSize.min, children: [sort, SizedBox(width: b.spacing.sm), view]),
-        ],
-      ),
-    ]);
   }
 }
 
