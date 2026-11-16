@@ -202,4 +202,16 @@ void main() {
     final ad = tester.getTopLeft(find.byType(AdSlot).first);
     expect(ad.dx, greaterThan(tester.getTopRight(find.byType(ListingCard).first).dx));
   });
+
+  testWidgets('Rent, Buy and BnB are pages, not a dropdown in the bar; phones switch with pills over the list', (tester) async {
+    await pump(tester, desktop, [home(1)]);
+    expect(find.byKey(const Key('filter-purpose')), findsNothing);
+    expect(find.byKey(const Key('purpose-pills')), findsNothing, reason: 'the top menu has them');
+
+    await pump(tester, phone, [home(1)]);
+    expect(find.byKey(const Key('filter-purpose')), findsNothing);
+    await tester.tap(find.descendant(of: find.byKey(const Key('purpose-pills')), matching: find.text('Buy')));
+    await tester.pumpAndSettle();
+    expect(location(tester), '/buy');
+  });
 }

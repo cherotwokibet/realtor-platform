@@ -17,8 +17,8 @@ import 'results_map.dart';
 /// browser back button, shared links and app deep links all work.
 ///
 /// The search bar stays at the top while the homes scroll under it: the
-/// purpose, a location box, a dropdown each for type, beds and price, and
-/// More Filters at the far end.
+/// location box, a dropdown each for type, beds and price, and More Filters
+/// at the far end.
 class ResultsScreen extends ConsumerWidget {
   const ResultsScreen({super.key, required this.filters});
   final ListingFilters filters;
@@ -128,8 +128,9 @@ ListingFilters _withPurpose(ListingFilters f, Purpose p) => ListingFilters(
     );
 
 /// The search bar of a results page. Wide screens: everything in one row.
-/// Phones: the purpose and the location box, then the dropdowns in a row
-/// that scrolls sideways. The dropdowns open under their button on wide
+/// Phones: the location box, then the dropdowns in a row under it. Rent, Buy
+/// and BnB are pages of their own (the top menu; pills over the list on
+/// phones), so the bar has no purpose control. The dropdowns open under their button on wide
 /// screens and as bottom sheets on phones.
 class SearchBarRow extends ConsumerStatefulWidget {
   const SearchBarRow({super.key, required this.filters, required this.onChange});
@@ -171,8 +172,6 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
     final b = context.brand;
     final scheme = Theme.of(context).colorScheme;
     final wide = MediaQuery.sizeOf(context).width >= wideLayoutFrom;
-    final features = ref.watch(tenantProvider).features;
-    final purposes = [for (final p in Purpose.values) if (features.isOn(p.feature)) p];
     final f = widget.filters;
     final more = [f.furnished != null, f.amenities.isNotEmpty, f.verifiedFirst, f.verifiedOnly, f.floorPlan, f.tour].where((x) => x).length;
     String priceLabel() => switch ((f.minPriceKES, f.maxPriceKES)) {
@@ -201,24 +200,6 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
             ]),
           ),
         );
-    final purpose = purposes.length < 2
-        ? null
-        : PopupMenuButton<Purpose>(
-            key: const Key('filter-purpose'),
-            tooltip: 'Rent, buy or BnB',
-            initialValue: f.purpose,
-            onSelected: (p) => widget.onChange(_withPurpose(f, p)),
-            itemBuilder: (_) => [for (final p in purposes) PopupMenuItem(value: p, child: Text(p.label))],
-            child: Container(
-              height: 48,
-              padding: EdgeInsets.symmetric(horizontal: b.spacing.md),
-              decoration: BoxDecoration(border: Border.all(color: scheme.primary), borderRadius: BorderRadius.circular(b.radiusSm)),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text(f.purpose.label, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: scheme.primary)),
-                Icon(Icons.arrow_drop_down, color: scheme.primary),
-              ]),
-            ),
-          );
     final location = SizedBox(
       height: 48,
       child: TextField(
@@ -249,14 +230,12 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
         padding: EdgeInsets.symmetric(horizontal: b.spacing.gutter, vertical: b.spacing.sm),
         child: wide
             ? Row(children: [
-                if (purpose != null) ...[purpose, gap],
                 Expanded(child: location),
                 for (final d in drops) ...[gap, d],
               ])
             : Column(mainAxisSize: MainAxisSize.min, children: [
                 Row(children: [
                   if (context.canPop()) const AppBack(),
-                  if (purpose != null) ...[purpose, gap],
                   Expanded(child: location),
                 ]),
                 SizedBox(height: b.spacing.sm),
@@ -365,11 +344,24 @@ class _ResultsList extends ConsumerWidget {
         ]);
       }
       final cols = c.maxWidth >= 600 ? 2 : 1;
+      final features = ref.watch(tenantProvider).features;
+      final purposes = [for (final p in Purpose.values) if (features.isOn(p.feature)) p];
       // Whole rows between adverts: five homes on a phone, six when two across.
       final chunk = cols == 1 ? AdSlot.every : AdSlot.every + 1;
       return ListView(
         padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.md, b.spacing.gutter, bottom),
         children: [
+          // Phones have no top menu, so Rent, Buy and BnB switch here.
+          if (purposes.length > 1 && MediaQuery.sizeOf(context).width < wideLayoutFrom) ...[
+            SegmentedButton<Purpose>(
+              key: const Key('purpose-pills'),
+              showSelectedIcon: false,
+              segments: [for (final p in purposes) ButtonSegment(value: p, label: Text(p.label))],
+              selected: {filters.purpose},
+              onSelectionChanged: (s) => onChange(_withPurpose(filters, s.first)),
+            ),
+            gap,
+          ],
           ...header,
           Align(alignment: Alignment.centerLeft, child: AlertButton(filters: filters)),
           gap,
@@ -654,8 +646,10 @@ class ContactButtons extends ConsumerWidget {
   const ContactButtons({super.key, required this.listing, this.expand = false});
   final ListingSummary listing;
 
-  /// Share the width equally (cards on phones) instead of hugging the labels.
+  /// Fill the width (cards on phones) instead of hugging the labels.
   final bool expand;
+
+  static const _whatsappKey = Key('contact-whatsapp');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -671,24 +665,36 @@ class ContactButtons extends ConsumerWidget {
       open(to);
     }
 
-    final style = OutlinedButton.styleFrom(padding: EdgeInsets.symmetric(horizontal: b.spacing.sm), visualDensity: VisualDensity.compact);
+    final scheme = Theme.of(context).colorScheme;
+    // Solid buttons, each its own colour, so the three are told apart at a
+    // glance: the brand colour to call, green for WhatsApp, a soft tint for email.
+    ButtonStyle solid(Color fill, Color ink) => FilledButton.styleFrom(
+          backgroundColor: fill,
+          foregroundColor: ink,
+          elevation: 0,
+          minimumSize: const Size(0, 44),
+          padding: EdgeInsets.symmetric(horizontal: expand ? b.spacing.sm : b.spacing.md),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
+        );
+    final onGreen = ThemeData.estimateBrightnessForColor(b.success) == Brightness.dark ? scheme.surface : scheme.onSurface;
     final buttons = <Widget>[
       if (tenant.hasContactNumbers)
-        OutlinedButton.icon(
-          style: style,
+        FilledButton.icon(
+          style: solid(scheme.primary, scheme.onPrimary),
           onPressed: () => tap('call', Uri(scheme: 'tel', path: tenant.phone)),
-          icon: const Icon(Icons.call_outlined, size: 18),
+          icon: const Icon(Icons.call, size: 18),
           label: const Text('Call'),
         ),
       if (whatsapp != null)
         FilledButton.icon(
-          style: style,
+          key: _whatsappKey,
+          style: solid(b.success, onGreen),
           onPressed: () => tap('whatsapp', whatsapp),
-          icon: const Icon(Icons.chat_outlined, size: 18),
-          label: const Text('WhatsApp'),
+          icon: const WhatsAppIcon(size: 20),
+          label: const Text('WhatsApp', maxLines: 1, softWrap: false),
         ),
-      OutlinedButton.icon(
-        style: style,
+      FilledButton.icon(
+        style: solid(b.primarySoft, scheme.primary),
         onPressed: () => open(Uri(scheme: 'mailto', path: tenant.email, queryParameters: {'subject': l.title, 'body': ask})),
         icon: const Icon(Icons.mail_outline, size: 18),
         label: const Text('Email'),
@@ -697,7 +703,8 @@ class ContactButtons extends ConsumerWidget {
     return Row(children: [
       for (final (i, button) in buttons.indexed) ...[
         if (i > 0) SizedBox(width: b.spacing.sm),
-        if (expand) Expanded(child: button) else button,
+        // WhatsApp has the longest word, so it gets a little more of the row.
+        if (expand) Expanded(flex: button.key == _whatsappKey ? 4 : 3, child: button) else button,
       ],
     ]);
   }
