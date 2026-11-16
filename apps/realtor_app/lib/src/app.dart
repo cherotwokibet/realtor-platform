@@ -186,6 +186,10 @@ class _SectionShell extends ConsumerWidget {
         ),
       ));
     }
+    // Results pages scroll as a whole, top menu included, with the scrollbar
+    // at the window's edge; they lay the menu and the page width out themselves.
+    final first = location.split('/').where((s) => s.isNotEmpty).firstOrNull;
+    if (first != null && Purpose.fromPath(first) != null) return backToSearch(Scaffold(body: child));
     return backToSearch(Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(TopNav.height),
