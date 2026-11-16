@@ -35,16 +35,19 @@ class ResultsScreen extends ConsumerWidget {
     void change(ListingFilters f) => _go(context, f);
 
     return Scaffold(
-      // List and map switch with one pill over the results, where a thumb
-      // reaches it, as the big property portals do.
+      // Phones switch list and map with one pill over the results, where a
+      // thumb reaches it; wide screens have the button at the end of the
+      // search bar. Both as the big property portals do.
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('map-toggle'),
-        tooltip: onMap ? 'List' : 'Map',
-        icon: Icon(onMap ? Icons.view_list_outlined : Icons.map_outlined),
-        label: Text(onMap ? 'List' : 'Map'),
-        onPressed: () => ref.read(resultsOnMapProvider.notifier).set(!onMap),
-      ),
+      floatingActionButton: MediaQuery.sizeOf(context).width >= wideLayoutFrom
+          ? null
+          : FloatingActionButton.extended(
+              key: const Key('map-toggle'),
+              tooltip: onMap ? 'List' : 'Map',
+              icon: Icon(onMap ? Icons.view_list_outlined : Icons.map_outlined),
+              label: Text(onMap ? 'List' : 'Map'),
+              onPressed: () => ref.read(resultsOnMapProvider.notifier).set(!onMap),
+            ),
       body: SafeArea(
         child: Column(children: [
           SearchBarRow(filters: filters, onChange: change),
@@ -223,6 +226,7 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
       drop(more == 0 ? 'More Filters' : 'More Filters ($more)', more > 0, FilterSection.more, const Key('filter-more'), icon: Icons.tune),
     ];
     final gap = SizedBox(width: b.spacing.sm);
+    final onMap = ref.watch(resultsOnMapProvider);
     return Material(
       key: const Key('filter-bar'),
       color: scheme.surface,
@@ -232,6 +236,18 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
             ? Row(children: [
                 Expanded(child: location),
                 for (final d in drops) ...[gap, d],
+                gap,
+                Tooltip(
+                  message: onMap ? 'List' : 'Map',
+                  child: FilledButton.icon(
+                    key: const Key('map-toggle'),
+                    style: FilledButton.styleFrom(minimumSize: const Size(0, 48), shape: const StadiumBorder()),
+                    onPressed: () => ref.read(resultsOnMapProvider.notifier).set(!onMap),
+                    iconAlignment: IconAlignment.end,
+                    icon: Icon(onMap ? Icons.view_list : Icons.map, size: 20),
+                    label: Text(onMap ? 'List' : 'Map'),
+                  ),
+                ),
               ])
             : Column(mainAxisSize: MainAxisSize.min, children: [
                 Row(children: [
@@ -305,7 +321,7 @@ class _ResultsList extends ConsumerWidget {
       padding: EdgeInsets.symmetric(vertical: b.spacing.xxl),
       child: Text('Nothing matches yet. Try fewer filters.', style: text.bodyMedium, textAlign: TextAlign.center),
     );
-    // Room at the bottom for the Map pill.
+    // Room at the bottom for the Map pill on phones.
     const bottom = 96.0;
 
     return LayoutBuilder(builder: (context, c) {

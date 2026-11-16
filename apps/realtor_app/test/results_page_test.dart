@@ -217,4 +217,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(location(tester), '/buy');
   });
+
+  testWidgets('Map is at the end of the search bar on wide screens, and a pill over the list on phones', (tester) async {
+    await pump(tester, desktop, [home(1)]);
+    final map = find.byKey(const Key('map-toggle'));
+    expect(find.descendant(of: find.byKey(const Key('filter-bar')), matching: map), findsOneWidget);
+    expect(tester.getTopLeft(map).dx, greaterThan(tester.getTopRight(find.byKey(const Key('filter-more'))).dx));
+    expect(find.byType(FloatingActionButton), findsNothing);
+    await tester.tap(map);
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: map, matching: find.text('List')), findsOneWidget);
+    await tester.tap(map);
+    await tester.pumpAndSettle();
+
+    await pump(tester, phone, [home(1)]);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('filter-bar')), matching: find.byKey(const Key('map-toggle'))), findsNothing);
+  });
 }
