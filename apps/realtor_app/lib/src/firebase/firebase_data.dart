@@ -59,7 +59,12 @@ ListingSummary summaryFromDoc(String id, Map<String, Object?> d, {required Strin
     blurhash: photos.isEmpty ? null : photos.first['blurhash'] as String?,
     photos: cards,
     hasFloorPlan: media.any((m) => m['kind'] == 'floor-plan'),
-    hasTour: media.any((m) => m['kind'] == 'video' || m['kind'] == 'tour-360'),
+    hasVideo: media.any((m) => m['kind'] == 'video'),
+    has360: media.any((m) => m['kind'] == 'tour-360'),
+    videoPoster: switch ([for (final m in media) if (m['kind'] == 'video') m].firstOrNull?['variants']) {
+      {'poster': final String path} => mediaUrl(bucket, path),
+      _ => null,
+    },
   );
 }
 

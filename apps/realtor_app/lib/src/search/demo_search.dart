@@ -19,6 +19,9 @@ class DemoListingSearch implements ListingSearch {
         hits.sort((a, b) => a.priceKES.compareTo(b.priceKES));
       case ListingSort.priceDesc:
         hits.sort((a, b) => b.priceKES.compareTo(a.priceKES));
+      case ListingSort.latest:
+        // The rows come newest first; no featured boost.
+        break;
       case ListingSort.nearest when near != null:
         hits.sort((a, b) => _km(near, a).compareTo(_km(near, b)));
       default:
@@ -61,7 +64,10 @@ class DemoListingSearch implements ListingSearch {
         (!f.verifiedOnly || l.verified) &&
         (f.furnished == null || f.furnished == l.amenities.any((x) => x.toLowerCase() == 'furnished')) &&
         (!f.floorPlan || l.hasFloorPlan) &&
-        (!f.tour || l.hasTour) &&
+        (!f.video || l.hasVideo) &&
+        (!f.tour || l.has360) &&
+        (f.beds.isEmpty || f.beds.any((n) => n == maxBedsChoice ? l.beds >= n : l.beds == n)) &&
+        (f.baths.isEmpty || f.baths.any((n) => n == maxBathsChoice ? l.baths >= n : l.baths == n)) &&
         (f.near == null || _km(f.near!, l) <= f.near!.km) &&
         (f.polygon.isEmpty || pointInPolygon(GeoPoint(l.lat, l.lng), f.polygon)) &&
         words.every(text.contains);

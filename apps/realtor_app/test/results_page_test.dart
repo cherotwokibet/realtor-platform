@@ -8,12 +8,13 @@ import 'package:realtor_app/src/ad_slot.dart';
 import 'package:realtor_app/src/app.dart';
 import 'package:realtor_app/src/providers.dart';
 import 'package:realtor_app/src/search/demo_search.dart';
+import 'package:realtor_app/src/search/filters_sheet.dart';
 import 'package:realtor_app/src/search/results_screen.dart';
 import 'package:realtor_core/realtor_core.dart';
 
 import 'feature_flags_test.dart' show tenantWith;
 
-ListingSummary home(int i, {List<String> photos = const [], List<String> amenities = const [], bool verified = false, bool plan = false}) => ListingSummary(
+ListingSummary home(int i, {List<String> photos = const [], List<String> amenities = const [], bool verified = false, bool plan = false, String? poster}) => ListingSummary(
       id: 'h$i',
       slug: 'home-$i',
       title: 'Home $i',
@@ -29,6 +30,8 @@ ListingSummary home(int i, {List<String> photos = const [], List<String> ameniti
       amenities: amenities,
       photos: photos,
       hasFloorPlan: plan,
+      hasVideo: poster != null,
+      videoPoster: poster,
     );
 
 /// Demo Homes with every feature on (but for [features]) and, unlike the
@@ -92,7 +95,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(find.text('Home 1')).dy, lessThan(was.dy), reason: 'the list scrolled');
       if (size == phone) {
-        expect(tester.getTopLeft(bar), before);
+        // The phone's top bar (menu, logo, Log in) scrolls away; the search bar stops at the top.
+        expect(before.dy, greaterThan(0));
+        expect(tester.getTopLeft(bar).dy, 0);
+        expect(find.byTooltip('Open navigation menu').hitTestable(), findsNothing);
+        await tester.dragFrom(const Offset(200, 600), const Offset(0, 2000));
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Open navigation menu').hitTestable(), findsOneWidget, reason: 'back at the top');
       } else {
         // The whole page scrolls: the top menu goes, the bar stops at the top.
         expect(tester.getTopLeft(bar).dy, 0);
@@ -102,11 +111,15 @@ void main() {
         expect(tester.getTopLeft(find.byType(AdSlot).first).dy, lessThan(was.dy + 200));
         expect(tester.getSize(find.byKey(const Key('results-page'))).width, size.width, reason: 'the scrollbar is at the window edge');
       }
-      for (final key in ['filter-location', 'filter-type', 'filter-beds', 'filter-price', 'filter-more']) {
+      // Wide: More Filters is the last control in the bar. Phones: the
+      // filters button comes first, then the pills.
+      final last = size == phone ? 'filter-all' : 'filter-more';
+      for (final key in ['filter-location', 'filter-type', 'filter-beds', 'filter-price', last]) {
         expect(find.byKey(Key(key)), findsOneWidget, reason: key);
       }
-      // More Filters is the last control in the bar.
-      expect(tester.getTopLeft(find.byKey(const Key('filter-more'))).dx, greaterThan(tester.getTopLeft(find.byKey(const Key('filter-price'))).dx));
+      final price = tester.getTopLeft(find.byKey(const Key('filter-price'))).dx;
+      final edge = tester.getTopLeft(find.byKey(Key(last))).dx;
+      expect(size == phone ? edge < price : edge > price, isTrue);
     });
   }
 
@@ -122,61 +135,131 @@ void main() {
     expect(location(tester), '/rent?q=near+the+stadium');
   });
 
-  testWidgets('on wide screens a dropdown opens under its button; More Filters has furnishing, features, amenities, verified, plans and tours', (tester) async {
+  testWidgets('on wide screens a dropdown opens under its button; Beds & Baths are exact counts with room types first', (tester) async {
     await pump(tester, desktop, [home(1)]);
     await tester.tap(find.byKey(const Key('filter-beds')));
     await tester.pumpAndSettle();
     final popover = find.byKey(const Key('filter-popover'));
     expect(tester.getTopLeft(popover).dy, greaterThan(tester.getBottomLeft(find.byKey(const Key('filter-beds'))).dy));
-    await tester.tap(find.text('2+'));
-    await tester.tap(find.text('Show homes'));
-    await tester.pumpAndSettle();
-    expect(location(tester), '/rent?beds=2');
-
-    await tester.tap(find.byKey(const Key('filter-more')));
-    await tester.pumpAndSettle();
-    final sheet = find.descendant(of: find.byKey(const Key('filter-popover')), matching: find.byType(Scrollable));
-    await tester.tap(find.text('Unfurnished'));
-    for (final label in ['Furnishing', 'Features', 'Amenities', 'Verified homes first', 'Has a floor plan', 'Has a video or virtual tour']) {
-      await tester.scrollUntilVisible(find.text(label), 80, scrollable: sheet.first);
-      expect(find.text(label), findsOneWidget, reason: label);
+    for (final label in ['Beds', 'Baths', 'Single room', 'Studio', 'Bedsitter', '7', '8+', '5', '6+']) {
+      expect(find.descendant(of: popover, matching: find.text(label)), findsWidgets, reason: label);
     }
-    await tester.scrollUntilVisible(find.text('Verified homes first'), -80, scrollable: sheet.first);
-    await tester.tap(find.text('Verified homes first'));
-    await tester.scrollUntilVisible(find.text('Has a floor plan'), 80, scrollable: sheet.first);
-    await tester.tap(find.text('Has a floor plan'));
-    await tester.tap(find.text('Show homes'));
+    expect(find.descendant(of: popover, matching: find.text('2+')), findsNothing, reason: 'counts are exact, not "2 or more"');
+    await tester.tap(find.byKey(const Key('beds-2')));
+    await tester.tap(find.byKey(const Key('beds-3')));
+    await tester.tap(find.text('Studio'));
+    await tester.tap(find.byKey(const Key('baths-6')));
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
-    expect(location(tester), '/rent?beds=2&vfirst=1&furnished=0&plan=1');
-    expect(find.text('More Filters (3)'), findsOneWidget);
+    expect(location(tester), '/rent/studios?bd=2%2C3&ba=6');
+    expect(find.descendant(of: find.byKey(const Key('filter-beds')), matching: find.text('Studio, 2, 3 beds · 6+ baths')), findsOneWidget);
   });
 
-  testWidgets('on phones the dropdowns are bottom sheets', (tester) async {
+  testWidgets('More Filters is lean: viewing options, and features and amenities', (tester) async {
+    await pump(tester, desktop, [home(1)]);
+    await tester.tap(find.byKey(const Key('filter-more')));
+    await tester.pumpAndSettle();
+    final popover = find.byKey(const Key('filter-popover'));
+    for (final label in ['Viewing options', 'Floor plans', 'Video tours', '360° tours', 'Features & Amenities', 'Parking', 'Swimming pool']) {
+      expect(find.descendant(of: popover, matching: find.text(label)), findsOneWidget, reason: label);
+    }
+    for (final label in ['Furnishing', 'Verified homes first', 'Verified homes only']) {
+      expect(find.descendant(of: popover, matching: find.text(label)), findsNothing, reason: '$label is over the list now');
+    }
+    await tester.tap(find.text('Video tours'));
+    await tester.tap(find.text('Parking'));
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(location(tester), '/rent?amenities=parking&video=1');
+    expect(find.text('More Filters (2)'), findsOneWidget);
+  });
+
+  testWidgets('over the list: All / Furnished / Unfurnished, the order, and List | Map', (tester) async {
+    await pump(tester, desktop, [home(1, amenities: ['furnished']), home(2, verified: true)]);
+    final heading = find.byKey(const Key('list-heading'));
+    expect(tester.getTopLeft(heading).dy, greaterThan(tester.getTopLeft(find.text('Homes to rent')).dy));
+    await tester.tap(find.byKey(const Key('furnished-false')));
+    await tester.pumpAndSettle();
+    expect(location(tester), '/rent?furnished=0');
+    expect(find.text('Home 1'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('sort')));
+    await tester.pumpAndSettle();
+    for (final label in ['Popular', 'Newest', 'Lowest price', 'Highest price', 'Verified homes first']) {
+      expect(find.text(label), findsWidgets, reason: label);
+    }
+    await tester.tap(find.text('Verified homes first').last);
+    await tester.pumpAndSettle();
+    expect(location(tester), '/rent?vfirst=1&furnished=0');
+    await tester.tap(find.byKey(const Key('sort')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Lowest price').last);
+    await tester.pumpAndSettle();
+    expect(location(tester), '/rent?furnished=0&sort=price-asc', reason: 'another order drops verified-first');
+
+    expect(find.descendant(of: find.byKey(const Key('filter-bar')), matching: find.text('Map')), findsNothing, reason: 'not in the search bar');
+    await tester.tap(find.descendant(of: find.byKey(const Key('map-toggle')), matching: find.text('Map')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('results-page')), findsNothing, reason: 'the map view');
+    await tester.tap(find.descendant(of: find.byKey(const Key('map-toggle')), matching: find.text('List')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('results-page')), findsOneWidget);
+  });
+
+  testWidgets('the location box lines up with the buttons beside it', (tester) async {
+    await pump(tester, desktop, [home(1)]);
+    final box = tester.getRect(find.byKey(const Key('filter-location')));
+    final button = tester.getRect(find.byKey(const Key('filter-type')));
+    expect(box.top, closeTo(button.top, 1));
+    expect(box.height, closeTo(button.height, 1));
+  });
+
+  testWidgets('on phones the dropdowns are bottom sheets; prices show thousands with commas', (tester) async {
     await pump(tester, phone, [home(1)]);
+    await tester.ensureVisible(find.byKey(const Key('filter-price')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('filter-price')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('filter-popover')), findsNothing);
     expect(find.byType(BottomSheet), findsOneWidget);
     await tester.enterText(find.byKey(const Key('filter-max-price')), '60000');
-    await tester.tap(find.text('Show homes'));
+    await tester.pump();
+    expect(find.text('60,000'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('filter-min-price')), '2000');
+    await tester.pump();
+    expect(find.text('2,000'), findsOneWidget);
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
-    expect(location(tester), '/rent?max=60000');
+    expect(location(tester), '/rent?min=2000&max=60000');
+  });
+
+  test('the thousands formatter keeps the cursor after the same digit', () {
+    const f = ThousandsFormatter();
+    final out = f.formatEditUpdate(TextEditingValue.empty, const TextEditingValue(text: '12345', selection: TextSelection.collapsed(offset: 3)));
+    expect(out.text, '12,345');
+    expect(out.selection.baseOffset, 4);
+    expect(ThousandsFormatter.format('1000000'), '1,000,000');
+    expect(ThousandsFormatter.format('007'), '7');
   });
 
   for (final size in [phone, desktop]) {
     testWidgets('a card has photos to flick through, the heart top right, and Call, WhatsApp (and Email when wide) in that order ($size)', (tester) async {
       final opened = await pump(tester, size, [
-        home(1, photos: ['https://example.com/a.jpg', 'https://example.com/b.jpg', 'https://example.com/c.jpg']),
+        home(1, photos: ['https://example.com/a.jpg', 'https://example.com/b.jpg', 'https://example.com/c.jpg'], poster: 'https://example.com/v.jpg'),
       ]);
       final card = find.byType(ListingCard);
-      // Photos: the arrow and a swipe both move on.
-      expect(find.byTooltip('Previous photo'), findsNothing);
+      // Photos and the video, with no end: from the first, back goes to the last (the video).
+      expect(find.byKey(const Key('photo-dots-0')), findsOneWidget);
+      await tester.tap(find.byTooltip('Previous photo'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('photo-dots-3')), findsOneWidget);
+      expect(find.byWidgetPredicate((w) => w is Image && w.semanticLabel == 'Home 1, video'), findsOneWidget);
       await tester.tap(find.byTooltip('Next photo'));
       await tester.pumpAndSettle();
-      expect(find.byTooltip('Previous photo'), findsOneWidget);
+      expect(find.byKey(const Key('photo-dots-0')), findsOneWidget, reason: 'after the last comes the first');
       await tester.drag(find.byKey(const Key('photo-carousel')), const Offset(-300, 0));
       await tester.pumpAndSettle();
-      expect(find.byTooltip('Next photo'), findsNothing, reason: 'the last of three photos');
+      expect(find.byKey(const Key('photo-dots-1')), findsOneWidget);
       expect(location(tester), '/rent', reason: 'moving through photos does not open the home');
 
       // Phones: Call and WhatsApp only. Wide screens add Email, last.
@@ -189,6 +272,8 @@ void main() {
       expect(box.right - heart.dx, lessThan(48));
       expect(heart.dy - box.top, lessThan(48));
 
+      await tester.ensureVisible(find.descendant(of: card, matching: find.text('Call')));
+      await tester.pumpAndSettle();
       await tester.tap(find.descendant(of: card, matching: find.text('Call')));
       await tester.pump();
       expect(opened.single.scheme, 'tel');
@@ -228,20 +313,40 @@ void main() {
     expect(location(tester), '/buy');
   });
 
-  testWidgets('Map is at the end of the search bar on wide screens, and a pill over the list on phones', (tester) async {
-    await pump(tester, desktop, [home(1)]);
-    final map = find.byKey(const Key('map-toggle'));
-    expect(find.descendant(of: find.byKey(const Key('filter-bar')), matching: map), findsOneWidget);
-    expect(tester.getTopLeft(map).dx, greaterThan(tester.getTopRight(find.byKey(const Key('filter-more'))).dx));
-    expect(find.byType(FloatingActionButton), findsNothing);
-    await tester.tap(map);
-    await tester.pumpAndSettle();
-    expect(find.descendant(of: map, matching: find.text('List')), findsOneWidget);
-    await tester.tap(map);
-    await tester.pumpAndSettle();
-
+  testWidgets('phones keep the Map pill over the list and have no List | Map row', (tester) async {
     await pump(tester, phone, [home(1)]);
     expect(find.byType(FloatingActionButton), findsOneWidget);
-    expect(find.descendant(of: find.byKey(const Key('filter-bar')), matching: find.byKey(const Key('map-toggle'))), findsNothing);
+    expect(find.byType(SegmentedButton<bool>), findsNothing);
+    expect(find.byKey(const Key('list-heading')), findsOneWidget, reason: 'furnishing and the order still show');
+  });
+
+  testWidgets('phones: the filters button opens every filter in one sheet, which says how many homes it finds', (tester) async {
+    await pump(tester, phone, [home(1), home(2, plan: true), home(3)]);
+    await tester.tap(find.byKey(const Key('filter-all')));
+    await tester.pumpAndSettle();
+    final sheet = find.byType(BottomSheet);
+    final list = find.descendant(of: sheet, matching: find.byType(Scrollable)).first;
+    for (final label in ['Property type', 'Beds', 'Baths', 'Viewing options', 'Features & Amenities']) {
+      await tester.scrollUntilVisible(find.descendant(of: sheet, matching: find.text(label)), 120, scrollable: list);
+      expect(find.descendant(of: sheet, matching: find.text(label)), findsOneWidget, reason: label);
+    }
+    expect(find.text('See 3 homes'), findsOneWidget);
+    await tester.tap(find.descendant(of: sheet, matching: find.text('Floor plans')));
+    await tester.pumpAndSettle();
+    expect(find.text('See 1 home'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('filters-done')));
+    await tester.pumpAndSettle();
+    expect(location(tester), '/rent?plan=1');
+    expect(find.descendant(of: find.byType(Badge), matching: find.text('1')), findsOneWidget, reason: 'the badge counts it');
+  });
+
+  testWidgets('phones: the top bar has the menu, the logo and Log in; Saved once signed in', (tester) async {
+    await pump(tester, phone, [home(1)]);
+    final top = find.byKey(const Key('phone-top-bar'));
+    expect(find.descendant(of: top, matching: find.byTooltip('Open navigation menu')), findsOneWidget);
+    expect(find.descendant(of: top, matching: find.text('Log in')), findsOneWidget);
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-drawer')), findsOneWidget);
   });
 }

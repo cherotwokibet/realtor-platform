@@ -21,7 +21,9 @@ class ListingSummary {
     this.blurhash,
     this.photos = const [],
     this.hasFloorPlan = false,
-    this.hasTour = false,
+    this.hasVideo = false,
+    this.has360 = false,
+    this.videoPoster,
   });
 
   /// How many photos a card's carousel carries.
@@ -39,8 +41,11 @@ class ListingSummary {
   /// rows saved before cards had one; [thumb] stands in then.
   final List<String> photos;
 
-  /// Has a floor plan; has a video or a 360° tour.
-  final bool hasFloorPlan, hasTour;
+  /// Has a floor plan; a video; a 360° tour.
+  final bool hasFloorPlan, hasVideo, has360;
+
+  /// A frame of the home's video, shown last in the card's carousel.
+  final String? videoPoster;
 
   /// For keeping a copy on the device (saved homes).
   Map<String, Object?> toJson() => {
@@ -61,7 +66,9 @@ class ListingSummary {
         if (blurhash != null) 'blurhash': blurhash,
         if (photos.isNotEmpty) 'photos': photos,
         if (hasFloorPlan) 'hasFloorPlan': true,
-        if (hasTour) 'hasTour': true,
+        if (hasVideo) 'hasVideo': true,
+        if (has360) 'has360': true,
+        if (videoPoster != null) 'videoPoster': videoPoster,
       };
 
   /// Null when [j] isn't a saved row (an older or damaged copy).
@@ -86,7 +93,9 @@ class ListingSummary {
         blurhash: j['blurhash'] as String?,
         photos: [for (final p in (j['photos'] as List?) ?? const []) '$p'],
         hasFloorPlan: j['hasFloorPlan'] == true,
-        hasTour: j['hasTour'] == true,
+        hasVideo: j['hasVideo'] == true,
+        has360: j['has360'] == true,
+        videoPoster: j['videoPoster'] as String?,
       );
     } on Object {
       return null;

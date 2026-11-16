@@ -78,10 +78,11 @@ test('counter-only writes (views, leads, taps) do not re-sync search', () => {
 });
 
 test('More Filters: furnishing, floor plans, tours and verified-first reach the query; cards get their photos', () => {
-  const by = String(toSearchParams({ purpose: 'rent', furnished: false, floorPlan: true, tour: true, verifiedFirst: true }).filter_by);
+  const by = String(toSearchParams({ purpose: 'rent', furnished: false, floorPlan: true, video: true, tour: true, verifiedFirst: true }).filter_by);
   assert.match(by, /amenities:!=\[`furnished`\]/);
   assert.match(by, /hasFloorPlan:=true/);
-  assert.match(by, /hasTour:=true/);
+  assert.match(by, /hasVideo:=true/);
+  assert.match(by, /has360:=true/);
   assert.match(String(toSearchParams({ purpose: 'rent', furnished: true }).filter_by), /amenities:=\[`furnished`\]/);
   assert.match(String(toSearchParams({ purpose: 'rent', verifiedFirst: true, sort: 'price-asc' }).sort_by), /^verified:desc,priceKES:asc$/);
 
@@ -92,5 +93,14 @@ test('More Filters: furnishing, floor plans, tours and verified-first reach the 
   })!;
   assert.deepEqual(doc.photos, ['c1', 'c2', 'c3', 'c4', 'c5', 'c6']);
   assert.equal(doc.hasFloorPlan, true);
-  assert.equal(doc.hasTour, false);
+  assert.equal(doc.hasVideo, false);
+  assert.equal(doc.has360, false);
+});
+
+test('Beds & Baths: exact counts, the top choice meaning that many or more; Newest sorts strictly by date', () => {
+  assert.match(String(toSearchParams({ purpose: 'rent', beds: [2, 1] }).filter_by), /beds:=\[1,2\]/);
+  assert.match(String(toSearchParams({ purpose: 'rent', beds: [1, 8] }).filter_by), /\(beds:=\[1\] \|\| beds:>=8\)/);
+  assert.match(String(toSearchParams({ purpose: 'rent', baths: [6] }).filter_by), /baths:>=6/);
+  assert.doesNotMatch(String(toSearchParams({ purpose: 'rent', beds: [0, 99] }).filter_by), /beds/);
+  assert.equal(toSearchParams({ purpose: 'rent', sort: 'latest' }).sort_by, 'updatedAt:desc');
 });

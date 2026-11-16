@@ -40,6 +40,69 @@ List<PhoneTab> phoneTabs(Features f) {
 /// Where a tab goes: Saved asks a signed-out visitor to sign in first.
 String phoneTabTarget(PhoneTab tab, {required bool signedIn}) => tab.path == '/saved' && !signedIn ? '/account' : tab.path;
 
+/// The phone's top bar, as a sliver: the menu on the left, the logo in the
+/// middle, and Log in on the right (Saved once signed in). It scrolls away
+/// with the page and comes back only at the top, so the page gets the room.
+class PhoneTopBar extends ConsumerWidget {
+  const PhoneTopBar({super.key});
+
+  static const height = 64.0;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tenant = ref.watch(tenantProvider);
+    final b = context.brand;
+    final signedIn = ref.watch(customerProvider).value != null;
+    return SliverAppBar(
+      key: const Key('phone-top-bar'),
+      toolbarHeight: height,
+      leadingWidth: 64,
+      primary: false,
+      automaticallyImplyLeading: false,
+      leading: Builder(
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(left: b.spacing.sm),
+          // The menu in a soft round, so it reads as a button.
+          child: Center(
+            child: IconButton.filledTonal(
+              constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+              tooltip: 'Open navigation menu',
+              style: IconButton.styleFrom(backgroundColor: b.surfaceAlt, foregroundColor: Theme.of(context).colorScheme.onSurface),
+              icon: const Icon(Icons.menu),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+          ),
+        ),
+      ),
+      title: Image.asset(b.logoAsset, height: 48, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
+      centerTitle: true,
+      actions: [
+        Padding(
+          padding: EdgeInsets.only(right: b.spacing.sm),
+          // A solid pill in the brand colour, as Property Finder has it.
+          child: Builder(builder: (context) {
+            final style = FilledButton.styleFrom(
+              shape: const StadiumBorder(),
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.lg),
+              minimumSize: const Size(0, 44),
+              textStyle: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            );
+            return signedIn
+                ? FilledButton.icon(
+                    key: const Key('top-saved'),
+                    style: style,
+                    onPressed: () => context.go('/saved'),
+                    icon: const Icon(Icons.favorite_border, size: 20),
+                    label: const Text('Saved'),
+                  )
+                : FilledButton(key: const Key('home-login'), style: style, onPressed: () => context.go('/account'), child: const Text('Log in'));
+          }),
+        ),
+      ],
+    );
+  }
+}
+
 /// The phone menu behind the hamburger: every way in, including the
 /// sections that have no bottom tab (Off-plan, Chat) and the site pages.
 class AppDrawer extends ConsumerWidget {

@@ -83,6 +83,17 @@ void main() {
     const l = ListingSummary(id: 'a', slug: 'a', title: 'A', purpose: Purpose.rent, type: 'apartment', beds: 1, baths: 1, priceKES: 1, area: 'x', lat: 0, lng: 0, photos: ['p1', 'p2'], hasFloorPlan: true);
     final back = ListingSummary.fromJson(l.toJson())!;
     expect(back.photos, ['p1', 'p2']);
-    expect((back.hasFloorPlan, back.hasTour), (true, false));
+    expect((back.hasFloorPlan, back.hasVideo, back.has360), (true, false, false));
+  });
+
+  test('Beds & Baths, video and 360° tours, and the Newest order round-trip', () {
+    const f = ListingFilters(purpose: Purpose.rent, beds: [1, 2, 8], baths: [6], video: true, tour: true, sort: ListingSort.latest);
+    expect(f.toUri().toString(), '/rent?video=1&tour=1&bd=1%2C2%2C8&ba=6&sort=latest');
+    expect(ListingFilters.fromUri(f.toUri()), f);
+    // Out-of-range or repeated counts are dropped, never thrown on.
+    final odd = ListingFilters.fromUri(Uri.parse('/rent?bd=3,0,3,9,x,1&ba=7,2'))!;
+    expect(odd.beds, [1, 3]);
+    expect(odd.baths, [2]);
+    expect(f.copyWith(page: 2).beds, [1, 2, 8], reason: 'kept by other changes');
   });
 }
