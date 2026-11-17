@@ -17,7 +17,7 @@ import { monthlyReport } from './reports';
 import { saveProject } from './projects';
 import { logRecommendation, nairobiDay } from './recommendations';
 import { MIN_RENTALS, refreshAreaStats, saveArea } from './areas';
-import { moderateReview, submitReview } from './reviews';
+import { moderateReview, submitListingReview, submitReview } from './reviews';
 import { type PushMessage, type PushSender, sweepSavedSearches } from './alerts';
 import { savePage } from './pages';
 import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
@@ -820,6 +820,23 @@ describe('reviews (P6-s03)', () => {
     await updateViewingStatus(db, wanjiku, { viewingId, status: 'done' }, later);
     const token = (await db.collection('viewings').doc(viewingId).get()).get('reviewToken') as string;
     await rejectsWith(submitReview(db, { token, rating: 5 }, new Date('2026-12-01T00:00:00Z')), 'failed-precondition');
+  });
+});
+
+describe('listing reviews', () => {
+  test('a signed-in visitor reviews a home once; it waits for a manager and never moves the agent rating', async () => {
+    for (const d of (await db.collection('reviews').get()).docs) await d.ref.delete();
+    const visitor = { uid: 'customer-1', role: null, agentId: null };
+    const input = { listingId: 'listing-001', rating: 2, comment: 'Lovely flat, but the water is rationed.', name: 'Achieng Atieno' };
+    await rejectsWith(submitListingReview(db, { uid: null, role: null, agentId: null }, input, now), 'unauthenticated');
+    await rejectsWith(submitListingReview(db, visitor, { ...input, comment: 'ok' }, now), 'invalid-argument');
+    await rejectsWith(submitListingReview(db, visitor, { ...input, listingId: 'no-such-listing' }, now), 'failed-precondition');
+    const { reviewId } = await submitListingReview(db, visitor, input, now);
+    await rejectsWith(submitListingReview(db, visitor, input, now), 'already-exists');
+    const review = (await db.collection('reviews').doc(reviewId).get()).data()!;
+    assert.deepEqual([review.kind, review.status, review.name, review.listingId, review.agentId], ['listing', 'pending', 'Achieng', 'listing-001', 'agent-wanjiku']);
+    assert.ok(!JSON.stringify(review).includes('customer-1') && !reviewId.includes('customer-1'), 'the account id is not stored');
+    assert.deepEqual(await moderateReview(db, manager, { reviewId, action: 'approve' }, now), { rating: null, ratingCount: 0 }, 'not counted for the agent');
   });
 });
 

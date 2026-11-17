@@ -136,3 +136,24 @@ class DemoLeadRepository implements LeadRepository {
   @override
   Future<void> payViewingFee({required String viewingId, required String phone}) async => payments.add('$viewingId/$phone');
 }
+
+/// Reviews in memory until the app reads Firestore: two on the first demo
+/// home, so the section can be seen; a new one "waits for a manager" (it is
+/// kept in [pending] and not shown).
+class DemoListingReviews implements ListingReviews {
+  final pending = <({String listingId, int rating, String comment, String? name})>[];
+
+  @override
+  Future<List<ListingReview>> forListing(String listingId) async => listingId == 'demo-1'
+      ? [
+          ListingReview(rating: 5, comment: 'Bright flat, and the borehole means water every day. The agent showed up on time.', name: 'Akinyi', createdAt: DateTime.utc(2026, 10, 20), afterViewing: true),
+          ListingReview(rating: 4, comment: 'Good security and parking. Traffic on Argwings Kodhek is heavy at rush hour.', name: 'Brian', createdAt: DateTime.utc(2026, 9, 2)),
+        ]
+      : const [];
+
+  @override
+  Future<void> submit({required String listingId, required int rating, required String comment, String? name}) async {
+    if (pending.any((p) => p.listingId == listingId)) throw LeadException('already-exists', 'you have already reviewed this home');
+    pending.add((listingId: listingId, rating: rating, comment: comment, name: name));
+  }
+}

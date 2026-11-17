@@ -49,7 +49,7 @@ void main() {
   testWidgets('signed out: the heart saves on the device and says to sign in; Saved asks to sign in', (tester) async {
     final store = MemoryStore();
     final c = await open(tester, store, '/listing/${first.slug}');
-    await tester.tap(find.byTooltip('Save this home'));
+    await tester.tap(find.descendant(of: find.byType(AppBar), matching: find.byTooltip('Save this home')));
     await tester.pumpAndSettle();
     expect(store.rows, hasLength(1));
     expect(find.text('Saved on this device. Sign in to see your saved homes.'), findsOneWidget);
@@ -64,10 +64,10 @@ void main() {
     final account = DemoAccount();
     await account.signInWithGoogle();
     final c = await open(tester, store, '/listing/${first.slug}', account: account);
-    await tester.tap(find.byTooltip('Save this home'));
+    await tester.tap(find.descendant(of: find.byType(AppBar), matching: find.byTooltip('Save this home')));
     await tester.pumpAndSettle();
     expect(store.rows, hasLength(1));
-    expect(find.byTooltip('Remove from saved'), findsOneWidget);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.byTooltip('Remove from saved')), findsOneWidget);
     expect(find.textContaining('Sign in to see'), findsNothing, reason: 'already signed in');
 
     c.read(routerProvider).go('/saved');

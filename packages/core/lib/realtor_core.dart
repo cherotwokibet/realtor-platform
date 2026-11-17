@@ -12,6 +12,7 @@ export 'src/listing_copy.dart';
 export 'src/listing_draft.dart';
 export 'src/listing_filters.dart';
 export 'src/listing_repository.dart';
+export 'src/listing_reviews.dart';
 export 'src/listing_search.dart';
 export 'src/money.dart';
 export 'src/monthly_report.dart';
