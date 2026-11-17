@@ -12,6 +12,7 @@ import 'nav.dart';
 import 'phone_nav.dart';
 import 'providers.dart';
 import 'search/purpose.dart';
+import 'site_footer.dart';
 import 'search/recent_searches.dart';
 import 'search/results_screen.dart';
 
@@ -209,10 +210,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             SizedBox(height: b.spacing.xl),
             _Newest(purpose: _purpose, onSeeAll: () => _search()),
-            SizedBox(height: b.spacing.xl),
-            _Footer(purposes: purposes),
           ]),
         ),
+        // The site footer runs the width of the window.
+        SliverToBoxAdapter(child: Padding(padding: EdgeInsets.only(top: b.spacing.xl), child: const SiteFooter())),
       ]),
       // In-app chat lives in its own section when on; otherwise WhatsApp handoff.
       bottomNavigationBar: !tenant.features.chat && whatsapp != null
@@ -431,56 +432,6 @@ class _Filters extends StatelessWidget {
         clear,
       ]);
     });
-  }
-}
-
-/// Contacts and links at the foot of the home page. The site pages (About,
-/// Privacy, …) live on the share site and open in the browser.
-class _Footer extends ConsumerWidget {
-  const _Footer({required this.purposes});
-  final List<Purpose> purposes;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tenant = ref.watch(tenantProvider);
-    final b = context.brand;
-    final text = Theme.of(context).textTheme;
-    final open = ref.read(urlOpenerProvider);
-    Widget link(String label, VoidCallback onTap) => InkWell(
-          onTap: onTap,
-          child: Padding(padding: EdgeInsets.symmetric(vertical: b.spacing.xs), child: Text(label, style: text.bodyMedium)),
-        );
-    Widget column(String title, List<Widget> children) => SizedBox(
-          width: 240,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: text.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
-            SizedBox(height: b.spacing.sm),
-            ...children,
-          ]),
-        );
-    return Container(
-      key: const Key('home-footer'),
-      decoration: BoxDecoration(color: b.surfaceAlt, borderRadius: BorderRadius.circular(b.radiusMd)),
-      padding: EdgeInsets.all(b.spacing.xl),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Wrap(spacing: b.spacing.xl, runSpacing: b.spacing.xl, children: [
-          column(tenant.name, [
-            if (tenant.tagline != null) Text(tenant.tagline!, style: text.bodyMedium),
-            if (tenant.phone != 'TBC') link('Call ${tenant.phone}', () => open(Uri(scheme: 'tel', path: tenant.phone))),
-            link(tenant.email, () => open(Uri(scheme: 'mailto', path: tenant.email))),
-          ]),
-          column('Browse', [
-            for (final p in purposes) link('Homes ${p.heading}', () => context.push('/${p.pathSegment}')),
-          ]),
-          column('About us', [
-            for (final (slug, name) in const [('about', 'About'), ('contact', 'Contact'), ('faq', 'FAQs'), ('privacy', 'Privacy'), ('terms', 'Terms')])
-              link(name, () => open(Uri.https(tenant.shareDomain, '/$slug'))),
-          ]),
-        ]),
-        SizedBox(height: b.spacing.lg),
-        Text('© ${ref.read(clockProvider)().year} ${tenant.name}', style: text.bodySmall),
-      ]),
-    );
   }
 }
 

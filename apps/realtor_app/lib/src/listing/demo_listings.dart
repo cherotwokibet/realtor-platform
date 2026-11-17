@@ -25,6 +25,8 @@ class DemoListingRepository implements ListingRepository {
             areaName: areaName(l.area),
           ).description,
           agent: _agents[i % _agents.length],
+          serviceChargeKES: l.purpose == Purpose.rent && l.beds >= 2 ? 3000 : null,
+          utilities: l.purpose == Purpose.rent ? const {'water': false, 'electricity': false, 'wifi': false} : const {},
         );
       }
     }

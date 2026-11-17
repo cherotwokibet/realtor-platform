@@ -12,6 +12,7 @@ import '../nav.dart';
 import '../providers.dart';
 import '../phone_nav.dart';
 import '../saved/favourites.dart';
+import '../site_footer.dart';
 import '../sections.dart';
 import 'filters_sheet.dart';
 import 'purpose.dart';
@@ -62,6 +63,9 @@ class ResultsScreen extends ConsumerWidget {
             child: TopNav(
               sections: visibleSections(enabledSections(tenant.features), signedIn: ref.watch(customerProvider).value != null),
               location: '/${filters.purpose.pathSegment}',
+              // The logo and Log in line up with the homes and the column beside them.
+              width: resultsContentWidth,
+              gutter: 24,
             ),
           );
 
@@ -106,6 +110,7 @@ class ResultsScreen extends ConsumerWidget {
                         ),
                         data: (r) => SliverToBoxAdapter(child: page(_ResultsList(filters: filters, result: r, onChange: change, scrolls: false))),
                       ),
+                      SliverToBoxAdapter(child: SiteFooter(width: wide ? resultsContentWidth : maxContentWidth)),
                     ],
                   ),
                 ),
@@ -429,7 +434,7 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
                           key: const Key('filter-reset-all'),
                           style: TextButton.styleFrom(minimumSize: const Size(0, 36), padding: EdgeInsets.symmetric(horizontal: b.spacing.sm)),
                           onPressed: () => _apply(_cleared),
-                          child: const Text('Reset all filters'),
+                          child: const Text('Reset All Filters'),
                         ),
                       ],
                     ]),
@@ -638,34 +643,7 @@ class ListHeading extends ConsumerWidget {
 
     // The order. Phones: plain coloured words with the sort mark on the
     // heading's line. Wide: a bordered dropdown beside List | Map.
-    final sort = PopupMenuButton<String>(
-      key: const Key('sort'),
-      tooltip: 'Order',
-      initialValue: order,
-      onSelected: (o) => onChange(withOrder(f, o)),
-      itemBuilder: (_) => [for (final (value, label) in orders) PopupMenuItem(value: value, child: Text(label))],
-      child: wide
-          ? Container(
-              height: 44,
-              padding: EdgeInsets.symmetric(horizontal: b.spacing.md),
-              decoration: BoxDecoration(border: Border.all(color: b.borderStrong), borderRadius: BorderRadius.circular(b.radiusSm)),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.sort, size: 18),
-                SizedBox(width: b.spacing.sm),
-                Text(orders.firstWhere((o) => o.$1 == order).$2, style: text.labelLarge),
-                SizedBox(width: b.spacing.sm),
-                const Icon(Icons.arrow_drop_down, size: 20),
-              ]),
-            )
-          : Padding(
-              padding: EdgeInsets.all(b.spacing.xs),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.sort, size: 20, color: scheme.primary),
-                SizedBox(width: b.spacing.xs),
-                Text(orders.firstWhere((o) => o.$1 == order).$2, style: text.titleSmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
-              ]),
-            ),
-    );
+    final sort = SortMenu(value: order, bordered: wide, onChanged: (o) => onChange(withOrder(f, o)));
     final view = GroupedChoice<bool>(
       key: const Key('map-toggle'),
       value: onMap,
@@ -726,6 +704,116 @@ class ListHeading extends ConsumerWidget {
             )
           : KeyedSubtree(key: const Key('list-heading'), child: furnishing),
     ]);
+  }
+}
+
+/// The order of the homes, as the portals draw it: a button with the sort
+/// mark (and on wide screens a border and an arrow that turns while open);
+/// the menu drops down under it, its words centred, the chosen one tinted.
+class SortMenu extends StatefulWidget {
+  const SortMenu({super.key, required this.value, required this.onChanged, this.bordered = true});
+  final String value;
+  final ValueChanged<String> onChanged;
+  final bool bordered;
+
+  @override
+  State<SortMenu> createState() => _SortMenuState();
+}
+
+class _SortMenuState extends State<SortMenu> {
+  final _menu = MenuController();
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final label = ListHeading.orders.firstWhere((o) => o.$1 == widget.value).$2;
+    const width = 180.0;
+    // "Sort" lines with an arrow down beside them.
+    Widget mark(Color color, double size) => Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.sort, size: size, color: color),
+          Transform.translate(offset: Offset(-size * 0.2, size * 0.1), child: Icon(Icons.arrow_downward, size: size * 0.6, color: color)),
+        ]);
+    final button = widget.bordered
+        ? AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            height: 44,
+            constraints: const BoxConstraints(minWidth: width),
+            padding: EdgeInsets.symmetric(horizontal: b.spacing.md),
+            decoration: BoxDecoration(
+              border: Border.all(color: _open ? scheme.onSurface : b.borderStrong, width: _open ? 1.5 : 1),
+              borderRadius: BorderRadius.circular(b.radiusSm),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              mark(scheme.onSurface, 18),
+              Text(label, style: text.labelLarge),
+              SizedBox(width: b.spacing.md),
+              AnimatedRotation(turns: _open ? 0.5 : 0, duration: const Duration(milliseconds: 150), child: const Icon(Icons.arrow_drop_down, size: 22)),
+            ]),
+          )
+        : Padding(
+            padding: EdgeInsets.all(b.spacing.xs),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              mark(scheme.primary, 20),
+              Text(label, style: text.titleSmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
+            ]),
+          );
+    return MenuAnchor(
+      controller: _menu,
+      onOpen: () => setState(() => _open = true),
+      onClose: () => setState(() => _open = false),
+      alignmentOffset: const Offset(0, 4),
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(scheme.surface),
+        elevation: const WidgetStatePropertyAll(4),
+        padding: WidgetStatePropertyAll(EdgeInsets.all(b.spacing.sm)),
+        minimumSize: const WidgetStatePropertyAll(Size(width, 0)),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm))),
+      ),
+      menuChildren: [
+        for (final (value, name) in ListHeading.orders)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: SizedBox(
+              width: width - b.spacing.sm * 2,
+              child: Material(
+                color: value == widget.value ? b.primarySoft : Colors.transparent,
+                borderRadius: BorderRadius.circular(b.radiusSm),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(b.radiusSm),
+                  onTap: () {
+                    _menu.close();
+                    if (value != widget.value) widget.onChanged(value);
+                  },
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: b.spacing.sm),
+                    child: Text(
+                      name,
+                      textAlign: TextAlign.center,
+                      style: text.bodyMedium?.copyWith(
+                        color: value == widget.value ? scheme.primary : b.textMuted,
+                        fontWeight: value == widget.value ? FontWeight.w700 : null,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+      builder: (context, menu, _) => Semantics(
+        button: true,
+        label: 'Order: $label',
+        child: InkWell(
+          key: const Key('sort'),
+          borderRadius: BorderRadius.circular(b.radiusSm),
+          onTap: () => menu.isOpen ? menu.close() : menu.open(),
+          child: button,
+        ),
+      ),
+    );
   }
 }
 

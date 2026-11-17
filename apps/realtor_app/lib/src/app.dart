@@ -207,9 +207,16 @@ class _SectionShell extends ConsumerWidget {
 /// way to search the tenant offers (Rent, Buy, BnB), the other sections,
 /// and the account on the right.
 class TopNav extends ConsumerWidget {
-  const TopNav({super.key, required this.sections, required this.location});
+  const TopNav({super.key, required this.sections, required this.location, this.width = maxContentWidth, this.gutter});
   final List<AppSection> sections;
   final String location;
+
+  /// How wide the bar's contents run, so the logo and the account button
+  /// line up with the page under them (results pages are narrower).
+  final double width;
+
+  /// Space at the sides; the theme's gutter when null.
+  final double? gutter;
 
   static const height = 80.0;
 
@@ -251,9 +258,9 @@ class TopNav extends ConsumerWidget {
       shape: Border(bottom: BorderSide(color: Theme.of(context).dividerTheme.color ?? scheme.outlineVariant)),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: maxContentWidth),
+          constraints: BoxConstraints(maxWidth: width),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: b.spacing.gutter),
+            padding: EdgeInsets.symmetric(horizontal: gutter ?? b.spacing.gutter),
             child: Row(children: [
               InkWell(
                 onTap: () => go('/'),
