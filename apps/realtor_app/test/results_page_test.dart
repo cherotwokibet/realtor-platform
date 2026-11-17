@@ -337,7 +337,8 @@ void main() {
     await tester.tap(find.byKey(const Key('filters-done')));
     await tester.pumpAndSettle();
     expect(location(tester), '/rent?plan=1');
-    expect(find.descendant(of: find.byType(Badge), matching: find.text('1')), findsOneWidget, reason: 'the badge counts it');
+    expect(find.byType(Badge), findsNothing, reason: 'no number');
+    expect(find.byTooltip('Filters (some set)'), findsOneWidget, reason: 'the button shows filters are set');
   });
 
   testWidgets('phones: the top bar has the menu, the logo and Log in; Saved once signed in', (tester) async {

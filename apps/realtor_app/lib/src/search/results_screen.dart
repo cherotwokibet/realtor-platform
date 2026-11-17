@@ -418,21 +418,7 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
                     scrollDirection: Axis.horizontal,
                     child: Row(children: [
                       Builder(
-                        builder: (anchor) => Badge(
-                          isLabelVisible: all > 0,
-                          // Inside the row's height, so it is not cut off.
-                          offset: const Offset(-2, 0),
-                          label: Text('$all'),
-                          child: IconButton.outlined(
-                            key: const Key('filter-all'),
-                            tooltip: 'Filters',
-                            constraints: const BoxConstraints.tightFor(width: 44, height: 36),
-                            padding: EdgeInsets.zero,
-                            style: IconButton.styleFrom(shape: const StadiumBorder(), side: BorderSide(color: b.borderStrong)),
-                            icon: Icon(Icons.tune, size: 18, color: scheme.primary),
-                            onPressed: () => _open(anchor, FilterSection.all),
-                          ),
-                        ),
+                        builder: (anchor) => _FiltersButton(active: all > 0, onPressed: () => _open(anchor, FilterSection.all)),
                       ),
                       SizedBox(width: b.spacing.sm),
                       VerticalDivider(width: 1, indent: 6, endIndent: 6, color: b.borderStrong),
@@ -450,6 +436,52 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
                   ),
                 ),
               ]),
+      ),
+    );
+  }
+}
+
+/// The phones' filters button. Once any filter is set it turns tinted with
+/// the brand colour, like a chosen pill, with a short pulse, as on the big
+/// portals' apps; no number.
+class _FiltersButton extends StatelessWidget {
+  const _FiltersButton({required this.active, required this.onPressed});
+  final bool active;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    return TweenAnimationBuilder<double>(
+      // A new key for each state, so the pulse plays when it changes.
+      key: ValueKey(active),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 420),
+      builder: (context, t, child) {
+        // Grows a little and settles: 1 -> 1.12 -> 1.
+        final scale = active ? 1 + 0.12 * Curves.easeOut.transform(t < 0.5 ? t * 2 : (1 - t) * 2) : 1.0;
+        return Transform.scale(scale: scale, child: child);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        decoration: ShapeDecoration(
+          color: active ? b.primarySoft : Colors.transparent,
+          shape: StadiumBorder(side: BorderSide(color: active ? scheme.primary : b.borderStrong, width: active ? 1.5 : 1)),
+        ),
+        child: Semantics(
+          selected: active,
+          child: IconButton(
+            key: const Key('filter-all'),
+            tooltip: active ? 'Filters (some set)' : 'Filters',
+            constraints: const BoxConstraints.tightFor(width: 44, height: 36),
+            padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(shape: const StadiumBorder()),
+            icon: Icon(Icons.tune, size: 18, color: scheme.primary),
+            onPressed: onPressed,
+          ),
+        ),
       ),
     );
   }
