@@ -120,6 +120,12 @@ class FirestoreListingRepository implements ListingRepository {
       depositMonths: (d['depositMonths'] as num?)?.toInt(),
       viewingFeeKES: (d['viewingFeeKES'] as num?)?.toInt(),
       description: d['description'] as String? ?? '',
+      serviceChargeKES: (d['serviceChargeKES'] as num?)?.toInt(),
+      listedAt: _time(d['createdAt']),
+      utilities: {
+        for (final MapEntry(:key, :value) in ((d['utilities'] as Map?) ?? const {}).entries)
+          if (value is bool) '$key': value,
+      },
       photos: [
         for (final m in (d['media'] as List<Object?>?) ?? const [])
           if (m is Map && m['kind'] == 'photo')

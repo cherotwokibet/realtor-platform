@@ -22,6 +22,9 @@ class ListingDetail {
     this.videos = const [],
     this.agent,
     this.description = '',
+    this.serviceChargeKES,
+    this.listedAt,
+    this.utilities = const {},
   });
   final ListingSummary summary;
   final String? estate;
@@ -41,6 +44,16 @@ class ListingDetail {
 
   /// Null when the agent is inactive; the realtor's own numbers are used.
   final ListingAgent? agent;
+
+  /// A monthly service charge on top of the price, if any.
+  final int? serviceChargeKES;
+
+  /// When the listing was first added.
+  final DateTime? listedAt;
+
+  /// Which of water, electricity and Wi-Fi the price includes (true) or
+  /// leaves to the tenant (false); a missing key means not stated.
+  final Map<String, bool> utilities;
 }
 
 /// A listing video: the HLS playlist (phones), a progressive MP4 for

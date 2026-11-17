@@ -3,12 +3,16 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_app/src/app.dart';
 import 'package:realtor_app/src/listing/demo_listings.dart';
 import 'package:realtor_app/src/providers.dart';
+import 'package:realtor_app/src/saved/favourites.dart';
 import 'package:realtor_core/realtor_core.dart';
+
+import 'favourites_test.dart' show MemoryStore;
 
 TenantConfig tenant() =>
     TenantConfig.fromJson(jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>);
@@ -47,6 +51,7 @@ Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size 
       tenantProvider.overrideWithValue(tenantConfig ?? tenant()),
       leadRepositoryProvider.overrideWithValue(repo ?? leads),
       if (listings != null) listingRepositoryProvider.overrideWithValue(listings),
+      favouritesStoreProvider.overrideWithValue(MemoryStore()),
       urlOpenerProvider.overrideWithValue((uri) async {
         opened.add(uri);
         return true;
@@ -62,17 +67,29 @@ Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size 
 
 const kilimani = '/listing/2-bedroom-apartment-kilimani';
 
+/// The page's own (vertical) scroll, not a row of cards or the map.
+final page = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first;
+
 void main() {
   testWidgets('a listing link opens the listing: price, facts, deposit, agent and actions', (tester) async {
     await open(tester, kilimani);
     expect(find.text('2 bedroom apartment, Kilimani'), findsWidgets);
-    expect(find.text('2 bed · 2 bath · Kilimani'), findsOneWidget);
-    expect(find.text('Deposit: 2 months'), findsOneWidget);
+    for (final fact in ['Apartment', '2 beds', '2 baths', 'Kilimani']) {
+      expect(find.text(fact), findsWidgets, reason: fact);
+    }
+    await tester.scrollUntilVisible(find.byKey(const Key('extra-payments')), 300, scrollable: page);
+    expect(find.text('2 months · KES 130,000'), findsOneWidget, reason: 'the deposit, among the extra payments');
+    expect(find.text('KES 3,000 a month'), findsOneWidget, reason: 'the service charge');
     expect(find.textContaining('A 2-bedroom, 2-bathroom apartment to let in Kilimani.'), findsOneWidget, reason: 'the description (P7-s02)');
     expect(find.text('Listed by Wanjiku Mwangi'), findsOneWidget);
     for (final action in ['WhatsApp', 'Call', 'Enquire', 'Book a viewing']) {
       expect(find.text(action), findsOneWidget, reason: action);
     }
+    for (final section in ['Property details', 'Tips for your safety', 'Extra payments', 'Description', 'Location']) {
+      expect(find.text(section), findsOneWidget, reason: section);
+    }
+    await tester.scrollUntilVisible(find.byKey(const Key('site-footer')), 400, scrollable: page);
+    expect(find.byKey(const Key('site-footer')), findsOneWidget);
   });
 
   testWidgets('an unknown listing says so and offers a way back', (tester) async {
@@ -175,8 +192,10 @@ void main() {
 
   testWidgets('similar homes: close ones from the same area show; none close, no section', (tester) async {
     await open(tester, '/listing/bedsitter-near-kasarani-stadium');
-    await tester.scrollUntilVisible(find.text('Similar homes'), 300);
+    await tester.scrollUntilVisible(find.text('Recommended for you'), 300, scrollable: page);
     expect(find.text('Student hostel bed, Kasarani'), findsOneWidget);
+    await tester.ensureVisible(find.text('Student hostel bed, Kasarani'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Student hostel bed, Kasarani'));
     await tester.pumpAndSettle();
     expect(find.text('Student hostel bed, Kasarani'), findsWidgets);
@@ -185,16 +204,57 @@ void main() {
     expect(leads.recommendations, ['demo-2/shown', 'demo-2/opened'], reason: 'counted once shown, once opened; the hostel bed has none');
 
     await open(tester, kilimani);
-    expect(find.text('Similar homes'), findsNothing, reason: 'no other rental near KES 65,000 shares its area or type');
+    expect(find.text('Recommended for you'), findsNothing, reason: 'no other rental near KES 65,000 shares its area or type');
   });
 
-  testWidgets('on desktop the photos sit beside the details, within the content width', (tester) async {
-    await open(tester, kilimani, size: const Size(1900, 1000));
+  testWidgets('on desktop: the photo mosaic within the page width, the contact card beside the details', (tester) async {
+    await open(tester, kilimani, listings: ThreePhotos(), size: const Size(1900, 1000));
     final photos = tester.getRect(find.byKey(const ValueKey('listing-photos')));
-    final whatsapp = tester.getRect(find.text('WhatsApp'));
-    expect(whatsapp.left, greaterThan(photos.right));
-    expect(whatsapp.bottom, lessThan(1000));
-    expect(photos.width, lessThan(1200));
+    final card = tester.getRect(find.byKey(const Key('contact-card')));
+    final details = tester.getRect(find.byKey(const Key('property-details')));
+    expect(photos.width, lessThanOrEqualTo(1100));
+    expect(card.top, greaterThan(photos.bottom));
+    expect(card.left, greaterThan(details.right));
+    expect(tester.getRect(find.descendant(of: find.byKey(const Key('contact-card')), matching: find.text('Enquire'))).bottom, lessThan(1000),
+        reason: 'contact in view without scrolling');
+    expect(find.byKey(const Key('share')), findsOneWidget);
+    expect(find.byKey(const Key('save')), findsOneWidget);
+  });
+
+  testWidgets('desktop: a photo opens the gallery (Photos and Map), a gallery photo opens the viewer, Back returns to the gallery', (tester) async {
+    await open(tester, kilimani, listings: ThreePhotos(), size: const Size(1600, 1000));
+    await tester.tap(find.byKey(const Key('gallery-count')));
+    await tester.pumpAndSettle();
+    expect(find.text('Photos (3)'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('gallery-tab-map')));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(const Key('gallery')), matching: find.byKey(const Key('listing-map'))), findsOneWidget);
+    await tester.tap(find.byKey(const Key('gallery-tab-photos')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('gallery-photo-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 3'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('back-to-gallery')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('photo-viewer')), findsNothing);
+    expect(find.byKey(const Key('gallery')), findsOneWidget);
+  });
+
+  testWidgets('Save keeps the home; Share copies its link', (tester) async {
+    final copied = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied.add((call.arguments as Map)['text'] as String);
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await open(tester, kilimani, size: const Size(1600, 1000));
+    await tester.tap(find.byKey(const Key('share')));
+    await tester.pumpAndSettle();
+    expect(copied, ['https://realtimeestates.co.ke/listing/2-bedroom-apartment-kilimani']);
+    expect(find.textContaining('Link copied'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('save')));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(const Key('save')), matching: find.text('Saved')), findsOneWidget);
   });
 
   testWidgets('on a phone the photos come first, full width', (tester) async {
@@ -202,6 +262,7 @@ void main() {
     final photos = tester.getRect(find.byKey(const ValueKey('listing-photos')));
     expect(photos.width, 412);
     expect(tester.getRect(find.text('WhatsApp')).top, greaterThan(photos.bottom));
+    expect(tester.getRect(find.text('WhatsApp')).bottom, lessThanOrEqualTo(1600), reason: 'Call and WhatsApp stay in the bottom bar');
   });
 
   testWidgets('a viewing with a fee offers M-Pesa to the booking phone (P6-s01)', (tester) async {
@@ -237,8 +298,12 @@ void main() {
     expect(repo.payments, isEmpty);
   });
 
-  testWidgets('more than one photo: a count, arrows and keys move through them', (tester) async {
+  testWidgets('more than one photo: the viewer has a count, arrows, keys and a mouse drag', (tester) async {
     await open(tester, kilimani, listings: ThreePhotos(), size: const Size(1400, 1000));
+    await tester.tap(find.byKey(const Key('gallery-count')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('gallery-photo-0')));
+    await tester.pumpAndSettle();
     expect(find.text('1 / 3'), findsOneWidget);
     expect(find.byKey(const Key('Previous photo')), findsNothing, reason: 'on the first photo');
     await tester.tap(find.byKey(const Key('Next photo')));
@@ -252,7 +317,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('2 / 3'), findsOneWidget);
     // A mouse drag also turns the page on the web.
-    await tester.drag(find.byType(PageView), const Offset(-500, 0), kind: PointerDeviceKind.mouse);
+    await tester.drag(find.descendant(of: find.byKey(const Key('photo-viewer')), matching: find.byType(PageView)), const Offset(-900, 0), kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
     expect(find.text('3 / 3'), findsOneWidget);
   });
@@ -260,6 +325,10 @@ void main() {
   testWidgets('a video comes after the photos, as a poster with a play button', (tester) async {
     final repo = ThreePhotos()..videos = const [ListingVideo(hls: 'https://x/v/master.m3u8', mp4: 'https://x/v/video.mp4', poster: 'https://x/v/poster.jpg')];
     await open(tester, kilimani, listings: repo, size: const Size(1400, 1000));
+    await tester.tap(find.byKey(const Key('gallery-count')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('gallery-photo-0')));
+    await tester.pumpAndSettle();
     expect(find.text('1 / 4'), findsOneWidget);
     for (var i = 0; i < 3; i++) {
       await tester.tap(find.byKey(const Key('Next photo')));
@@ -268,5 +337,14 @@ void main() {
     expect(find.text('4 / 4'), findsOneWidget);
     expect(find.byKey(const Key('play-video')), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp(r'^Play .*video 1$')), findsOneWidget);
+  });
+
+  testWidgets('a phone: tapping the photos opens them full screen, with the count', (tester) async {
+    await open(tester, kilimani, listings: ThreePhotos());
+    expect(find.text('1 / 3'), findsOneWidget, reason: 'the strip counts too');
+    await tester.tap(find.byKey(const ValueKey('listing-photos')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('photo-viewer')), findsOneWidget);
+    expect(find.byKey(const Key('back-to-gallery')), findsNothing, reason: 'phones open the viewer straight away');
   });
 }
