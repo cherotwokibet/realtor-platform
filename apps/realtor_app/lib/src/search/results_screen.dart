@@ -236,15 +236,45 @@ class SearchBarRow extends ConsumerStatefulWidget {
 class _SearchBarRowState extends ConsumerState<SearchBarRow> {
   late final _location = TextEditingController(text: locationText(widget.filters));
 
+  // A changed filter opens a new results page. Its pill row starts where the
+  // last one was left, so the pill just used is still in view, then glides
+  // back to the start, as the big portals' apps do.
+  static double _carriedOffset = 0;
+  late final _pills = ScrollController(initialScrollOffset: _carriedOffset);
+
+  @override
+  void initState() {
+    super.initState();
+    if (_carriedOffset > 0) {
+      _carriedOffset = 0;
+      _glideBack();
+    }
+  }
+
+  /// A pause, then the glide to the start: one animation, so nothing is left pending.
+  void _glideBack() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _pills.hasClients && _pills.offset > 0) {
+          _pills.animateTo(0, duration: const Duration(milliseconds: 950), curve: const Interval(0.45, 1, curve: Curves.easeInOutCubic));
+        }
+      });
+
   @override
   void didUpdateWidget(SearchBarRow old) {
     super.didUpdateWidget(old);
-    if (old.filters != widget.filters) _location.text = locationText(widget.filters);
+    if (old.filters != widget.filters) {
+      _location.text = locationText(widget.filters);
+      // The same bar on the new results: glide back from the pill just used.
+      if (_carriedOffset > 0) {
+        _carriedOffset = 0;
+        _glideBack();
+      }
+    }
   }
 
   @override
   void dispose() {
     _location.dispose();
+    _pills.dispose();
     super.dispose();
   }
 
@@ -256,7 +286,28 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
 
   Future<void> _open(BuildContext anchor, FilterSection section) async {
     final next = await showFiltersSheet(context, widget.filters, section: section, anchor: anchor);
-    if (next != null && mounted) widget.onChange(next);
+    if (next != null && mounted) _apply(next);
+  }
+
+  void _apply(ListingFilters next) {
+    if (next == widget.filters) return;
+    _carriedOffset = _pills.hasClients ? _pills.offset : 0;
+    widget.onChange(next);
+  }
+
+  /// Every filter of the bar cleared; the place, the order and furnishing stay.
+  ListingFilters get _cleared {
+    final f = widget.filters;
+    return ListingFilters(
+      purpose: f.purpose,
+      q: f.q,
+      areas: f.areas,
+      furnished: f.furnished,
+      verifiedFirst: f.verifiedFirst,
+      near: f.near,
+      polygon: f.polygon,
+      sort: f.sort,
+    );
   }
 
   @override
@@ -363,11 +414,14 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
                   height: 36,
                   child: SingleChildScrollView(
                     key: const Key('filter-pills'),
+                    controller: _pills,
                     scrollDirection: Axis.horizontal,
                     child: Row(children: [
                       Builder(
                         builder: (anchor) => Badge(
                           isLabelVisible: all > 0,
+                          // Inside the row's height, so it is not cut off.
+                          offset: const Offset(-2, 0),
                           label: Text('$all'),
                           child: IconButton.outlined(
                             key: const Key('filter-all'),
@@ -382,7 +436,16 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
                       ),
                       SizedBox(width: b.spacing.sm),
                       VerticalDivider(width: 1, indent: 6, endIndent: 6, color: b.borderStrong),
-                      for (final d in drops.take(3)) ...[gap, d],
+                      for (final d in drops) ...[gap, d],
+                      if (all > 0) ...[
+                        gap,
+                        TextButton(
+                          key: const Key('filter-reset-all'),
+                          style: TextButton.styleFrom(minimumSize: const Size(0, 36), padding: EdgeInsets.symmetric(horizontal: b.spacing.sm)),
+                          onPressed: () => _apply(_cleared),
+                          child: const Text('Reset all filters'),
+                        ),
+                      ],
                     ]),
                   ),
                 ),

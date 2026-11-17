@@ -102,10 +102,21 @@ Future<ListingFilters?> showFiltersSheet(BuildContext context, ListingFilters fi
     // More Filters sits at the right end of the bar, so it opens leftwards.
     final left = (section == FilterSection.more ? at.right - width : at.left).clamp(8.0, screen.width - width - 8);
     final top = at.bottom + 4;
-    return showDialog<ListingFilters>(
+    // It eases down out of its button, as a menu does.
+    return showGeneralDialog<ListingFilters>(
       context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close',
       barrierColor: Colors.transparent,
-      builder: (context) => Stack(children: [
+      transitionDuration: const Duration(milliseconds: 180),
+      transitionBuilder: (_, animation, __, child) {
+        final eased = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+        return FadeTransition(
+          opacity: eased,
+          child: SlideTransition(position: Tween(begin: const Offset(0, -0.015), end: Offset.zero).animate(eased), child: child),
+        );
+      },
+      pageBuilder: (context, _, __) => Stack(children: [
         Positioned(
           left: left,
           top: top,
@@ -133,7 +144,11 @@ Future<ListingFilters?> showFiltersSheet(BuildContext context, ListingFilters fi
     // Over the bottom tabs, as a sheet of its own.
     useRootNavigator: true,
     useSafeArea: true,
-    showDragHandle: true,
+    // Lean, as on the portals' apps: no handle; one part of the filters has
+    // no close button either (tap outside or Done).
+    showDragHandle: false,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(context.brand.radiusMd * 2))),
+    sheetAnimationStyle: const AnimationStyle(duration: Duration(milliseconds: 260), reverseDuration: Duration(milliseconds: 200)),
     builder: (_) => FiltersSheet(initial: filters, section: section),
   );
 }
@@ -348,11 +363,15 @@ class _FiltersSheetState extends ConsumerState<FiltersSheet> {
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (!widget.popover)
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: pad),
-            child: Row(children: [
-              Expanded(child: Text(title, style: text.titleMedium)),
-              IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-            ]),
+            padding: EdgeInsets.fromLTRB(pad, b.spacing.lg, b.spacing.sm, 0),
+            child: SizedBox(
+              height: 40,
+              child: Row(children: [
+                Expanded(child: Text(title, style: text.titleMedium)),
+                // Only the sheet with every filter, which is tall, has a close button.
+                if (_section == FilterSection.all) IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              ]),
+            ),
           ),
         Flexible(
           child: ListView(

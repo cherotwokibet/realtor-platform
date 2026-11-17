@@ -349,4 +349,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('app-drawer')), findsOneWidget);
   });
+
+  testWidgets('phones: after a filter is picked, the pill row keeps its place, then glides back to the start; Reset all filters clears them', (tester) async {
+    await pump(tester, phone, [home(1), home(2)]);
+    double offset() => tester.state<ScrollableState>(find.descendant(of: find.byKey(const Key('filter-pills')), matching: find.byType(Scrollable))).position.pixels;
+    await tester.ensureVisible(find.byKey(const Key('filter-price')));
+    await tester.pumpAndSettle();
+    final scrolled = offset();
+    expect(scrolled, greaterThan(0));
+    await tester.tap(find.byKey(const Key('filter-price')));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Close'), findsNothing, reason: 'one part of the filters has no close button');
+    await tester.enterText(find.byKey(const Key('filter-max-price')), '60000');
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+    await tester.pump();
+    expect(offset(), closeTo(scrolled, 1), reason: 'the new page starts where the row was');
+    await tester.pumpAndSettle();
+    expect(offset(), 0, reason: 'then glides back to the start');
+    expect(location(tester), '/rent?max=60000');
+
+    await tester.ensureVisible(find.byKey(const Key('filter-reset-all')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('filter-reset-all')));
+    await tester.pumpAndSettle();
+    expect(location(tester), '/rent');
+    expect(find.byKey(const Key('filter-reset-all')), findsNothing);
+  });
 }
