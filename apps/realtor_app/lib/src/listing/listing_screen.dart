@@ -91,8 +91,8 @@ class _ListingView extends ConsumerWidget {
               ),
       email: () => showEnquirySheet(context, listing: l),
     );
-    void openGallery({bool map = false, int at = 0}) =>
-        showGallery(context, items: items, title: l.title, contact: actions, lat: l.lat, lng: l.lng, map: map, initial: at);
+    void openGallery({bool map = false, int at = 0}) => showGallery(context,
+        items: items, title: l.title, contact: _GalleryContact(agent: detail.agent, actions: actions), lat: l.lat, lng: l.lng, map: map, initial: at);
     // The Video button plays the video at once, full size, with no extra step.
     void playVideo(int at) => showPhotoViewer(context, items: items, title: l.title, initial: at, autoplay: true);
 
@@ -207,29 +207,58 @@ class _ContactActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final b = context.brand;
     final scheme = Theme.of(context).colorScheme;
-    ButtonStyle solid(Color fill, Color ink) => FilledButton.styleFrom(
-          backgroundColor: fill,
+    // Soft buttons, as on the big portals: a light tint of each colour with
+    // the icon and the word in the colour itself.
+    ButtonStyle soft(Color ink) => FilledButton.styleFrom(
+          backgroundColor: ink.withValues(alpha: 0.1),
           foregroundColor: ink,
+          elevation: 0,
           minimumSize: const Size(0, 48),
           padding: EdgeInsets.symmetric(horizontal: b.spacing.sm),
+          textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
         );
-    final onGreen = ThemeData.estimateBrightnessForColor(b.success) == Brightness.dark ? scheme.surface : scheme.onSurface;
     final buttons = <Widget>[
-      if (call != null)
-        FilledButton.icon(style: solid(scheme.primary, scheme.onPrimary), onPressed: call, icon: const Icon(Icons.call, size: 18), label: const Text('Call')),
+      if (call != null) FilledButton.icon(style: soft(scheme.primary), onPressed: call, icon: const Icon(Icons.call, size: 20), label: const Text('Call')),
       if (whatsapp != null)
         FilledButton.icon(
-            style: solid(b.success, onGreen),
-            onPressed: whatsapp,
-            icon: const WhatsAppIcon(size: 20),
-            label: const Text('WhatsApp', maxLines: 1, softWrap: false)),
+            style: soft(b.success), onPressed: whatsapp, icon: const WhatsAppIcon(size: 22), label: const Text('WhatsApp', maxLines: 1, softWrap: false)),
       if (!compact || (call == null && whatsapp == null))
-        FilledButton.icon(
-            style: solid(b.primarySoft, scheme.primary), onPressed: email, icon: const Icon(Icons.mail_outline, size: 18), label: const Text('Email')),
+        FilledButton.icon(style: soft(scheme.primary), onPressed: email, icon: const Icon(Icons.mail, size: 20), label: const Text('Email')),
     ];
     return Row(children: [
       for (final (i, button) in buttons.indexed) ...[if (i > 0) SizedBox(width: b.spacing.sm), Expanded(child: button)],
+    ]);
+  }
+}
+
+/// The foot of the gallery window, as on the big portals: who lists the
+/// home on the left, the contact buttons on the right.
+class _GalleryContact extends StatelessWidget {
+  const _GalleryContact({required this.agent, required this.actions});
+  final ListingAgent? agent;
+  final _ContactActions actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final text = Theme.of(context).textTheme;
+    if (agent == null) return actions;
+    return Row(children: [
+      CircleAvatar(radius: 22, child: Text(agent!.name.characters.first)),
+      SizedBox(width: b.spacing.md),
+      Expanded(
+        child: Text.rich(
+          TextSpan(
+              text: 'Listing by ',
+              children: [TextSpan(text: agent!.name, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600))]),
+          style: text.titleSmall,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      SizedBox(width: b.spacing.md),
+      SizedBox(width: 440, child: actions),
     ]);
   }
 }
@@ -352,9 +381,7 @@ class _Body extends ConsumerWidget {
       if (l.amenities.isNotEmpty) ...[
         section,
         heading('Features & amenities'),
-        Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [
-          for (final a in l.amenities) Chip(avatar: Icon(Icons.check_circle_outline, size: 18, color: scheme.primary), label: Text(typeName(a))),
-        ]),
+        _Amenities(amenities: l.amenities, wide: wide),
       ],
       section,
       const _SafetyTips(),
@@ -672,7 +699,8 @@ class _Breadcrumbs extends StatelessWidget {
       key: const Key('breadcrumbs'),
       scrollDirection: Axis.horizontal,
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: compact ? 0 : b.spacing.xs),
+        // Air above and below, as on the big portals.
+        padding: compact ? EdgeInsets.zero : EdgeInsets.only(top: b.spacing.lg, bottom: b.spacing.md),
         child: Row(children: trail),
       ),
     );
@@ -910,5 +938,96 @@ class _ReviewDialogState extends ConsumerState<_ReviewDialog> {
         FilledButton(key: const Key('send-review'), onPressed: _sending ? null : _send, child: Text(_sending ? 'Sending…' : 'Send review')),
       ],
     );
+  }
+}
+
+/// An icon for each feature or amenity the filters and the admin use;
+/// anything else gets a tick.
+IconData amenityIcon(String key) => switch (key.toLowerCase().replaceAll(' ', '-')) {
+      'furnished' => Icons.chair_outlined,
+      'parking' => Icons.local_parking,
+      'security' => Icons.security,
+      'borehole' => Icons.water_drop_outlined,
+      'water' => Icons.water_drop_outlined,
+      'wifi' || 'wi-fi' => Icons.wifi,
+      'lift' || 'elevator' => Icons.elevator_outlined,
+      'gym' => Icons.fitness_center,
+      'swimming-pool' || 'pool' => Icons.pool,
+      'garden' => Icons.yard_outlined,
+      'balcony' => Icons.balcony_outlined,
+      'backup-generator' || 'generator' || 'electricity-backup' => Icons.electrical_services,
+      'cctv' => Icons.videocam_outlined,
+      'pets' || 'pet-friendly' => Icons.pets,
+      'playground' => Icons.child_care,
+      'servant-quarters' || 'dsq' => Icons.bedroom_child_outlined,
+      'solar' || 'solar-water-heating' => Icons.solar_power_outlined,
+      'air-conditioning' || 'ac' => Icons.ac_unit,
+      'internet' || 'fibre' => Icons.router_outlined,
+      'shops' => Icons.storefront_outlined,
+      _ => Icons.check_circle_outline,
+    };
+
+/// Features and amenities as tiles with an icon, as on the big portals: the
+/// first few, then "+ N more" which opens them all.
+class _Amenities extends StatelessWidget {
+  const _Amenities({required this.amenities, required this.wide});
+  final List<String> amenities;
+  final bool wide;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final shown = wide ? 5 : 3;
+    final more = amenities.length - shown;
+    // Six fit across the details column (775 wide), five then "+ N more".
+    final tileWidth = wide ? 120.0 : 104.0;
+    Widget tile(Widget child, {Color? color, VoidCallback? onTap, Key? key}) => SizedBox(
+          width: tileWidth,
+          height: tileWidth,
+          child: Material(
+            key: key,
+            color: color ?? b.surfaceAlt,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(b.radiusSm),
+              side: color == null ? BorderSide.none : BorderSide(color: scheme.outlineVariant),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(b.radiusSm),
+              onTap: onTap,
+              child: Padding(padding: EdgeInsets.all(b.spacing.sm), child: Center(child: child)),
+            ),
+          ),
+        );
+    Widget amenity(String a) => Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(amenityIcon(a), size: 26, color: scheme.onSurface),
+          SizedBox(height: b.spacing.sm),
+          Text(typeName(a), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodySmall),
+        ]);
+    void showAll() => showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
+            title: Text('Features & amenities (${amenities.length})'),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [for (final a in amenities) tile(amenity(a))]),
+              ),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+          ),
+        );
+    return Wrap(key: const Key('amenities'), spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [
+      for (final a in amenities.take(more > 0 ? shown : amenities.length)) tile(amenity(a)),
+      if (more > 0)
+        tile(
+          Text('+ $more more\namenities', textAlign: TextAlign.center, style: text.labelLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700)),
+          key: const Key('more-amenities'),
+          color: scheme.surface,
+          onTap: showAll,
+        ),
+    ]);
   }
 }
