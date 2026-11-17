@@ -731,11 +731,8 @@ class _SortMenuState extends State<SortMenu> {
     final text = Theme.of(context).textTheme;
     final label = ListHeading.orders.firstWhere((o) => o.$1 == widget.value).$2;
     const width = 180.0;
-    // "Sort" lines with an arrow down beside them.
-    Widget mark(Color color, double size) => Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.sort, size: size, color: color),
-          Transform.translate(offset: Offset(-size * 0.2, size * 0.1), child: Icon(Icons.arrow_downward, size: size * 0.6, color: color)),
-        ]);
+    // The portals' sort mark: three lines, shorter each time, with an arrow down.
+    Widget mark(Color color, double size) => Padding(padding: const EdgeInsets.only(right: 6), child: SortIcon(size: size, color: color));
     final button = widget.bordered
         ? AnimatedContainer(
             duration: const Duration(milliseconds: 150),
@@ -815,6 +812,52 @@ class _SortMenuState extends State<SortMenu> {
       ),
     );
   }
+}
+
+/// Three lines lined up on the right, each shorter than the one above, with
+/// an arrow down beside them: the mark the big portals put on their order.
+class SortIcon extends StatelessWidget {
+  const SortIcon({super.key, this.size = 20, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+        child: CustomPaint(size: Size(size * 1.15, size), painter: _SortMark(color ?? IconTheme.of(context).color ?? Theme.of(context).colorScheme.onSurface)),
+      );
+}
+
+class _SortMark extends CustomPainter {
+  const _SortMark(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final h = size.height, w = size.width;
+    final pen = Paint()
+      ..color = color
+      ..strokeWidth = h * 0.12
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round;
+    final right = w * 0.6;
+    for (final (i, length) in [0.55, 0.42, 0.28].indexed) {
+      final y = h * (0.22 + i * 0.28);
+      canvas.drawLine(Offset(right - w * length, y), Offset(right, y), pen);
+    }
+    final x = w * 0.86;
+    canvas.drawLine(Offset(x, h * 0.16), Offset(x, h * 0.86), pen);
+    canvas.drawPath(
+      Path()
+        ..moveTo(x - w * 0.14, h * 0.68)
+        ..lineTo(x, h * 0.86)
+        ..lineTo(x + w * 0.14, h * 0.68),
+      pen,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SortMark old) => old.color != color;
 }
 
 /// Options in one bordered group, the chosen one filled softly, as the
