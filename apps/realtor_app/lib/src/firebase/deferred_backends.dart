@@ -109,3 +109,15 @@ class DeferredPushAlerts implements PushAlerts {
   @override
   Stream<String> get opened => Stream.fromFuture(_inner).asyncExpand((p) => p.opened);
 }
+
+class DeferredListingReviews implements ListingReviews {
+  DeferredListingReviews(this._inner);
+  final Future<ListingReviews> _inner;
+
+  @override
+  Future<List<ListingReview>> forListing(String listingId) async => (await _inner).forListing(listingId);
+
+  @override
+  Future<void> submit({required String listingId, required int rating, required String comment, String? name}) async =>
+      (await _inner).submit(listingId: listingId, rating: rating, comment: comment, name: name);
+}

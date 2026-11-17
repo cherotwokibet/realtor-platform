@@ -91,7 +91,10 @@ class _ListingView extends ConsumerWidget {
               ),
       email: () => showEnquirySheet(context, listing: l),
     );
-    void openGallery({bool map = false}) => showGallery(context, items: items, title: l.title, contact: actions, lat: l.lat, lng: l.lng, map: map);
+    void openGallery({bool map = false, int at = 0}) =>
+        showGallery(context, items: items, title: l.title, contact: actions, lat: l.lat, lng: l.lng, map: map, initial: at);
+    // The Video button plays the video at once, full size, with no extra step.
+    void playVideo(int at) => showPhotoViewer(context, items: items, title: l.title, initial: at, autoplay: true);
 
     // Phones have Call and WhatsApp in the bottom bar, so their card leaves them out.
     final body = _Body(detail: detail, link: link, wide: wide, contactCard: _ContactCard(detail: detail, actions: wide ? actions : null));
@@ -121,21 +124,14 @@ class _ListingView extends ConsumerWidget {
               children: [
                 SizedBox(height: TopNav.height, child: top),
                 page(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      key: const Key('back-to-search'),
-                      onPressed: () => context.canPop() ? context.pop() : context.go('/${l.purpose.pathSegment}'),
-                      icon: const Icon(Icons.chevron_left),
-                      label: const Text('Back to search'),
-                    ),
-                  ),
+                  _Breadcrumbs(detail: detail),
                   GalleryMosaic(
                     items: items,
                     title: l.title,
                     verified: l.verified,
-                    onOpen: (_) => openGallery(),
+                    onOpen: (i) => openGallery(at: i),
                     onMap: () => openGallery(map: true),
+                    onVideo: playVideo,
                   ),
                   SizedBox(height: b.spacing.lg),
                   body,
@@ -167,7 +163,13 @@ class _ListingView extends ConsumerWidget {
       body: ListView(
         primary: true,
         children: [
-          PhotoStrip(items: items, title: l.title, verified: l.verified, onOpen: (i) => showPhotoViewer(context, items: items, title: l.title, initial: i)),
+          PhotoStrip(
+            items: items,
+            title: l.title,
+            verified: l.verified,
+            onOpen: (i) => showPhotoViewer(context, items: items, title: l.title, initial: i, autoplay: items[i].video != null),
+          ),
+          Padding(padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.sm, b.spacing.gutter, 0), child: _Breadcrumbs(detail: detail, compact: true)),
           Padding(padding: EdgeInsets.all(b.spacing.gutter), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [body, recommended])),
           SizedBox(height: b.spacing.xl),
           const SiteFooter(),
@@ -209,6 +211,7 @@ class _ContactActions extends StatelessWidget {
           backgroundColor: fill,
           foregroundColor: ink,
           minimumSize: const Size(0, 48),
+          padding: EdgeInsets.symmetric(horizontal: b.spacing.sm),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
         );
     final onGreen = ThemeData.estimateBrightnessForColor(b.success) == Brightness.dark ? scheme.surface : scheme.onSurface;
@@ -363,8 +366,10 @@ class _Body extends ConsumerWidget {
       SizedBox(height: b.spacing.md),
       ClipRRect(
         borderRadius: BorderRadius.circular(b.radiusMd),
-        child: SizedBox(height: wide ? 360 : 240, child: ListingMap(lat: l.lat, lng: l.lng, title: l.title)),
+        child: SizedBox(height: wide ? 360 : 260, child: ListingMap(lat: l.lat, lng: l.lng, title: l.title)),
       ),
+      section,
+      _Reviews(listing: l),
     ]);
     if (!wide) return main;
     return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -577,14 +582,21 @@ class _RecommendedState extends ConsumerState<_Recommended> {
     final listing = widget.listing;
     final inArea = ref.watch(liveListingsProvider((area: listing.area, agent: null))).value ?? const [];
     final newest = ref.watch(searchResultsProvider(ListingFilters(purpose: listing.purpose))).value?.hits ?? const [];
-    final similar = similarListings(listing, [...inArea, ...newest], similarKey, count: 8);
+    final close = similarListings(listing, [...inArea, ...newest], similarKey, count: 8);
+    // Top the row up with the newest homes of the same purpose, so there is
+    // always a row to browse, closest first.
+    final similar = [
+      ...close,
+      for (final n in [...inArea, ...newest])
+        if (n.id != listing.id && n.purpose == listing.purpose && !close.any((c) => c.id == n.id)) n,
+    ].fold<List<ListingSummary>>([], (all, n) => all.any((a) => a.id == n.id) || all.length >= 10 ? all : [...all, n]);
     if (similar.isEmpty) return const SizedBox.shrink();
     if (_counted != listing.id) {
       _counted = listing.id;
       _log('shown');
     }
     final b = context.brand;
-    const cardWidth = 300.0;
+    const cardWidth = 264.0;
     return Padding(
       key: const Key('recommended'),
       padding: EdgeInsets.only(top: b.spacing.xxl),
@@ -603,11 +615,300 @@ class _RecommendedState extends ConsumerState<_Recommended> {
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             for (final (i, s) in similar.indexed) ...[
               if (i > 0) const SizedBox(width: 16),
-              SizedBox(width: cardWidth, child: ListingCard(listing: s, onOpen: () => _log('opened'))),
+              SizedBox(width: cardWidth, child: RecommendedCard(listing: s, onOpen: () => _log('opened'))),
             ],
           ]),
         ),
       ]),
+    );
+  }
+}
+
+/// Where the home sits, as on the big portals: Back to search, then Home >
+/// the type to rent (or buy) > the area > the estate > the home. Each but
+/// the last opens that search.
+class _Breadcrumbs extends StatelessWidget {
+  const _Breadcrumbs({required this.detail, this.compact = false});
+  final ListingDetail detail;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final l = detail.summary;
+    final typePath = listingTypeSlugs[l.type];
+    final kind = typePath == null ? 'Homes' : '${typeName(l.type)}s';
+    final purposeUrl = '/${l.purpose.pathSegment}';
+    final crumbs = <(String, String?)>[
+      ('$kind ${l.purpose.heading}', typePath == null ? purposeUrl : '$purposeUrl/$typePath'),
+      (areaName(l.area), typePath == null ? '$purposeUrl/${l.area}' : '$purposeUrl/$typePath/${l.area}'),
+      if (detail.estate != null && detail.estate!.trim().isNotEmpty) (detail.estate!.trim(), null),
+      (l.title, null),
+    ];
+    final style = (compact ? text.bodySmall : text.bodyMedium);
+    Widget chevron() => Padding(padding: EdgeInsets.symmetric(horizontal: b.spacing.xs), child: Icon(Icons.chevron_right, size: 16, color: b.textMuted));
+    final trail = <Widget>[
+      if (!compact) ...[
+        TextButton.icon(
+          key: const Key('back-to-search'),
+          style: TextButton.styleFrom(padding: EdgeInsets.only(right: b.spacing.sm)),
+          onPressed: () => context.canPop() ? context.pop() : context.go(purposeUrl),
+          icon: const Icon(Icons.chevron_left),
+          label: const Text('Back to search'),
+        ),
+        SizedBox(width: b.spacing.md),
+      ],
+      InkWell(onTap: () => context.go('/'), child: Icon(Icons.home_outlined, size: 18, color: scheme.primary, semanticLabel: 'Home')),
+      for (final (i, (label, url)) in crumbs.indexed) ...[
+        chevron(),
+        url == null
+            ? Text(label, style: style?.copyWith(fontWeight: i == crumbs.length - 1 ? FontWeight.w600 : null), maxLines: 1, overflow: TextOverflow.ellipsis)
+            : InkWell(onTap: () => context.go(url), child: Text(label, style: style?.copyWith(color: scheme.primary))),
+      ],
+    ];
+    return SingleChildScrollView(
+      key: const Key('breadcrumbs'),
+      scrollDirection: Axis.horizontal,
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: compact ? 0 : b.spacing.xs),
+        child: Row(children: trail),
+      ),
+    );
+  }
+}
+
+/// A smaller card for the Recommended row, as on the big portals: the photo
+/// with the heart and the badge, the price, beds and baths, the place, and
+/// Call and WhatsApp.
+class RecommendedCard extends ConsumerWidget {
+  const RecommendedCard({super.key, required this.listing, this.onOpen});
+  final ListingSummary listing;
+  final VoidCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.brand;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final l = listing;
+    final photos = l.photos.isNotEmpty ? l.photos : [if (l.thumb != null) l.thumb!];
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: () {
+          onOpen?.call();
+          context.push('/listing/${l.slug}');
+        },
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          AspectRatio(
+            aspectRatio: 16 / 10,
+            child: Stack(fit: StackFit.expand, children: [
+              PhotoCarousel(photos: photos, label: l.title, videoPoster: l.videoPoster),
+              if (l.verified) Positioned(left: b.spacing.sm, top: b.spacing.sm, child: const VerifiedBadge()),
+              Positioned(right: 2, top: 2, child: Material(color: scheme.surface, shape: const CircleBorder(), child: FavouriteButton(listing: l))),
+            ]),
+          ),
+          Padding(
+            padding: EdgeInsets.all(b.spacing.md),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              PriceText(l.priceKES,
+                  period: l.purpose.period, compact: l.purpose == Purpose.sale, style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              SizedBox(height: b.spacing.xs),
+              Row(children: [
+                Icon(Icons.bed_outlined, size: 16, color: b.textMuted),
+                SizedBox(width: b.spacing.xs),
+                Text(l.beds > 0 ? '${l.beds}' : typeName(l.type), style: text.bodySmall),
+                if (l.baths > 0) ...[
+                  SizedBox(width: b.spacing.md),
+                  Icon(Icons.bathtub_outlined, size: 16, color: b.textMuted),
+                  SizedBox(width: b.spacing.xs),
+                  Text('${l.baths}', style: text.bodySmall),
+                ],
+                if (l.beds > 0) ...[
+                  SizedBox(width: b.spacing.md),
+                  Flexible(child: Text(typeName(l.type), style: text.bodySmall, overflow: TextOverflow.ellipsis))
+                ],
+              ]),
+              SizedBox(height: b.spacing.xs),
+              Text(l.title, style: text.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(areaName(l.area), style: text.bodySmall?.copyWith(color: b.textMuted), maxLines: 1, overflow: TextOverflow.ellipsis),
+              SizedBox(height: b.spacing.sm),
+              ContactButtons(listing: l, expand: true),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// What people said about this home: the average and the approved reviews,
+/// and a way to write one. Any signed-in visitor may; a manager checks each
+/// before it shows, so the section never fills with spam or abuse.
+class _Reviews extends ConsumerWidget {
+  const _Reviews({required this.listing});
+  final ListingSummary listing;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.brand;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final reviews = ref.watch(reviewsForListingProvider(listing.id)).value ?? const <ListingReview>[];
+    final average = averageRating(reviews);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    Widget stars(num value, {double size = 18}) => Row(mainAxisSize: MainAxisSize.min, children: [
+          for (var i = 1; i <= 5; i++) Icon(value >= i ? Icons.star : (value >= i - 0.5 ? Icons.star_half : Icons.star_border), size: size, color: b.accent),
+        ]);
+    Future<void> write() async {
+      final signedIn = ref.read(customerProvider).value != null;
+      if (!signedIn) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: const Text('Sign in to review this home.'),
+            action: SnackBarAction(label: 'Sign in', onPressed: () => context.go('/account')),
+          ));
+        return;
+      }
+      final sent = await showDialog<bool>(context: context, builder: (_) => _ReviewDialog(listing: listing));
+      if (sent == true && context.mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('Thank you. Your review shows once it has been checked.')));
+      }
+    }
+
+    return Column(key: const Key('reviews'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Expanded(child: Text(reviews.isEmpty ? 'Reviews' : 'Reviews (${reviews.length})', style: text.titleLarge)),
+        OutlinedButton.icon(
+            key: const Key('write-review'), onPressed: write, icon: const Icon(Icons.rate_review_outlined), label: const Text('Write a review')),
+      ]),
+      SizedBox(height: b.spacing.md),
+      if (average != null)
+        Row(children: [
+          Text(average.toStringAsFixed(1), style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+          SizedBox(width: b.spacing.sm),
+          stars(average, size: 22),
+          SizedBox(width: b.spacing.sm),
+          Flexible(child: Text('from ${reviews.length} ${reviews.length == 1 ? 'review' : 'reviews'}', style: text.bodyMedium?.copyWith(color: b.textMuted))),
+        ])
+      else
+        Text('No reviews yet. Lived here or viewed it? Be the first to say what it is like.', style: text.bodyMedium?.copyWith(color: b.textMuted)),
+      for (final r in reviews.take(6))
+        Padding(
+          padding: EdgeInsets.only(top: b.spacing.md),
+          child: Container(
+            padding: EdgeInsets.all(b.spacing.md),
+            decoration: BoxDecoration(border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(b.radiusMd)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                stars(r.rating),
+                SizedBox(width: b.spacing.sm),
+                if (r.afterViewing)
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: b.spacing.sm, vertical: 2),
+                    decoration: BoxDecoration(color: b.primarySoft, borderRadius: BorderRadius.circular(b.radiusSm)),
+                    child: Text('After a viewing', style: text.labelSmall?.copyWith(color: scheme.primary)),
+                  ),
+              ]),
+              if (r.comment != null) ...[SizedBox(height: b.spacing.sm), Text(r.comment!, style: text.bodyMedium)],
+              SizedBox(height: b.spacing.sm),
+              Text('${r.name ?? 'A visitor'} · ${months[r.createdAt.month - 1]} ${r.createdAt.year}', style: text.bodySmall?.copyWith(color: b.textMuted)),
+            ]),
+          ),
+        ),
+    ]);
+  }
+}
+
+/// Stars, a comment and a first name; sent to be checked.
+class _ReviewDialog extends ConsumerStatefulWidget {
+  const _ReviewDialog({required this.listing});
+  final ListingSummary listing;
+
+  @override
+  ConsumerState<_ReviewDialog> createState() => _ReviewDialogState();
+}
+
+class _ReviewDialogState extends ConsumerState<_ReviewDialog> {
+  int _rating = 0;
+  final _comment = TextEditingController();
+  final _name = TextEditingController();
+  String? _error;
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    if (_rating == 0) return setState(() => _error = 'Choose from 1 to 5 stars.');
+    if (_comment.text.trim().length < 3) return setState(() => _error = 'Say a few words about the home.');
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    try {
+      await ref.read(listingReviewsProvider).submit(listingId: widget.listing.id, rating: _rating, comment: _comment.text.trim(), name: _name.text.trim());
+      if (mounted) Navigator.pop(context, true);
+    } on LeadException catch (e) {
+      if (mounted) {
+        setState(() {
+          _sending = false;
+          _error = e.code == 'already-exists' ? 'You have already reviewed this home.' : 'That did not send. Please try again.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    return AlertDialog(
+      title: const Text('Review this home'),
+      content: SizedBox(
+        width: 420,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(widget.listing.title, style: Theme.of(context).textTheme.bodyMedium),
+          SizedBox(height: b.spacing.md),
+          Row(children: [
+            for (var i = 1; i <= 5; i++)
+              IconButton(
+                key: Key('star-$i'),
+                tooltip: '$i ${i == 1 ? 'star' : 'stars'}',
+                onPressed: () => setState(() => _rating = i),
+                icon: Icon(_rating >= i ? Icons.star : Icons.star_border, color: b.accent, size: 32),
+              ),
+          ]),
+          SizedBox(height: b.spacing.sm),
+          TextField(
+            key: const Key('review-comment'),
+            controller: _comment,
+            maxLines: 4,
+            maxLength: 1000,
+            decoration: const InputDecoration(labelText: 'Your review', hintText: 'Water, security, the neighbours, the landlord...'),
+          ),
+          TextField(
+            key: const Key('review-name'),
+            controller: _name,
+            maxLength: 40,
+            decoration: const InputDecoration(labelText: 'First name (optional)', helperText: 'Only your first name is shown.'),
+          ),
+          if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(key: const Key('send-review'), onPressed: _sending ? null : _send, child: Text(_sending ? 'Sending…' : 'Send review')),
+      ],
     );
   }
 }

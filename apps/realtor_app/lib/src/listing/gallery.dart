@@ -31,36 +31,52 @@ Widget _image(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Stri
       errorBuilder: (_, __, ___) => ColoredBox(color: context.brand.surfaceAlt),
     );
 
-/// A video's poster with a play mark; tapping plays it.
-class VideoTile extends StatelessWidget {
-  const VideoTile({super.key, required this.video, required this.label, this.fit = BoxFit.cover});
+/// A video in place: its poster with a play mark until tapped (or at once
+/// with [autoplay]), then the video itself, right there, with its controls.
+/// No second screen opens.
+class VideoTile extends StatefulWidget {
+  const VideoTile({super.key, required this.video, required this.label, this.fit = BoxFit.cover, this.autoplay = false});
   final ListingVideo video;
   final String label;
   final BoxFit fit;
+  final bool autoplay;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-        button: true,
-        label: 'Play $label',
-        child: InkWell(
-          key: const Key('play-video'),
-          onTap: () => showDialog<void>(context: context, builder: (_) => VideoDialog(video: video)),
-          child: Stack(fit: StackFit.expand, children: [
-            _image(context, video.poster, fit: fit),
-            Center(child: Icon(Icons.play_circle_fill, size: 72, color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9))),
-          ]),
-        ),
-      );
+  State<VideoTile> createState() => _VideoTileState();
+}
+
+class _VideoTileState extends State<VideoTile> {
+  late bool _playing = widget.autoplay;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_playing) return VideoPlayerView(video: widget.video, label: widget.label);
+    return Semantics(
+      button: true,
+      label: 'Play ${widget.label}',
+      child: InkWell(
+        key: const Key('play-video'),
+        onTap: () => setState(() => _playing = true),
+        child: Stack(fit: StackFit.expand, children: [
+          _image(context, widget.video.poster, fit: widget.fit),
+          Center(child: Icon(Icons.play_circle_fill, size: 72, color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9))),
+        ]),
+      ),
+    );
+  }
 }
 
 /// Desktop: the first photo large on the left and the next three stacked on
 /// the right, as on the big portals. Any photo opens the gallery; Map opens
 /// it on the map; the last tile says how many there are.
 class GalleryMosaic extends StatelessWidget {
-  const GalleryMosaic({super.key, required this.items, required this.title, required this.onOpen, this.onMap, this.verified = false});
+  const GalleryMosaic({super.key, required this.items, required this.title, required this.onOpen, this.onMap, this.onVideo, this.verified = false});
   final List<GalleryItem> items;
   final String title;
   final ValueChanged<int> onOpen;
+
+  /// Plays the first video straight away.
+  final ValueChanged<int>? onVideo;
   final VoidCallback? onMap;
   final bool verified;
 
@@ -131,7 +147,7 @@ class GalleryMosaic extends StatelessWidget {
                   if (onMap != null) pill('Map', Icons.place_outlined, onMap!, key: const Key('gallery-map')),
                   if (hasVideo) ...[
                     SizedBox(width: b.spacing.sm),
-                    pill('Video', Icons.play_arrow, () => onOpen(items.indexWhere((i) => i.video != null))),
+                    pill('Video', Icons.play_arrow, () => (onVideo ?? onOpen)(items.indexWhere((i) => i.video != null)), key: const Key('gallery-video')),
                   ],
                 ]),
               ),
@@ -239,19 +255,23 @@ Future<void> showGallery(
   double? lat,
   double? lng,
   bool map = false,
+  int initial = 0,
 }) =>
     showDialog<void>(
       context: context,
-      builder: (context) => _GalleryDialog(items: items, title: title, contact: contact, lat: lat, lng: lng, startOnMap: map),
+      builder: (context) => _GalleryDialog(items: items, title: title, contact: contact, lat: lat, lng: lng, startOnMap: map, initial: initial),
     );
 
 class _GalleryDialog extends StatefulWidget {
-  const _GalleryDialog({required this.items, required this.title, required this.contact, this.lat, this.lng, this.startOnMap = false});
+  const _GalleryDialog({required this.items, required this.title, required this.contact, this.lat, this.lng, this.startOnMap = false, this.initial = 0});
   final List<GalleryItem> items;
   final String title;
   final Widget contact;
   final double? lat, lng;
   final bool startOnMap;
+
+  /// The photo that was clicked: the window opens scrolled to it.
+  final int initial;
 
   @override
   State<_GalleryDialog> createState() => _GalleryDialogState();
@@ -259,6 +279,28 @@ class _GalleryDialog extends StatefulWidget {
 
 class _GalleryDialogState extends State<_GalleryDialog> {
   late bool _map = widget.startOnMap;
+  final _grid = ScrollController();
+  static const _gap = 8.0;
+  double _tileWidth = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Open where the visitor clicked, as the portals do: the row with that
+    // photo at the top, once the grid has its size.
+    if (widget.initial > 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_grid.hasClients) return;
+        _grid.jumpTo(((widget.initial ~/ 2) * (_tileWidth * 9 / 16 + _gap)).clamp(0.0, _grid.position.maxScrollExtent));
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _grid.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -319,22 +361,35 @@ class _GalleryDialogState extends State<_GalleryDialog> {
             Expanded(
               child: _map && hasMap
                   ? ClipRRect(borderRadius: BorderRadius.circular(b.radiusMd), child: ListingMap(lat: widget.lat!, lng: widget.lng!, title: widget.title))
-                  : GridView.builder(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2, mainAxisSpacing: b.spacing.sm, crossAxisSpacing: b.spacing.sm, childAspectRatio: 16 / 9),
-                      itemCount: items.length,
-                      itemBuilder: (context, i) => ClipRRect(
-                        borderRadius: BorderRadius.circular(b.radiusSm),
-                        child: InkWell(
-                          key: Key('gallery-photo-$i'),
-                          onTap: () => showPhotoViewer(context, items: items, title: widget.title, initial: i, fromGallery: true),
-                          child: Stack(fit: StackFit.expand, children: [
-                            _image(context, items[i].image, label: '${widget.title}, ${items[i].video == null ? 'photo' : 'video'} ${i + 1}'),
-                            if (items[i].video != null) Center(child: Icon(Icons.play_circle_fill, size: 56, color: scheme.surface.withValues(alpha: 0.9))),
-                          ]),
+                  : LayoutBuilder(builder: (context, box) {
+                      _tileWidth = (box.maxWidth - _gap) / 2;
+                      return GridView.builder(
+                        controller: _grid,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2, mainAxisSpacing: _gap, crossAxisSpacing: _gap, childAspectRatio: 16 / 9),
+                        itemCount: items.length,
+                        itemBuilder: (context, i) => DecoratedBox(
+                          // The photo that was clicked stays marked.
+                          position: DecorationPosition.foreground,
+                          decoration: BoxDecoration(
+                            border: i == widget.initial && widget.initial > 0 ? Border.all(color: scheme.primary, width: 3) : null,
+                            borderRadius: BorderRadius.circular(b.radiusSm),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(b.radiusSm),
+                            child: InkWell(
+                              key: Key('gallery-photo-$i'),
+                              onTap: () =>
+                                  showPhotoViewer(context, items: items, title: widget.title, initial: i, fromGallery: true, autoplay: items[i].video != null),
+                              child: Stack(fit: StackFit.expand, children: [
+                                _image(context, items[i].image, label: '${widget.title}, ${items[i].video == null ? 'photo' : 'video'} ${i + 1}'),
+                                if (items[i].video != null) Center(child: Icon(Icons.play_circle_fill, size: 56, color: scheme.surface.withValues(alpha: 0.9))),
+                              ]),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    }),
             ),
             const Divider(height: 24),
             widget.contact,
@@ -348,7 +403,8 @@ class _GalleryDialogState extends State<_GalleryDialog> {
 /// One photo at a time, full screen on a dark backdrop: arrows, the keys,
 /// a swipe or a mouse drag move through them; "2 / 8" and a strip of
 /// thumbnails show where you are. From the gallery it offers the way back.
-Future<void> showPhotoViewer(BuildContext context, {required List<GalleryItem> items, required String title, int initial = 0, bool fromGallery = false}) =>
+Future<void> showPhotoViewer(BuildContext context,
+        {required List<GalleryItem> items, required String title, int initial = 0, bool fromGallery = false, bool autoplay = false}) =>
     showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -356,11 +412,14 @@ Future<void> showPhotoViewer(BuildContext context, {required List<GalleryItem> i
       barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.92),
       transitionDuration: const Duration(milliseconds: 200),
       transitionBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
-      pageBuilder: (context, _, __) => _Viewer(items: items, title: title, initial: initial, fromGallery: fromGallery),
+      pageBuilder: (context, _, __) => _Viewer(items: items, title: title, initial: initial, fromGallery: fromGallery, autoplay: autoplay),
     );
 
 class _Viewer extends StatefulWidget {
-  const _Viewer({required this.items, required this.title, required this.initial, required this.fromGallery});
+  const _Viewer({required this.items, required this.title, required this.initial, required this.fromGallery, this.autoplay = false});
+
+  /// Start the video at [initial] playing, with no extra tap.
+  final bool autoplay;
   final List<GalleryItem> items;
   final String title;
   final int initial;
@@ -453,6 +512,8 @@ class _ViewerState extends State<_Viewer> {
                         padding: EdgeInsets.symmetric(horizontal: b.spacing.xxl),
                         child: items[i].video != null
                             ? VideoTile(
+                                key: ValueKey('video-$i'),
+                                autoplay: widget.autoplay && i == widget.initial,
                                 video: items[i].video!,
                                 label: '${widget.title}, video ${items.take(i + 1).where((x) => x.video != null).length}',
                                 fit: BoxFit.contain)
@@ -500,58 +561,154 @@ class _ViewerState extends State<_Viewer> {
   }
 }
 
-/// Where the home is: the realtor's map tiles with a pin. Scroll-wheel zoom
-/// is off so the page scrolls past it.
-class ListingMap extends ConsumerWidget {
-  const ListingMap({super.key, required this.lat, required this.lng, required this.title});
+/// Where the home is: the realtor's map tiles with a pin. Drag to move and
+/// pinch to zoom; on a computer, the + and - buttons or Ctrl + scroll zoom
+/// (a plain scroll keeps scrolling the page, as on the big portals), and
+/// the corner button opens it full screen.
+class ListingMap extends ConsumerStatefulWidget {
+  const ListingMap({super.key, required this.lat, required this.lng, required this.title, this.fullScreen = false});
   final double lat, lng;
   final String title;
+  final bool fullScreen;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ListingMap> createState() => _ListingMapState();
+}
+
+class _ListingMapState extends ConsumerState<ListingMap> {
+  final _map = MapController();
+  bool _hint = false;
+  static const _start = 15.0;
+
+  LatLng get _here => LatLng(widget.lat, widget.lng);
+
+  void _zoom(double by) {
+    final cam = _map.camera;
+    _map.move(cam.center, (cam.zoom + by).clamp(3.0, 19.0));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tenant = ref.watch(tenantProvider);
     final scheme = Theme.of(context).colorScheme;
-    final here = LatLng(lat, lng);
-    return Semantics(
-      label: 'Map of where $title is',
-      child: FlutterMap(
-        key: const Key('listing-map'),
-        options: MapOptions(
-          initialCenter: here,
-          initialZoom: 15,
-          interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.scrollWheelZoom & ~InteractiveFlag.rotate),
+    final b = context.brand;
+    Widget control(IconData icon, String tip, VoidCallback onTap, {Key? key}) => Material(
+          color: scheme.surface,
+          elevation: 2,
+          borderRadius: BorderRadius.circular(b.radiusSm),
+          child: IconButton(key: key, tooltip: tip, visualDensity: VisualDensity.compact, icon: Icon(icon), onPressed: onTap),
+        );
+    final map = FlutterMap(
+      key: const Key('listing-map'),
+      mapController: _map,
+      options: MapOptions(
+        initialCenter: _here,
+        initialZoom: _start,
+        minZoom: 3,
+        maxZoom: 19,
+        // Full screen: every gesture. In the page: wheel zoom only with Ctrl.
+        interactionOptions: InteractionOptions(
+          flags: widget.fullScreen
+              ? InteractiveFlag.all & ~InteractiveFlag.rotate
+              : InteractiveFlag.all & ~InteractiveFlag.scrollWheelZoom & ~InteractiveFlag.rotate,
         ),
-        children: [
-          if (ref.watch(mapTilesEnabledProvider)) TileLayer(urlTemplate: tenant.mapTiles, userAgentPackageName: tenant.androidId, maxZoom: 19),
-          MarkerLayer(markers: [
-            Marker(point: here, width: 40, height: 40, alignment: Alignment.topCenter, child: Icon(Icons.location_on, size: 40, color: scheme.primary)),
-          ]),
-        ],
+      ),
+      children: [
+        if (ref.watch(mapTilesEnabledProvider)) TileLayer(urlTemplate: tenant.mapTiles, userAgentPackageName: tenant.androidId, maxZoom: 19),
+        MarkerLayer(markers: [
+          Marker(point: _here, width: 44, height: 44, alignment: Alignment.topCenter, child: Icon(Icons.location_on, size: 44, color: scheme.primary)),
+        ]),
+      ],
+    );
+    return Semantics(
+      label: 'Map of where ${widget.title} is',
+      child: Listener(
+        onPointerSignal: (e) {
+          if (widget.fullScreen || e is! PointerScrollEvent) return;
+          if (HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed) {
+            GestureBinding.instance.pointerSignalResolver.register(e, (_) => _zoom(e.scrollDelta.dy < 0 ? 1 : -1));
+          } else if (!_hint) {
+            setState(() => _hint = true);
+            Future.delayed(const Duration(milliseconds: 1500), () {
+              if (mounted) setState(() => _hint = false);
+            });
+          }
+        },
+        child: Stack(children: [
+          Positioned.fill(child: map),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                opacity: _hint ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: ColoredBox(
+                  color: scheme.scrim.withValues(alpha: 0.45),
+                  child: Center(
+                    child: Text('Use Ctrl + scroll to zoom the map', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: scheme.surface)),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: b.spacing.sm,
+            bottom: b.spacing.sm,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              control(Icons.my_location, 'Back to the home', () => _map.move(_here, _start)),
+              SizedBox(height: b.spacing.sm),
+              control(Icons.add, 'Zoom in', () => _zoom(1), key: const Key('map-zoom-in')),
+              SizedBox(height: 2),
+              control(Icons.remove, 'Zoom out', () => _zoom(-1), key: const Key('map-zoom-out')),
+            ]),
+          ),
+          Positioned(
+            right: b.spacing.sm,
+            top: b.spacing.sm,
+            child: widget.fullScreen
+                ? control(Icons.close, 'Close', () => Navigator.pop(context))
+                : control(Icons.fullscreen, 'Full screen map', key: const Key('map-full-screen'), () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (_) => Dialog.fullscreen(child: ListingMap(lat: widget.lat, lng: widget.lng, title: widget.title, fullScreen: true)),
+                    );
+                  }),
+          ),
+        ]),
       ),
     );
   }
 }
 
-/// Plays a listing video: the MP4 on the web (browsers without HLS), the
-/// adaptive HLS stream on phones. Tap to pause or play.
-class VideoDialog extends StatefulWidget {
-  const VideoDialog({super.key, required this.video});
+/// Plays a listing video where it is: the poster shows while it loads
+/// (no blank box), then it plays at once. The MP4 on the web (browsers
+/// without HLS), the adaptive HLS stream on phones. Tap to pause or play;
+/// the bar has play, a seek bar with the time, sound and full screen.
+class VideoPlayerView extends StatefulWidget {
+  const VideoPlayerView({super.key, required this.video, required this.label, this.fullScreen = false});
   final ListingVideo video;
+  final String label;
+  final bool fullScreen;
 
   @override
-  State<VideoDialog> createState() => _VideoDialogState();
+  State<VideoPlayerView> createState() => _VideoPlayerViewState();
 }
 
-class _VideoDialogState extends State<VideoDialog> {
+class _VideoPlayerViewState extends State<VideoPlayerView> {
   late final VideoPlayerController _player;
   String? _error;
+  bool _controls = true;
 
   @override
   void initState() {
     super.initState();
     final v = widget.video;
     _player = VideoPlayerController.networkUrl(Uri.parse(kIsWeb && v.mp4 != null ? v.mp4! : v.hls))..addListener(_changed);
-    _player.initialize().then((_) => _player.play(), onError: (Object _) {
+    _player.initialize().then((_) {
+      // Browsers block sound before a click; the click that got here counts,
+      // but start muted on the web if it is refused, so it always plays.
+      _player.play().catchError((Object _) => _player.setVolume(0).then((_) => _player.play()));
+      _hideSoon();
+    }, onError: (Object _) {
       if (mounted) setState(() => _error = 'This video could not be played here.');
     });
   }
@@ -559,6 +716,10 @@ class _VideoDialogState extends State<VideoDialog> {
   void _changed() {
     if (mounted) setState(() {});
   }
+
+  void _hideSoon() => Future.delayed(const Duration(seconds: 3), () {
+        if (mounted && _player.value.isPlaying) setState(() => _controls = false);
+      });
 
   @override
   void dispose() {
@@ -568,31 +729,111 @@ class _VideoDialogState extends State<VideoDialog> {
     super.dispose();
   }
 
+  static String _time(Duration d) => '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
   @override
   Widget build(BuildContext context) {
     final value = _player.value;
-    return Dialog(
-      insetPadding: EdgeInsets.all(context.brand.spacing.md),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(alignment: Alignment.center, children: [
-        AspectRatio(
-          aspectRatio: value.isInitialized ? value.aspectRatio : 16 / 9,
-          child: _error != null
-              ? Center(child: Text(_error!, textAlign: TextAlign.center))
-              : !value.isInitialized
-                  ? const Center(child: CircularProgressIndicator())
-                  : GestureDetector(
-                      onTap: () => value.isPlaying ? _player.pause() : _player.play(),
-                      child: Stack(alignment: Alignment.bottomCenter, children: [
-                        VideoPlayer(_player),
-                        VideoProgressIndicator(_player, allowScrubbing: true),
-                        if (!value.isPlaying) const Center(child: Icon(Icons.play_arrow, size: 64)),
+    final scheme = Theme.of(context).colorScheme;
+    final ink = scheme.surface;
+    if (_error != null) {
+      return ColoredBox(color: scheme.scrim, child: Center(child: Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: ink))));
+    }
+    final ready = value.isInitialized;
+    return MouseRegion(
+      onHover: (_) {
+        if (!_controls) setState(() => _controls = true);
+        _hideSoon();
+      },
+      child: GestureDetector(
+        key: const Key('video-player'),
+        onTap: () {
+          if (!ready) return;
+          value.isPlaying ? _player.pause() : _player.play();
+          setState(() => _controls = true);
+          _hideSoon();
+        },
+        child: ColoredBox(
+          color: scheme.scrim,
+          child: Stack(alignment: Alignment.center, children: [
+            if (ready)
+              Center(child: AspectRatio(aspectRatio: value.aspectRatio, child: VideoPlayer(_player)))
+            else ...[
+              Positioned.fill(child: _image(context, widget.video.poster, fit: BoxFit.contain, label: widget.label)),
+              const CircularProgressIndicator(),
+            ],
+            if (ready && (value.isBuffering)) const CircularProgressIndicator(),
+            if (ready)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: AnimatedOpacity(
+                  opacity: _controls || !value.isPlaying ? 1 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                          begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [scheme.scrim.withValues(alpha: 0.75), Colors.transparent]),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 24, 8, 4),
+                      child: Row(children: [
+                        IconButton(
+                          key: const Key('video-play-pause'),
+                          tooltip: value.isPlaying ? 'Pause' : 'Play',
+                          color: ink,
+                          icon: Icon(value.isPlaying ? Icons.pause : Icons.play_arrow),
+                          onPressed: () => value.isPlaying ? _player.pause() : _player.play(),
+                        ),
+                        Text('${_time(value.position)} / ${_time(value.duration)}', style: TextStyle(color: ink, fontSize: 12)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: VideoProgressIndicator(
+                            _player,
+                            allowScrubbing: true,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            colors: VideoProgressColors(
+                                playedColor: scheme.primary, bufferedColor: ink.withValues(alpha: 0.4), backgroundColor: ink.withValues(alpha: 0.2)),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: value.volume == 0 ? 'Sound on' : 'Mute',
+                          color: ink,
+                          icon: Icon(value.volume == 0 ? Icons.volume_off : Icons.volume_up),
+                          onPressed: () => _player.setVolume(value.volume == 0 ? 1 : 0),
+                        ),
+                        if (!widget.fullScreen)
+                          IconButton(
+                            tooltip: 'Full screen',
+                            color: ink,
+                            icon: const Icon(Icons.fullscreen),
+                            onPressed: () {
+                              _player.pause();
+                              showDialog<void>(
+                                context: context,
+                                builder: (_) => Dialog.fullscreen(
+                                  backgroundColor: scheme.scrim,
+                                  child: Stack(children: [
+                                    Positioned.fill(child: VideoPlayerView(video: widget.video, label: widget.label, fullScreen: true)),
+                                    Positioned(
+                                      top: 8,
+                                      right: 8,
+                                      child: IconButton(tooltip: 'Close', color: ink, icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                                    ),
+                                  ]),
+                                ),
+                              );
+                            },
+                          ),
                       ]),
                     ),
+                  ),
+                ),
+              ),
+          ]),
         ),
-        Positioned(
-            top: 4, right: 4, child: IconButton.filledTonal(tooltip: 'Close', onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close))),
-      ]),
+      ),
     );
   }
 }

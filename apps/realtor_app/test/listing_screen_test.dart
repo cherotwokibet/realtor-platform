@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:realtor_app/src/account/account_data.dart';
 import 'package:realtor_app/src/app.dart';
 import 'package:realtor_app/src/listing/demo_listings.dart';
 import 'package:realtor_app/src/providers.dart';
@@ -190,7 +191,7 @@ void main() {
     expect(find.text('Request viewing'), findsOneWidget);
   });
 
-  testWidgets('similar homes: close ones from the same area show; none close, no section', (tester) async {
+  testWidgets('recommended: close ones first; with none close, the newest of the same purpose', (tester) async {
     await open(tester, '/listing/bedsitter-near-kasarani-stadium');
     await tester.scrollUntilVisible(find.text('Recommended for you'), 300, scrollable: page);
     expect(find.text('Student hostel bed, Kasarani'), findsOneWidget);
@@ -201,10 +202,14 @@ void main() {
     expect(find.text('Student hostel bed, Kasarani'), findsWidgets);
     final router = ProviderScope.containerOf(tester.element(find.byType(RealtorApp))).read(routerProvider);
     expect(router.state.uri.path, '/listing/student-hostel-bed-kasarani');
-    expect(leads.recommendations, ['demo-2/shown', 'demo-2/opened'], reason: 'counted once shown, once opened; the hostel bed has none');
+    expect(leads.recommendations.take(2), ['demo-2/shown', 'demo-2/opened'], reason: 'counted once shown, once opened');
 
+    // With nothing close, the row still fills with the newest homes to rent.
     await open(tester, kilimani);
-    expect(find.text('Recommended for you'), findsNothing, reason: 'no other rental near KES 65,000 shares its area or type');
+    await tester.scrollUntilVisible(find.text('Recommended for you'), 300, scrollable: page);
+    final row = find.byKey(const Key('recommended'));
+    expect(find.descendant(of: row, matching: find.text('Bedsitter near Kasarani stadium')), findsOneWidget);
+    expect(find.descendant(of: row, matching: find.text('2 bedroom apartment, Kilimani')), findsNothing, reason: 'never the home itself');
   });
 
   testWidgets('on desktop: the photo mosaic within the page width, the contact card beside the details', (tester) async {
@@ -346,5 +351,89 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('photo-viewer')), findsOneWidget);
     expect(find.byKey(const Key('back-to-gallery')), findsNothing, reason: 'phones open the viewer straight away');
+  });
+
+  testWidgets('breadcrumbs: Back to search, then Home > Apartments to rent > the area > the home, each opening that search', (tester) async {
+    await open(tester, kilimani, size: const Size(1600, 1000));
+    final crumbs = find.byKey(const Key('breadcrumbs'));
+    for (final c in ['Back to search', 'Apartments to rent', 'Kilimani', '2 bedroom apartment, Kilimani']) {
+      expect(find.descendant(of: crumbs, matching: find.text(c)), findsOneWidget, reason: c);
+    }
+    await tester.tap(find.descendant(of: crumbs, matching: find.text('Kilimani')));
+    await tester.pumpAndSettle();
+    final router = ProviderScope.containerOf(tester.element(find.byType(RealtorApp))).read(routerProvider);
+    expect(router.state.uri.path, '/rent/apartments/kilimani');
+  });
+
+  testWidgets('desktop: a mosaic photo opens the gallery at that photo; Video plays at once, with no extra screen', (tester) async {
+    final repo = ThreePhotos()..videos = const [ListingVideo(hls: 'https://x/v/master.m3u8', mp4: 'https://x/v/video.mp4', poster: 'https://x/v/poster.jpg')];
+    await open(tester, kilimani, listings: repo, size: const Size(1600, 1000));
+    await tester.tap(find.bySemanticsLabel('Open the gallery at photo 3 of 4'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('gallery')), findsOneWidget);
+    Navigator.of(tester.element(find.byKey(const Key('gallery')))).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('gallery-video')));
+    await tester.pump();
+    expect(find.byKey(const Key('photo-viewer')), findsOneWidget);
+    expect(find.byKey(const Key('play-video')), findsNothing, reason: 'no poster to tap: it is already playing');
+    expect(find.byKey(const Key('video-player')), findsOneWidget);
+  });
+
+  testWidgets('the map zooms with its buttons and opens full screen', (tester) async {
+    await open(tester, kilimani, size: const Size(1600, 1000));
+    await tester.scrollUntilVisible(find.byKey(const Key('map-zoom-in')), 300, scrollable: page);
+    await tester.ensureVisible(find.byKey(const Key('listing-map')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('map-zoom-in')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('map-full-screen')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('listing-map')), findsNWidgets(2), reason: 'the page map and the full-screen one');
+  });
+
+  testWidgets('reviews: the approved ones with their average; writing one needs sign-in, then waits to be checked', (tester) async {
+    final reviews = DemoListingReviews();
+    final account = DemoAccount();
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        tenantProvider.overrideWithValue(tenant()),
+        listingReviewsProvider.overrideWithValue(reviews),
+        demoAccountProvider.overrideWithValue(account),
+        favouritesStoreProvider.overrideWithValue(MemoryStore()),
+      ],
+      child: const RealtorApp(),
+    ));
+    ProviderScope.containerOf(tester.element(find.byType(RealtorApp))).read(routerProvider).go(kilimani);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('write-review')), 300, scrollable: page);
+    await tester.ensureVisible(find.byKey(const Key('write-review')));
+    await tester.pumpAndSettle();
+    expect(find.text('Reviews (2)'), findsOneWidget);
+    expect(find.text('4.5'), findsOneWidget);
+    expect(find.text('After a viewing'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('write-review')));
+    await tester.pumpAndSettle();
+    expect(find.text('Sign in to review this home.'), findsOneWidget);
+
+    await account.signInWithGoogle();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('write-review')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('send-review')));
+    await tester.pump();
+    expect(find.text('Choose from 1 to 5 stars.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('star-4')));
+    await tester.enterText(find.byKey(const Key('review-comment')), 'Water every day, friendly caretaker.');
+    await tester.enterText(find.byKey(const Key('review-name')), 'Wanjiru Kamau');
+    await tester.tap(find.byKey(const Key('send-review')));
+    await tester.pumpAndSettle();
+    expect(reviews.pending.single.rating, 4);
+    expect(find.textContaining('shows once it has been checked'), findsOneWidget);
+    expect(find.text('Reviews (2)'), findsOneWidget, reason: 'not shown until approved');
   });
 }

@@ -260,3 +260,30 @@ class CallableLeadRepository implements LeadRepository {
   Future<void> payViewingFee({required String viewingId, required String phone}) =>
       _run('payments-startViewingPayment', {'viewingId': viewingId, 'phone': phone});
 }
+
+/// Approved reviews of a listing from Firestore; a visitor's review goes to
+/// the `submitListingReview` Function, which holds it for a manager.
+class FirestoreListingReviews implements ListingReviews {
+  FirestoreListingReviews(this._db, this._call);
+  final FirebaseFirestore _db;
+  final CallFunction _call;
+
+  @override
+  Future<List<ListingReview>> forListing(String listingId) async {
+    final snap = await _db.collection('reviews').where('listingId', isEqualTo: listingId).where('status', isEqualTo: 'approved').limit(50).get();
+    return [
+      for (final d in snap.docs)
+        if (ListingReview.fromDoc({...d.data(), 'createdAt': _time(d.data()['createdAt'])}) case final ListingReview r) r,
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  @override
+  Future<void> submit({required String listingId, required int rating, required String comment, String? name}) async {
+    try {
+      await _call('submitListingReview', {'listingId': listingId, 'rating': rating, 'comment': comment, if (name != null && name.isNotEmpty) 'name': name});
+    } on FirebaseException catch (e) {
+      final code = e.code.replaceFirst('functions/', '');
+      throw LeadException(code, (e.message ?? code).replaceFirst(RegExp(r'\s*\[\d{3}\]$'), ''));
+    }
+  }
+}

@@ -72,6 +72,10 @@ Future<void> main() async {
       leadRepositoryProvider.overrideWithValue(
         DeferredLeadRepository(once(() => CallableLeadRepository.firebase(FirebaseFunctions.instanceFor(region: tenant.firebaseRegion)))),
       ),
+      listingReviewsProvider.overrideWithValue(DeferredListingReviews(once(() {
+        final functions = FirebaseFunctions.instanceFor(region: tenant.firebaseRegion);
+        return FirestoreListingReviews(FirebaseFirestore.instance, (name, data) async => (await functions.httpsCallable(name).call<Object?>(data)).data);
+      }))),
     ]);
   }
   runApp(ProviderScope(overrides: overrides, child: const RealtorApp()));

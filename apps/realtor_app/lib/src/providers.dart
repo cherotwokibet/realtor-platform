@@ -47,6 +47,11 @@ final liveListingsProvider = FutureProvider.family<List<ListingSummary>, ({Strin
   (ref, q) => ref.watch(listingRepositoryProvider).live(area: q.area, agentId: q.agent),
 );
 
+/// Listing reviews: demo ones until the app reads Firestore.
+final listingReviewsProvider = Provider<ListingReviews>((ref) => DemoListingReviews());
+
+final reviewsForListingProvider = FutureProvider.family<List<ListingReview>, String>((ref, id) => ref.watch(listingReviewsProvider).forListing(id));
+
 /// Leads stay on the phone until the app calls the Functions (P4).
 final leadRepositoryProvider = Provider<LeadRepository>((ref) => DemoLeadRepository());
 

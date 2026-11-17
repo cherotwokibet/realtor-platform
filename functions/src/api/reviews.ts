@@ -1,10 +1,13 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { docId } from '../model/schema';
 import { audit } from './audit';
 import { type Caller, parseInput, requireManager } from './auth';
+
+/** Listing reviews never count towards an agent's rating: anyone signed in may leave one. */
+const countsForAgent = (d: { get(field: string): unknown }) => d.get('kind') !== 'listing';
 
 /**
  * Reviews (P6-s03). A viewing marked done gets a one-time review link
@@ -76,9 +79,9 @@ export async function moderateReview(db: Firestore, caller: Caller, input: unkno
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'no such review');
     const agentId = snap.get('agentId') as string;
-    const approved = await tx.get(db.collection('reviews').where('agentId', '==', agentId).where('status', '==', 'approved').select('rating'));
-    const ratings = approved.docs.filter((d) => d.id !== ref.id).map((d) => d.get('rating') as number);
-    if (status === 'approved') ratings.push(snap.get('rating') as number);
+    const approved = await tx.get(db.collection('reviews').where('agentId', '==', agentId).where('status', '==', 'approved').select('rating', 'kind'));
+    const ratings = approved.docs.filter((d) => d.id !== ref.id && countsForAgent(d)).map((d) => d.get('rating') as number);
+    if (status === 'approved' && countsForAgent(snap)) ratings.push(snap.get('rating') as number);
     result = {
       rating: ratings.length ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : null,
       ratingCount: ratings.length,
@@ -97,12 +100,50 @@ export async function moderateReview(db: Firestore, caller: Caller, input: unkno
 
 /** The agent's rating from their approved reviews, written back. */
 export async function recomputeRating(db: Firestore, agentId: string): Promise<{ rating: number | null; ratingCount: number }> {
-  const approved = await db.collection('reviews').where('agentId', '==', agentId).where('status', '==', 'approved').select('rating').get();
-  const ratings = approved.docs.map((d) => d.get('rating') as number);
+  const approved = await db.collection('reviews').where('agentId', '==', agentId).where('status', '==', 'approved').select('rating', 'kind').get();
+  const ratings = approved.docs.filter(countsForAgent).map((d) => d.get('rating') as number);
   const r = {
     rating: ratings.length ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : null,
     ratingCount: ratings.length,
   };
   await db.collection('agents').doc(agentId).update(r);
   return r;
+}
+
+export const submitListingReviewInput = z.object({
+  listingId: docId,
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().trim().min(3).max(1000),
+  /** Shown with the review; first name only is kept. */
+  name: z.string().trim().max(40).optional(),
+});
+
+/**
+ * A signed-in visitor's review of a listing, with stars and a comment. It
+ * waits for a manager, like every review, and never changes the agent's
+ * rating (only reviews after a viewing do). One per person per listing: the
+ * document id is a hash of the two, so the account id itself is not stored.
+ */
+export async function submitListingReview(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ reviewId: string }> {
+  if (!caller.uid) throw new HttpsError('unauthenticated', 'sign in to review a home');
+  const req = parseInput(submitListingReviewInput, input);
+  const listingRef = db.collection('listings').doc(req.listingId);
+  const reviewId = 'l_' + createHash('sha256').update(`${req.listingId}/${caller.uid}`).digest('base64url').slice(0, 32);
+  const reviewRef = db.collection('reviews').doc(reviewId);
+  await db.runTransaction(async (tx) => {
+    const listing = await tx.get(listingRef);
+    if (!listing.exists || listing.get('status') !== 'live') throw new HttpsError('failed-precondition', 'this home is not available');
+    if ((await tx.get(reviewRef)).exists) throw new HttpsError('already-exists', 'you have already reviewed this home');
+    tx.create(reviewRef, {
+      kind: 'listing',
+      listingId: req.listingId,
+      agentId: listing.get('agentId'),
+      rating: req.rating,
+      comment: req.comment,
+      ...(req.name ? { name: req.name.split(/\s+/)[0] } : {}),
+      status: 'pending',
+      createdAt: now,
+    });
+  });
+  return { reviewId };
 }
