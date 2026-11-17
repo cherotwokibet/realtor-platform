@@ -87,7 +87,8 @@ class GalleryMosaic extends StatelessWidget {
     final b = context.brand;
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final radius = BorderRadius.circular(b.radiusMd);
+    // Small corners, as on the big portals.
+    final radius = BorderRadius.circular(b.radiusSm);
     if (items.isEmpty) {
       return ClipRRect(
         borderRadius: radius,
@@ -336,65 +337,84 @@ class _GalleryDialogState extends State<_GalleryDialog> {
       key: const Key('gallery'),
       insetPadding: EdgeInsets.all(b.spacing.xl),
       clipBehavior: Clip.antiAlias,
+      // Small corners, as on the big portals.
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1000, maxHeight: 760),
-        child: Padding(
-          padding: EdgeInsets.all(b.spacing.lg),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
-              Expanded(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(border: Border.all(color: b.borderStrong), borderRadius: BorderRadius.circular(b.radiusSm)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Row(children: [
-                      tab(false, Icons.photo_outlined, 'Photos (${items.length})'),
-                      if (hasMap) tab(true, Icons.place_outlined, 'Map'),
-                    ]),
+        child: Stack(children: [
+          Padding(
+            // Room at the top right for the close button, in the corner.
+            padding: EdgeInsets.fromLTRB(b.spacing.lg, b.spacing.xl, b.spacing.lg, b.spacing.lg),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Expanded(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(border: Border.all(color: b.borderStrong), borderRadius: BorderRadius.circular(b.radiusSm)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Row(children: [
+                        tab(false, Icons.photo_outlined, 'Photos (${items.length})'),
+                        if (hasMap) tab(true, Icons.place_outlined, 'Map'),
+                      ]),
+                    ),
                   ),
                 ),
-              ),
-              SizedBox(width: b.spacing.sm),
-              IconButton(tooltip: 'Close', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
-            ]),
-            SizedBox(height: b.spacing.md),
-            Expanded(
-              child: _map && hasMap
-                  ? ClipRRect(borderRadius: BorderRadius.circular(b.radiusMd), child: ListingMap(lat: widget.lat!, lng: widget.lng!, title: widget.title))
-                  : LayoutBuilder(builder: (context, box) {
-                      _tileWidth = (box.maxWidth - _gap) / 2;
-                      return GridView.builder(
-                        controller: _grid,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2, mainAxisSpacing: _gap, crossAxisSpacing: _gap, childAspectRatio: 16 / 9),
-                        itemCount: items.length,
-                        itemBuilder: (context, i) => DecoratedBox(
-                          // The photo that was clicked stays marked.
-                          position: DecorationPosition.foreground,
-                          decoration: BoxDecoration(
-                            border: i == widget.initial && widget.initial > 0 ? Border.all(color: scheme.primary, width: 3) : null,
-                            borderRadius: BorderRadius.circular(b.radiusSm),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(b.radiusSm),
-                            child: InkWell(
-                              key: Key('gallery-photo-$i'),
-                              onTap: () =>
-                                  showPhotoViewer(context, items: items, title: widget.title, initial: i, fromGallery: true, autoplay: items[i].video != null),
-                              child: Stack(fit: StackFit.expand, children: [
-                                _image(context, items[i].image, label: '${widget.title}, ${items[i].video == null ? 'photo' : 'video'} ${i + 1}'),
-                                if (items[i].video != null) Center(child: Icon(Icons.play_circle_fill, size: 56, color: scheme.surface.withValues(alpha: 0.9))),
-                              ]),
+              ]),
+              SizedBox(height: b.spacing.md),
+              Expanded(
+                child: _map && hasMap
+                    ? ClipRRect(borderRadius: BorderRadius.circular(b.radiusMd), child: ListingMap(lat: widget.lat!, lng: widget.lng!, title: widget.title))
+                    : LayoutBuilder(builder: (context, box) {
+                        // The scrollbar sits at the right edge, beside the photos, always shown.
+                        const bar = 14.0;
+                        _tileWidth = (box.maxWidth - bar - _gap) / 2;
+                        return Scrollbar(
+                          controller: _grid,
+                          thumbVisibility: true,
+                          child: ScrollConfiguration(
+                            behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                            child: GridView.builder(
+                              controller: _grid,
+                              padding: const EdgeInsets.only(right: bar),
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2, mainAxisSpacing: _gap, crossAxisSpacing: _gap, childAspectRatio: 16 / 9),
+                              itemCount: items.length,
+                              itemBuilder: (context, i) => DecoratedBox(
+                                // The photo that was clicked stays marked.
+                                position: DecorationPosition.foreground,
+                                decoration: BoxDecoration(
+                                  border: i == widget.initial && widget.initial > 0 ? Border.all(color: scheme.primary, width: 3) : null,
+                                  borderRadius: BorderRadius.circular(b.radiusSm),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(b.radiusSm),
+                                  child: InkWell(
+                                    key: Key('gallery-photo-$i'),
+                                    onTap: () => showPhotoViewer(context,
+                                        items: items, title: widget.title, initial: i, fromGallery: true, autoplay: items[i].video != null),
+                                    child: Stack(fit: StackFit.expand, children: [
+                                      _image(context, items[i].image, label: '${widget.title}, ${items[i].video == null ? 'photo' : 'video'} ${i + 1}'),
+                                      if (items[i].video != null)
+                                        Center(child: Icon(Icons.play_circle_fill, size: 56, color: scheme.surface.withValues(alpha: 0.9))),
+                                    ]),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    }),
-            ),
-            const Divider(height: 24),
-            widget.contact,
-          ]),
-        ),
+                        );
+                      }),
+              ),
+              const Divider(height: 24),
+              widget.contact,
+            ]),
+          ),
+          Positioned(
+            top: 2,
+            right: 2,
+            child: IconButton(tooltip: 'Close', visualDensity: VisualDensity.compact, onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+          ),
+        ]),
       ),
     );
   }

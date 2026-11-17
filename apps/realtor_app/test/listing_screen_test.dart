@@ -436,4 +436,51 @@ void main() {
     expect(find.textContaining('shows once it has been checked'), findsOneWidget);
     expect(find.text('Reviews (2)'), findsOneWidget, reason: 'not shown until approved');
   });
+
+  testWidgets('features and amenities are tiles; past the first few, "+ N more" opens them all', (tester) async {
+    final json = <String>['parking', 'security', 'borehole', 'wifi', 'lift', 'gym', 'garden', 'balcony'];
+    final repo = _Amenities8(json);
+    await open(tester, kilimani, listings: repo, size: const Size(1600, 1000));
+    await tester.scrollUntilVisible(find.byKey(const Key('more-amenities')), 300, scrollable: page);
+    await tester.ensureVisible(find.byKey(const Key('more-amenities')));
+    await tester.pumpAndSettle();
+    expect(find.text('+ 3 more\namenities'), findsOneWidget);
+    expect(find.text('Gym'), findsNothing);
+    await tester.tap(find.byKey(const Key('more-amenities')));
+    await tester.pumpAndSettle();
+    expect(find.text('Features & amenities (8)'), findsOneWidget);
+    expect(find.text('Gym'), findsOneWidget);
+  });
+
+  testWidgets('a pop-up note can be closed', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async => null);
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await open(tester, kilimani, size: const Size(1600, 1000));
+    await tester.tap(find.byKey(const Key('share')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Link copied'), findsOneWidget);
+    await tester.tap(find.descendant(of: find.byType(SnackBar), matching: find.byType(IconButton)));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Link copied'), findsNothing);
+  });
+}
+
+/// Demo listings, with eight amenities on each.
+class _Amenities8 extends DemoListingRepository {
+  _Amenities8(this.amenities);
+  final List<String> amenities;
+  @override
+  Future<ListingDetail?> bySlug(String slug) async {
+    final d = await super.bySlug(slug);
+    if (d == null) return null;
+    final s = d.summary;
+    return ListingDetail(
+      summary: ListingSummary(
+        id: s.id, slug: s.slug, title: s.title, purpose: s.purpose, type: s.type, beds: s.beds, baths: s.baths,
+        priceKES: s.priceKES, area: s.area, lat: s.lat, lng: s.lng, amenities: amenities,
+      ),
+      description: d.description,
+      agent: d.agent,
+    );
+  }
 }

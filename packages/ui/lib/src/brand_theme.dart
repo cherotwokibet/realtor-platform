@@ -158,6 +158,8 @@ ThemeData buildBrandTheme(TenantConfig tenant) {
       margin: EdgeInsets.zero,
     ),
     dividerTheme: DividerThemeData(color: Color(c.border), space: 1),
+    // Every pop-up note can be closed, not only waited out.
+    snackBarTheme: const SnackBarThemeData(showCloseIcon: true, behavior: SnackBarBehavior.floating),
     extensions: [
       BrandExtension(
         primarySoft: Color(c.primarySoft),
