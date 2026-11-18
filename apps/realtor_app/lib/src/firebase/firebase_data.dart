@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:http/http.dart' as http;
 import 'package:realtor_core/realtor_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,7 +16,10 @@ DateTime? _time(Object? v) => v is Timestamp
     ? v.toDate()
     : v is DateTime
         ? v
-        : null;
+        // The listings file (/api/listings.json) sends times as milliseconds.
+        : v is num
+            ? DateTime.fromMillisecondsSinceEpoch(v.toInt())
+            : null;
 
 /// A `{kind: 'video'}` media entry as a playable video, or null for anything else.
 ListingVideo? videoFromMedia(Object? m, String bucket) {
@@ -342,21 +346,72 @@ class PrefsListingSnapshotStore implements ListingSnapshotStore {
   }
 }
 
+/// The live homes from one small file the site serves (/api/listings.json,
+/// the listingIndex function behind Hosting's CDN; P3-s01). On the web it
+/// is preloaded by index.html while the app downloads, so the first results
+/// need neither the Firestore SDK nor a read of every listing document.
+/// Read once per visit; [rows] and [live] answer from it.
+class ListingIndex {
+  ListingIndex(this._fetch, {required this.bucket, DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
+
+  /// From a URL with package:http.
+  factory ListingIndex.url(Uri url, {required String bucket}) => ListingIndex(() async {
+        final r = await http.get(url).timeout(const Duration(seconds: 12));
+        if (r.statusCode != 200) throw StateError('listings file: ${r.statusCode}');
+        return r.body;
+      }, bucket: bucket);
+
+  final Future<String> Function() _fetch;
+  final String bucket;
+  final DateTime Function() _clock;
+  Future<List<({ListingSummary home, String? agentId, DateTime? updated})>>? _all;
+
+  Future<List<({ListingSummary home, String? agentId, DateTime? updated})>> _load() => _all ??= _fetch().then((body) {
+        final now = _clock();
+        final rows = (jsonDecode(body) as Map<String, Object?>)['rows'] as List<Object?>;
+        return [
+          for (final r in rows.whereType<Map<String, Object?>>())
+            (home: summaryFromDoc(r['id'] as String, r, bucket: bucket, now: now), agentId: r['agentId'] as String?, updated: _time(r['updatedAt'])),
+        ];
+      })
+        // A failed read is tried again next time, not kept.
+        ..catchError((Object e) {
+          _all = null;
+          throw e;
+        }).ignore();
+
+  Future<List<ListingSummary>> rows(Purpose purpose) async => [
+        for (final r in await _load())
+          if (r.home.purpose == purpose) r.home
+      ];
+
+  /// As [FirestoreListingRepository.live]: newest first.
+  Future<List<ListingSummary>> live({String? area, String? agentId, int limit = 30}) async {
+    final rows = [
+      for (final r in await _load())
+        if ((area == null || r.home.area == area) && (agentId == null || r.agentId == agentId)) r
+    ]..sort((a, b) => (b.updated ?? DateTime(0)).compareTo(a.updated ?? DateTime(0)));
+    return [for (final r in rows.take(limit)) r.home];
+  }
+}
+
 /// Search that answers at once from the listings kept on the device, then
-/// refreshes them from Firestore in the background (stale-while-revalidate),
-/// so a returning visitor sees homes before Firebase has even started. The
-/// first visit, or a copy older than [maxStale], waits for Firestore.
+/// refreshes them in the background (stale-while-revalidate), so a
+/// returning visitor sees homes before anything has loaded. The first
+/// visit, or a copy older than [maxStale], waits for [_load].
 class SnapshotListingSearch implements ListingSearch {
-  SnapshotListingSearch(this._live, {required this.store, DateTime Function()? clock, this.maxStale = const Duration(hours: 12)})
+  SnapshotListingSearch(this._load, {required this.store, DateTime Function()? clock, this.maxStale = const Duration(hours: 12)})
       : _clock = clock ?? DateTime.now;
-  final Future<FirestoreListingSearch> _live;
+
+  /// The live homes of one purpose: the listings file, else Firestore.
+  final Future<List<ListingSummary>> Function(Purpose) _load;
   final ListingSnapshotStore store;
   final Duration maxStale;
   final DateTime Function() _clock;
   final _fresh = <Purpose, Future<List<ListingSummary>>>{};
 
   /// Reads Firestore once per purpose per visit, and keeps the result.
-  Future<List<ListingSummary>> _refresh(Purpose p) => _fresh[p] ??= _live.then((s) => s.rows(p)).then((rows) {
+  Future<List<ListingSummary>> _refresh(Purpose p) => _fresh[p] ??= _load(p).then((rows) {
         store.save(p, _clock(), rows).ignore();
         return rows;
       });

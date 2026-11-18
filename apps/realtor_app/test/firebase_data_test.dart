@@ -75,22 +75,45 @@ void main() {
   test('a returning visitor sees the homes kept from last time at once; fresh ones are fetched and kept for next time', () async {
     final store = _MemorySnapshots();
     // First visit: nothing kept, so it waits for Firestore, then keeps the homes.
-    final first = SnapshotListingSearch(Future.value(FirestoreListingSearch(db, bucket: 'b', clock: () => now)), store: store, clock: () => now);
+    final first = SnapshotListingSearch(FirestoreListingSearch(db, bucket: 'b', clock: () => now).rows, store: store, clock: () => now);
     expect((await first.search(const ListingFilters(purpose: Purpose.rent))).found, 2);
     await Future<void>.delayed(Duration.zero);
     expect(store.kept[Purpose.rent]!.rows, hasLength(2));
 
     // Next visit, Firebase still starting (never ready here): the kept homes show.
-    final slow = Completer<FirestoreListingSearch>();
-    final next = SnapshotListingSearch(slow.future, store: store, clock: () => now.add(const Duration(hours: 1)));
+    final slow = Completer<List<ListingSummary>>();
+    final next = SnapshotListingSearch((_) => slow.future, store: store, clock: () => now.add(const Duration(hours: 1)));
     final r = await next.search(const ListingFilters(purpose: Purpose.rent, maxPriceKES: 60000));
     expect(r.hits.map((h) => h.slug), ['flat-1'], reason: 'filtered from the kept copy, without waiting');
 
     // A copy older than half a day is not trusted: the search waits for fresh homes.
-    final stale = SnapshotListingSearch(Future.value(FirestoreListingSearch(db, bucket: 'b', clock: () => now)),
-        store: store, clock: () => now.add(const Duration(days: 2)));
+    final stale =
+        SnapshotListingSearch(FirestoreListingSearch(db, bucket: 'b', clock: () => now).rows, store: store, clock: () => now.add(const Duration(days: 2)));
     await db.collection('listings').doc('l6').set(listing('flat-6'));
     expect((await stale.search(const ListingFilters(purpose: Purpose.rent))).found, 3);
+  });
+
+  test('the listings file: homes by purpose, newest by area or agent, times in milliseconds; a failed read is tried again', () async {
+    final at = now.millisecondsSinceEpoch;
+    final file = '{"at":$at,"rows":['
+        '{"id":"a","slug":"flat-a","title":"A","purpose":"rent","priceKES":50000,"area":"kilimani","agentId":"g1","updatedAt":${at - 2000},'
+        '"verifiedAt":${at - 1000},"expiresAt":${at + 86400000},"media":[{"kind":"photo","blurhash":"x","variants":{"card":"c.webp","thumb":"t.webp"}}]},'
+        '{"id":"b","slug":"flat-b","title":"B","purpose":"rent","priceKES":60000,"area":"kasarani","agentId":"g2","updatedAt":${at - 1000}},'
+        '{"id":"c","slug":"house-c","title":"C","purpose":"sale","priceKES":9000000,"area":"kilimani","agentId":"g1","updatedAt":$at}]}';
+    var calls = 0;
+    final index = ListingIndex(() async {
+      if (++calls == 1) throw StateError('offline');
+      return file;
+    }, bucket: 'b', clock: () => now);
+    await expectLater(index.rows(Purpose.rent), throwsStateError);
+    final rent = await index.rows(Purpose.rent);
+    expect(rent.map((h) => h.slug), ['flat-a', 'flat-b']);
+    expect(rent.first.verified, isTrue);
+    expect(rent.first.photos.single, contains('c.webp'));
+    expect((await index.live()).map((h) => h.slug), ['house-c', 'flat-b', 'flat-a'], reason: 'newest first');
+    expect((await index.live(area: 'kilimani', limit: 1)).map((h) => h.slug), ['house-c']);
+    expect((await index.live(agentId: 'g2')).map((h) => h.slug), ['flat-b']);
+    expect(calls, 2, reason: 'read once per visit after it works');
   });
 
   test('details by slug: live only, card photos, the agent while active', () async {

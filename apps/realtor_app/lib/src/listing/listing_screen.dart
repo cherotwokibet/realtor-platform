@@ -256,20 +256,21 @@ class _GalleryContact extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     if (agent == null) return actions;
     return Row(children: [
-      CircleAvatar(radius: 22, child: Text(agent!.name.characters.first)),
+      CircleAvatar(radius: 30, child: Text(agent!.name.characters.first, style: text.titleLarge)),
       SizedBox(width: b.spacing.md),
       Expanded(
         child: Text.rich(
           TextSpan(
               text: 'Listing by ',
               children: [TextSpan(text: agent!.name, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600))]),
-          style: text.titleSmall,
+          style: text.titleMedium,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
       ),
       SizedBox(width: b.spacing.md),
-      SizedBox(width: 440, child: actions),
+      // Bayut's buttons: 120 by 48, 8 apart.
+      SizedBox(width: 3 * 120 + 2 * 8, child: actions),
     ]);
   }
 }
@@ -404,7 +405,7 @@ class _Body extends ConsumerWidget {
       SizedBox(height: b.spacing.md),
       ClipRRect(
         borderRadius: BorderRadius.circular(b.radiusMd),
-        child: SizedBox(height: wide ? 360 : 260, child: ListingMap(lat: l.lat, lng: l.lng, title: l.title)),
+        child: SizedBox(height: wide ? 360 : 260, child: ListingMap(lat: l.lat, lng: l.lng, title: l.title, label: l.title)),
       ),
       section,
       _Reviews(listing: l),

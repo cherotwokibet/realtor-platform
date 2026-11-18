@@ -88,6 +88,7 @@ test('the app paints an outline of the page at once (logo, search, cards), gone 
   assert.match(out, /prefers-reduced-motion/);
   assert.match(out, /flutter-first-frame/);
   assert.match(out, /rel="preload" href="assets\/assets\/tenant\/logo-horizontal.png" as="image"/);
+  assert.match(out, /<link rel="preload" href="\/api\/listings.json" as="fetch" crossorigin="anonymous">/);
   assert.equal(patchIndexHtml(out, t), out, 'still idempotent');
 });
 

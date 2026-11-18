@@ -29,6 +29,7 @@ dependencies:
   latlong2: ^0.10.1
   video_player: ^2.14.1
   firebase_messaging: ^17.0.1
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

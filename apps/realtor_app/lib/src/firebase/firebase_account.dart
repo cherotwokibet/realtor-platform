@@ -82,18 +82,14 @@ class FirestoreAlerts implements AlertsRepository {
   final FirebaseFirestore _db;
 
   @override
-  Stream<List<SavedSearchRow>> searches(String uid) => _db
-      .collection('savedSearches')
-      .where('userId', isEqualTo: uid)
-      .snapshots()
-      .map((s) => [
-            for (final d in s.docs)
-              (
-                id: d.id,
-                filters: filtersFromAlert((d.data()['filters'] as Map?) ?? const {}),
-                lastNotifiedAt: (d.data()['lastNotifiedAt'] as Timestamp?)?.toDate(),
-              ),
-          ]);
+  Stream<List<SavedSearchRow>> searches(String uid) => _db.collection('savedSearches').where('userId', isEqualTo: uid).snapshots().map((s) => [
+        for (final d in s.docs)
+          (
+            id: d.id,
+            filters: filtersFromAlert((d.data()['filters'] as Map?) ?? const {}),
+            lastNotifiedAt: (d.data()['lastNotifiedAt'] as Timestamp?)?.toDate(),
+          ),
+      ]);
 
   @override
   Future<void> saveSearch(String uid, ListingFilters filters) => _db.collection('savedSearches').add({

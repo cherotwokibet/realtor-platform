@@ -136,6 +136,8 @@ export function withStartupPreloads(html: string, fonts: string[]): string {
     // Flutter serves asset <key> at assets/<key>.
     ...['assets/tenant/tenant.json', 'assets/tenant/fonts.json', ...fonts].map((key) => fetchLink(`assets/${key}`)),
     fetchLink('/__/firebase/init.json'),
+    // The live homes (the listingIndex function, CDN-cached), fetched while the app downloads.
+    fetchLink('/api/listings.json'),
     // The loading screen's logo, before anything else on the page.
     '<link rel="preload" href="assets/assets/tenant/logo-horizontal.png" as="image">',
     // The engine and Firebase SDK come from gstatic, the fallback font from fonts.gstatic.
