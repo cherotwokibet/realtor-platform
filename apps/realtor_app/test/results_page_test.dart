@@ -128,6 +128,26 @@ void main() {
     });
   }
 
+  testWidgets('wide screens: Clear Filters and Save Search under the filters, at the right', (tester) async {
+    await pump(tester, desktop, [home(1)]);
+    final clear = find.byKey(const Key('filter-clear'));
+    expect(tester.widget<TextButton>(clear).onPressed, isNull, reason: 'nothing to clear yet');
+    expect(find.byKey(const Key('save-search')), findsOneWidget);
+    expect(tester.getTopLeft(clear).dy, greaterThanOrEqualTo(tester.getBottomLeft(find.byKey(const Key('filter-location'))).dy));
+    await tester.tap(find.byKey(const Key('save-search')));
+    await tester.pumpAndSettle();
+    expect(location(tester), '/account', reason: 'signed out: sign in first, the search kept');
+  });
+
+  testWidgets('the location box suggests areas while typing; picking one searches there', (tester) async {
+    await pump(tester, desktop, [home(1)]);
+    await tester.enterText(find.byKey(const Key('filter-location')), 'kil');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('area-suggestion-kilimani')));
+    await tester.pumpAndSettle();
+    expect(location(tester), '/rent/kilimani');
+  });
+
   testWidgets('typing an area in the bar searches there; other words are searched as text', (tester) async {
     await pump(tester, desktop, [home(1)]);
     await tester.enterText(find.byKey(const Key('filter-location')), 'Kilimani');

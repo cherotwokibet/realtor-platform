@@ -39,7 +39,7 @@ export function patchIndexHtml(html: string, t: any, fonts: string[] = []): stri
   out = setMeta(out, 'property', 'og:image', 'og.png');
   if (!out.includes(SKIP_WEB_MESSAGING)) out = out.replace('</head>', `  ${SKIP_WEB_MESSAGING}\n</head>`);
   if (!out.includes(HASH_REDIRECT)) out = out.replace('</head>', `  ${HASH_REDIRECT}\n</head>`);
-  return withStartupPreloads(withAppSkeleton(out, t), fonts);
+  return withStartupPreloads(withAppSkeleton(out, t, fonts), fonts);
 }
 
 /**
@@ -81,44 +81,88 @@ function withLoadingScreen(html: string, t: any, line: string): string {
 }
 
 /**
- * The customer app's loading screen (P3-s01): instead of plain words, the
- * outline of the page it is about to show (the logo, the search bar, the
- * filter pills and two home cards, gently shimmering), painted with the
- * first bytes of HTML. Visitors see the site at once and the wait reads as
- * the page filling in, as on the big portals. Removed on Flutter's first
- * frame. Replaces the older text-only screen in an existing index.html.
+ * The customer app's loading screen (P3-s01), painted from the first bytes
+ * of HTML so the visitor sees the site at once. On the home page it is the
+ * page itself: the logo and menu, the hero photo with the realtor's
+ * headline in the brand font, and the search card's outline, laid out as
+ * the app lays them out, so Flutter's first frame replaces it without a
+ * jump. Elsewhere, an outline of results (search bar, filter pills, two
+ * cards). Removed on Flutter's first frame. Replaces an older loading
+ * screen in an existing index.html.
  */
-export function withAppSkeleton(html: string, t: any): string {
-  if (html.includes('id="loading" class="sk"')) return html;
-  // An index.html from before: take the text-only screen out first.
+export function withAppSkeleton(html: string, t: any, fonts: string[] = []): string {
+  if (html.includes('<!--loading:4-->')) return html;
+  // An index.html from before: take the older screen out first.
   let out = html
+    .replace(/\s*<!--loading:\d+-->[\s\S]*?<!--\/loading-->/g, '')
     .replace(/\s*<style>#loading\{[^<]*<\/style>/, '')
+    .replace(/\s*<div id="loading" class="sk"[\s\S]*?<\/p><\/div>/, '')
     .replace(/\s*<div id="loading"[^>]*>.*?<\/div>/, '')
     .replace(/\s*<script>\(function\(\)\{function go\(\)\{var e=document\.getElementById\('loading'\)[^<]*<\/script>/, '');
   const c = t.brand.colors;
-  const line = t.tagline ?? '';
+  const r = t.brand.radius;
+  const hero = t.home?.hero;
+  const heroTitle: string = hero?.title ?? t.tagline ?? t.name;
+  const heroText: string | undefined = hero?.text;
+  const heroPhoto = Array.isArray(hero?.images) && hero.images.length > 0 ? 'assets/assets/tenant/home-hero-1.webp' : null;
+  const display: string = t.brand.fonts?.display ?? 'system-ui';
+  const body: string = t.brand.fonts?.body ?? 'system-ui';
+  // The headline and its line in the brand fonts, from the font files the app loads anyway (preloaded).
+  const fileOf = (family: string, weight: string) => fonts.find((f) => f.includes(`${family.replace(/\s+/g, '')}-${weight}.`));
+  const face = [
+    [display, 'SemiBold', 600],
+    [body, 'Regular', 400],
+  ]
+    .map(([family, w, n]) => [family, fileOf(family as string, w as string), n])
+    .filter(([, f]) => f)
+    .map(([family, f, n]) => `@font-face{font-family:"${family}";font-weight:${n};font-display:swap;src:url(assets/${f})}`)
+    .join('');
+  const sans = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  const shimmer = `background:linear-gradient(90deg,${c.surfaceAlt} 25%,${c.surface} 50%,${c.surfaceAlt} 75%);background-size:200% 100%;animation:sk 1.2s ease-in-out infinite`;
   const style =
-    `<style>#loading{position:fixed;inset:0;z-index:9;overflow:hidden;pointer-events:none;background:${c.background};font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}` +
-    `#loading .sk-in{max-width:1100px;margin:0 auto;padding:0 16px}` +
-    `#loading .sk-top{display:flex;align-items:center;justify-content:space-between;height:64px;border-bottom:1px solid ${c.border};padding:0 16px}` +
-    `#loading .sk-top img{height:44px}` +
-    `#loading .sk-b,#loading .sk-c i{background:linear-gradient(90deg,${c.surfaceAlt} 25%,${c.surface} 50%,${c.surfaceAlt} 75%);background-size:200% 100%;animation:sk 1.2s ease-in-out infinite;border-radius:${t.brand.radius.sm}px;display:block}` +
-    `#loading .sk-login{width:84px;height:36px;border-radius:999px}` +
-    `#loading .sk-search{height:44px;margin:12px 0 8px}` +
-    `#loading .sk-pills{display:flex;gap:8px;margin-bottom:16px}#loading .sk-pills .sk-b{height:32px;width:96px;border-radius:999px}` +
-    `#loading .sk-c{margin-bottom:16px;border:1px solid ${c.border};border-radius:${t.brand.radius.md}px;overflow:hidden}` +
-    `#loading .sk-c i.p{height:200px;border-radius:0}#loading .sk-c i{height:14px;margin:12px}#loading .sk-c i.w6{width:60%}#loading .sk-c i.w4{width:40%}` +
-    `#loading .sk-name{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}` +
-    `@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}@media (prefers-reduced-motion:reduce){#loading .sk-b,#loading .sk-c i{animation:none}}</style>`;
-  const card = '<div class="sk-c"><i class="p"></i><i class="w6"></i><i class="w4"></i></div>';
+    `<style>${face}#loading{position:fixed;inset:0;z-index:9;overflow:hidden;pointer-events:none;background:${c.background};font-family:${sans};color:${c.text}}#loading *{box-sizing:border-box}` +
+    `#loading .b{${shimmer};border-radius:${r.sm}px;display:block}` +
+    // Phones: the menu button, the logo in the middle and the Log in pill, as the app's top bar; the tab bar at the foot.
+    `#loading .top{display:flex;align-items:center;justify-content:space-between;height:64px;padding:0 16px}` +
+    `#loading .top img{height:44px}#loading .burger{width:48px;height:48px;border-radius:50%}#loading .menu{display:none;gap:8px;margin-left:24px}#loading .menu .b{width:56px;height:20px}` +
+    `#loading .login{width:76px;height:44px;border-radius:999px;background:${c.primary};animation:none}` +
+    `#loading .tabs{position:fixed;left:0;right:0;bottom:0;height:80px;display:flex;justify-content:space-around;align-items:center;background:${c.surface}}#loading .tabs .b{width:48px;height:36px;border-radius:16px}` +
+    `#loading .in{max-width:1200px;margin:0 auto;padding:16px}` +
+    // Home: the hero and the search card over its bottom edge.
+    `#loading .hero{position:relative;display:flex;flex-direction:column;justify-content:center;border-radius:${r.md}px;overflow:hidden;min-height:120px;padding:24px 24px 48px;background:${c.primary}${heroPhoto ? ` url(${heroPhoto}) center/cover` : ''};color:#fff}` +
+    `#loading .hero:before{content:"";position:absolute;inset:0;background:rgba(0,0,0,.45)}` +
+    `#loading .hero h1,#loading .hero p{position:relative;margin:0}` +
+    `#loading .hero h1{font:600 24px/1.33 "${display}",${sans}}#loading .hero p{margin-top:8px;font:400 16px/1.5 "${body}",${sans};letter-spacing:.5px}` +
+    `#loading .card{position:relative;margin:-24px 8px 0;background:${c.surface};border-radius:${r.md}px;box-shadow:0 1px 4px rgba(0,0,0,.18);padding:16px}` +
+    `#loading .chips{display:flex;gap:8px;margin-bottom:12px}#loading .chips .b{width:64px;height:32px;border-radius:999px}` +
+    `#loading .field{height:48px}#loading .go{height:40px;margin-top:8px}` +
+    // Results: the search bar, the pills and two cards.
+    `#loading .search{height:44px;margin:0 0 8px}` +
+    `#loading .pills{display:flex;gap:8px;margin-bottom:16px}#loading .pills .b{height:32px;width:96px;border-radius:999px}` +
+    `#loading .c{margin-bottom:16px;border:1px solid ${c.border};border-radius:${r.md}px;overflow:hidden}` +
+    `#loading .c i{display:block;${shimmer};height:14px;margin:12px;border-radius:${r.sm}px}#loading .c i.p{height:200px;margin:0;border-radius:0}#loading .c i.w6{width:60%}#loading .c i.w4{width:40%}` +
+    `#loading.home .res,#loading:not(.home) .home{display:none}` +
+    // Wide screens, as the app from 840 px: the menu in the bar, a taller hero, the card inset more.
+    `@media (min-width:840px){#loading .top{height:80px;justify-content:flex-start;border-bottom:1px solid ${c.border};padding:0 max(16px,calc((100% - 1200px)/2 + 16px))}#loading .top img{height:56px}#loading .menu{display:flex}` +
+    `#loading .burger,#loading .tabs{display:none}#loading .login{margin-left:auto;width:172px;height:40px;border-radius:${r.sm}px;background:none;border:1px solid ${c.borderStrong}}` +
+    `#loading .hero{min-height:220px}#loading .card{margin:-24px 24px 0}#loading .go{display:none}}` +
+    `@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}@media (prefers-reduced-motion:reduce){#loading .b,#loading .c i{animation:none}}</style>`;
+  const card = '<div class="c"><i class="p"></i><i class="w6"></i><i class="w4"></i></div>';
   const div =
-    `<div id="loading" class="sk" aria-hidden="true">` +
-    `<div class="sk-top"><img src="assets/assets/tenant/logo-horizontal.png" alt=""><span class="sk-b sk-login"></span></div>` +
-    `<div class="sk-in"><span class="sk-b sk-search"></span><div class="sk-pills"><span class="sk-b"></span><span class="sk-b"></span><span class="sk-b"></span></div>${card}${card}</div>` +
-    `<p class="sk-name">${esc(t.name)}${line ? `<small>${esc(line)}</small>` : ''}</p></div>`;
-  // Gone on Flutter's first frame; after 15 s at the latest, so it can never cover the app.
-  const remove = `<script>(function(){function go(){var e=document.getElementById('loading');if(e)e.remove();}window.addEventListener('flutter-first-frame',go);setTimeout(go,15000);})();</script>`;
-  return out.replace(/<head>/, `<head>\n  ${style}`).replace(/<body>/, `<body>\n  ${div}\n  ${remove}`);
+    `<div id="loading" aria-hidden="true">` +
+    `<div class="top"><span class="b burger"></span><img src="assets/assets/tenant/logo-horizontal.png" alt=""><span class="menu"><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span></span><span class="b login"></span></div>` +
+    `<div class="in home"><div class="hero"><h1>${esc(heroTitle)}</h1>${heroText ? `<p>${esc(heroText)}</p>` : ''}</div>` +
+    `<div class="card"><div class="chips"><span class="b"></span><span class="b"></span><span class="b"></span></div><span class="b field"></span><span class="b go"></span></div></div>` +
+    `<div class="in res"><span class="b search"></span><div class="pills"><span class="b"></span><span class="b"></span><span class="b"></span></div>${card}${card}</div>` +
+    `<div class="tabs"><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span></div>` +
+    `</div>`;
+  // Which outline: the home page's, or the results'. Gone on Flutter's first frame; after 15 s at the latest.
+  const script =
+    `<script>(function(){var e=document.getElementById('loading');if(e&&location.pathname.replace(/\\/+$/,'')==='')e.className='home';` +
+    `function go(){var e=document.getElementById('loading');if(e)e.remove();}window.addEventListener('flutter-first-frame',go);setTimeout(go,15000);})();</script>`;
+  return out
+    .replace(/<head>/, `<head>\n  <!--loading:4-->${style}<!--/loading-->`)
+    .replace(/<body>/, `<body>\n  <!--loading:4-->${div}\n  ${script}<!--/loading-->`);
 }
 
 /**

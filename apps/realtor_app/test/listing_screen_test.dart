@@ -141,6 +141,17 @@ void main() {
     expect(find.textContaining('Thank you. Realtime Estates'), findsOneWidget);
   });
 
+  testWidgets('the viewing and enquiry sheets close with an X', (tester) async {
+    await open(tester, kilimani);
+    for (final action in ['Book a viewing', 'Enquire']) {
+      await tester.tap(find.text(action).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('sheet-close')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('sheet-close')), findsNothing, reason: action);
+    }
+  });
+
   testWidgets('a viewing request sends the chosen Nairobi slot', (tester) async {
     await open(tester, kilimani);
     await tester.tap(find.text('Book a viewing'));

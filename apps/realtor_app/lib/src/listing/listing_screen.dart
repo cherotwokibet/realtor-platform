@@ -1019,7 +1019,7 @@ IconData amenityIcon(String key) => switch (key.toLowerCase().replaceAll(' ', '-
       // One outlined set, so the tiles look alike.
       'furnished' => Icons.chair_outlined,
       'parking' => Icons.local_parking_outlined,
-      'security' => Icons.shield_outlined,
+      'security' => Icons.local_police_outlined,
       'cctv' => Icons.videocam_outlined,
       'borehole' => Icons.water_outlined,
       'water' => Icons.water_drop_outlined,
