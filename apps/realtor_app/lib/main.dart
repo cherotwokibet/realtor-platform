@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
 import 'src/app.dart';
@@ -44,14 +45,21 @@ Future<void> main() async {
     }
 
     final bucket = '${firebase.projectId}-media';
+    // The web reads the live homes from one small, cached file first (P3-s01).
+    final index = kIsWeb ? ListingIndex.url(Uri.base.resolve('/api/listings.json'), bucket: bucket) : null;
+    final firestoreSearch = once(() => FirestoreListingSearch(FirebaseFirestore.instance, bucket: bucket));
+    Future<List<ListingSummary>> fromFirestore(Purpose p) => firestoreSearch.then((s) => s.rows(p));
     // On the web, "Get alerts" sign-in links come back to this site.
     overrides.addAll([
       // Homes from the last visit show at once; fresh ones follow (P3-s01).
       listingSearchProvider.overrideWithValue(
-        SnapshotListingSearch(once(() => FirestoreListingSearch(FirebaseFirestore.instance, bucket: bucket)), store: PrefsListingSnapshotStore()),
+        SnapshotListingSearch(
+          (p) => index == null ? fromFirestore(p) : index.rows(p).catchError((Object _) => fromFirestore(p)),
+          store: PrefsListingSnapshotStore(),
+        ),
       ),
       listingRepositoryProvider.overrideWithValue(
-        DeferredListingRepository(once(() => FirestoreListingRepository(FirebaseFirestore.instance, bucket: bucket))),
+        DeferredListingRepository(once(() => FirestoreListingRepository(FirebaseFirestore.instance, bucket: bucket)), quickLive: index?.live),
       ),
       customerAccountProvider.overrideWithValue(DeferredCustomerAccount(once(() => FirebaseCustomerAccount(
             FirebaseAuth.instance,

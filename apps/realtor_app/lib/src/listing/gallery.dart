@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -329,8 +330,9 @@ class _GalleryDialogState extends State<_GalleryDialog> {
   final _grid = ScrollController();
   static const _gap = 8.0;
 
-  /// The scrollbar's lane at the right edge; the close button sits above it.
-  static const _lane = 28.0;
+  /// The right margin, as on Bayut: the scrollbar runs down its middle and
+  /// the close button sits at its top, so the two line up.
+  static const _lane = 40.0;
   double _tileWidth = 0;
 
   @override
@@ -402,19 +404,21 @@ class _GalleryDialogState extends State<_GalleryDialog> {
     ];
     final shown = _shown;
 
+    final view = MediaQuery.sizeOf(context);
     return Dialog(
       key: const Key('gallery'),
-      insetPadding: EdgeInsets.all(b.spacing.xl),
+      // Bayut's size: about 1010 wide and four fifths of the window high.
+      insetPadding: EdgeInsets.symmetric(horizontal: b.spacing.lg, vertical: (view.height * 0.1).clamp(b.spacing.lg, 200.0)),
       clipBehavior: Clip.antiAlias,
       // Small corners, as on the big portals.
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1000, maxHeight: 760),
+        constraints: const BoxConstraints(maxWidth: 1010, maxHeight: 760),
         child: Stack(children: [
           Padding(
             // The right edge is the scrollbar's lane; the close button is
             // above it, so the two line up, as on the big portals.
-            padding: EdgeInsets.fromLTRB(b.spacing.lg, b.spacing.lg + 8, 0, b.spacing.lg),
+            padding: const EdgeInsets.fromLTRB(24, 24, 0, 24),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Padding(
                 padding: const EdgeInsets.only(right: _lane),
@@ -423,13 +427,14 @@ class _GalleryDialogState extends State<_GalleryDialog> {
                   child: Padding(padding: const EdgeInsets.all(4), child: Row(children: tabs)),
                 ),
               ),
-              SizedBox(height: b.spacing.md),
+              const SizedBox(height: 13),
               Expanded(
                 child: _tab == _GalleryTab.map && hasMap
                     ? Padding(
                         padding: const EdgeInsets.only(right: _lane),
                         child: ClipRRect(
-                            borderRadius: BorderRadius.circular(b.radiusSm), child: ListingMap(lat: widget.lat!, lng: widget.lng!, title: widget.title)),
+                            borderRadius: BorderRadius.circular(b.radiusSm),
+                            child: ListingMap(lat: widget.lat!, lng: widget.lng!, title: widget.title, label: widget.title)),
                       )
                     : LayoutBuilder(builder: (context, box) {
                         _tileWidth = (box.maxWidth - _lane - _gap) / 2;
@@ -487,15 +492,16 @@ class _GalleryDialogState extends State<_GalleryDialog> {
             ]),
           ),
           Positioned(
-            top: 4,
+            top: 2,
             right: 0,
-            width: _lane + 8,
+            width: _lane,
+            height: _lane,
             child: IconButton(
+              key: const Key('gallery-close'),
               tooltip: 'Close',
-              visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close),
+              icon: const Icon(Icons.close, size: 24),
             ),
           ),
         ]),
@@ -674,10 +680,13 @@ class _ViewerState extends State<_Viewer> {
 /// page and says how to zoom), and opened full screen. Full screen, every
 /// gesture works: drag, pinch, scroll and double-tap.
 class ListingMap extends ConsumerStatefulWidget {
-  const ListingMap({super.key, required this.lat, required this.lng, required this.title, this.fullScreen = false});
+  const ListingMap({super.key, required this.lat, required this.lng, required this.title, this.fullScreen = false, this.label});
   final double lat, lng;
   final String title;
   final bool fullScreen;
+
+  /// A line in a white bubble over the pin (the home's title), as on Bayut.
+  final String? label;
 
   @override
   ConsumerState<ListingMap> createState() => _ListingMapState();
@@ -707,7 +716,7 @@ class _ListingMapState extends ConsumerState<ListingMap> {
 
   void _openFull() => showDialog<void>(
         context: context,
-        builder: (_) => Dialog.fullscreen(child: ListingMap(lat: widget.lat, lng: widget.lng, title: widget.title, fullScreen: true)),
+        builder: (_) => Dialog.fullscreen(child: ListingMap(lat: widget.lat, lng: widget.lng, title: widget.title, label: widget.label, fullScreen: true)),
       );
 
   @override
@@ -725,14 +734,27 @@ class _ListingMapState extends ConsumerState<ListingMap> {
     final zoom = DecoratedBox(
       decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(b.radiusSm), boxShadow: shadow),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        IconButton(key: const Key('map-zoom-in'), tooltip: 'Zoom in', icon: const Icon(Icons.add), onPressed: () => _zoom(1)),
-        SizedBox(width: 28, child: Divider(height: 1, color: scheme.outlineVariant)),
-        IconButton(key: const Key('map-zoom-out'), tooltip: 'Zoom out', icon: const Icon(Icons.remove), onPressed: () => _zoom(-1)),
+        SizedBox.square(
+            dimension: 30,
+            child: IconButton(
+                key: const Key('map-zoom-in'), tooltip: 'Zoom in', padding: EdgeInsets.zero, icon: const Icon(Icons.add, size: 20), onPressed: () => _zoom(1))),
+        SizedBox(width: 22, child: Divider(height: 1, color: scheme.outlineVariant)),
+        SizedBox.square(
+            dimension: 30,
+            child: IconButton(
+                key: const Key('map-zoom-out'),
+                tooltip: 'Zoom out',
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.remove, size: 20),
+                onPressed: () => _zoom(-1))),
       ]),
     );
+    // White circles, as Bayut's full-screen button.
     Widget round(IconData icon, String tip, VoidCallback onTap, {Key? key}) => DecoratedBox(
-          decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(b.radiusSm), boxShadow: shadow),
-          child: IconButton(key: key, tooltip: tip, icon: Icon(icon), onPressed: onTap),
+          decoration: BoxDecoration(color: scheme.surface, shape: BoxShape.circle, boxShadow: shadow),
+          child: SizedBox.square(
+              dimension: 40,
+              child: IconButton(key: key, tooltip: tip, padding: EdgeInsets.zero, icon: Icon(icon, size: 24, color: b.textMuted), onPressed: onTap)),
         );
     Widget pill(String label, IconData icon, VoidCallback onTap, {Key? key, bool primary = false}) => Material(
           color: primary ? scheme.primary : scheme.surface,
@@ -775,10 +797,10 @@ class _ListingMapState extends ConsumerState<ListingMap> {
         MarkerLayer(markers: [
           Marker(
             point: _here,
-            width: 48,
-            height: 48,
+            width: 280,
+            height: widget.label == null ? 64 : 116,
             alignment: Alignment.topCenter,
-            child: Icon(Icons.location_on, size: 48, color: scheme.primary, shadows: [Shadow(color: scheme.scrim.withValues(alpha: 0.35), blurRadius: 6)]),
+            child: HomePin(label: widget.label),
           ),
         ]),
         // The tiles' owners ask to be named.
@@ -859,6 +881,60 @@ class _ListingMapState extends ConsumerState<ListingMap> {
       ),
     );
   }
+}
+
+/// The home on the map, as on Bayut: a round pin in the brand colour with a
+/// house in it and a dot where it points, under an optional white bubble
+/// that names the place.
+class HomePin extends StatelessWidget {
+  const HomePin({super.key, this.label});
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final shadow = [BoxShadow(color: scheme.scrim.withValues(alpha: 0.25), blurRadius: 6, offset: const Offset(0, 2))];
+    return Column(key: const Key('home-pin'), mainAxisAlignment: MainAxisAlignment.end, children: [
+      if (label != null) ...[
+        Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(4), boxShadow: shadow),
+          child: Text(label!, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodySmall?.copyWith(color: scheme.onSurface)),
+        ),
+        const SizedBox(height: 8),
+      ],
+      DecoratedBox(
+        decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle, boxShadow: shadow),
+        child: SizedBox.square(dimension: 46, child: Icon(Icons.home_rounded, size: 26, color: scheme.onPrimary)),
+      ),
+      CustomPaint(size: const Size(14, 8), painter: _PinTip(scheme.primary)),
+      const SizedBox(height: 2),
+      DecoratedBox(
+        decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle, border: Border.all(color: scheme.surface, width: 1.5)),
+        child: const SizedBox.square(dimension: 7),
+      ),
+    ]);
+  }
+}
+
+class _PinTip extends CustomPainter {
+  _PinTip(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = ui.Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(path.shift(const Offset(0, -1)), Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_PinTip old) => old.color != color;
 }
 
 /// Plays a listing video where it is: the poster shows while it loads

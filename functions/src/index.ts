@@ -40,6 +40,7 @@ import * as pages from './api/pages';
 import * as projects from './api/projects';
 import * as recommendations from './api/recommendations';
 import { refreshAreaStats } from './api/areas';
+import { INDEX_CACHE, listingIndex as buildListingIndex } from './api/listing-index';
 import { fcmSender, sweepSavedSearches } from './api/alerts';
 import { dataRequest as runDataRequest } from './api/privacy';
 import { purgeExpired } from './api/retention';
@@ -117,6 +118,17 @@ export const dataRequest = onCall((req) => runDataRequest(getFirestore(), caller
 // matching inboxes, so an alert lands within 5 minutes of a listing going live.
 // A quiet run is one small read (config/alerts) and one empty query. Phones
 // that turned alerts on also get a push (FCM, no key needed on Android).
+// The live homes as one small, CDN-cached file (P3-s01): Hosting serves it
+// at /api/listings.json (firebase.json) and the app's index.html preloads it.
+export const listingIndex = onRequest({ memory: '512MiB' }, async (req, res) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.status(405).end();
+    return;
+  }
+  res.set('Cache-Control', INDEX_CACHE);
+  res.json(await buildListingIndex(getFirestore()));
+});
+
 export const savedSearchAlerts = onSchedule({ schedule: 'every 5 minutes', timeZone: 'Africa/Nairobi', retryCount: 1 }, async () => {
   const r = await sweepSavedSearches(getFirestore(), new Date(), fcmSender(getMessaging()));
   console.log(`alerts: ${r.listings} new listings, ${r.alerts} alerts, ${r.pushed} pushes`);

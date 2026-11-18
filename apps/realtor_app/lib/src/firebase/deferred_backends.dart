@@ -18,8 +18,12 @@ class DeferredListingSearch implements ListingSearch {
 }
 
 class DeferredListingRepository implements ListingRepository {
-  DeferredListingRepository(this._inner);
+  DeferredListingRepository(this._inner, {this.quickLive});
   final Future<ListingRepository> _inner;
+
+  /// Newest homes without waiting for the backend (the listings file); on
+  /// failure the backend answers.
+  final Future<List<ListingSummary>> Function({String? area, String? agentId, int limit})? quickLive;
 
   @override
   Future<ListingDetail?> bySlug(String slug) async => (await _inner).bySlug(slug);
@@ -28,8 +32,17 @@ class DeferredListingRepository implements ListingRepository {
   @override
   Future<AgentProfile?> agent(String id) async => (await _inner).agent(id);
   @override
-  Future<List<ListingSummary>> live({String? area, String? agentId, int limit = 30}) async =>
-      (await _inner).live(area: area, agentId: agentId, limit: limit);
+  Future<List<ListingSummary>> live({String? area, String? agentId, int limit = 30}) async {
+    if (quickLive case final quick?) {
+      try {
+        return await quick(area: area, agentId: agentId, limit: limit);
+      } on Object {
+        // Fall through to the backend.
+      }
+    }
+    return (await _inner).live(area: area, agentId: agentId, limit: limit);
+  }
+
   @override
   Future<List<AreaGuide>> areas() async => (await _inner).areas();
   @override
@@ -46,20 +59,17 @@ class DeferredLeadRepository implements LeadRepository {
   Future<void> enquire({required String listingId, required String phone, String? name, String? message}) async =>
       (await _inner).enquire(listingId: listingId, phone: phone, name: name, message: message);
   @override
-  Future<void> logTap({required String listingId, required String channel}) async =>
-      (await _inner).logTap(listingId: listingId, channel: channel);
+  Future<void> logTap({required String listingId, required String channel}) async => (await _inner).logTap(listingId: listingId, channel: channel);
   @override
   Future<void> logRecommendation({required String listingId, required String event}) async =>
       (await _inner).logRecommendation(listingId: listingId, event: event);
   @override
-  Future<List<String>?> openTimes({required String listingId, required String day}) async =>
-      (await _inner).openTimes(listingId: listingId, day: day);
+  Future<List<String>?> openTimes({required String listingId, required String day}) async => (await _inner).openTimes(listingId: listingId, day: day);
   @override
   Future<BookedViewing> bookViewing({required String listingId, required String slot, required String name, required String phone}) async =>
       (await _inner).bookViewing(listingId: listingId, slot: slot, name: name, phone: phone);
   @override
-  Future<void> payViewingFee({required String viewingId, required String phone}) async =>
-      (await _inner).payViewingFee(viewingId: viewingId, phone: phone);
+  Future<void> payViewingFee({required String viewingId, required String phone}) async => (await _inner).payViewingFee(viewingId: viewingId, phone: phone);
 }
 
 class DeferredCustomerAccount implements CustomerAccount {
