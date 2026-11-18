@@ -11,6 +11,7 @@ import 'ad_slot.dart';
 import 'nav.dart';
 import 'phone_nav.dart';
 import 'providers.dart';
+import 'search/area_suggest.dart';
 import 'search/purpose.dart';
 import 'site_footer.dart';
 import 'search/recent_searches.dart';
@@ -31,10 +32,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   static const _types = ['bedsitter', 'single-room', 'apartment', 'maisonette', 'townhouse', 'hostel'];
 
+  /// The home search's property types, in the realtor's order.
+  static const _searchTypes = ['single-room', 'bedsitter', 'studio', 'apartment'];
+
   // The filter row under the hero (plain search; conversational search has its own field).
   final _area = TextEditingController();
   String? _type;
-  int? _minBeds, _maxPrice;
+
+  /// Bedrooms: 1, 2 or 3 exactly, or [_bedsUpFrom] and more.
+  int? _beds;
+  static const _bedsUpFrom = 4;
+
+  /// The chosen top price, one of [_prices] for the purpose.
+  _Price? _price;
 
   @override
   void dispose() {
@@ -45,15 +55,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _clear() => setState(() {
         _area.clear();
         _type = null;
-        _minBeds = null;
-        _maxPrice = null;
+        _beds = null;
+        _price = null;
       });
 
-  /// Top prices offered for each purpose (KES): a month, in all, or a night.
-  static List<int> _prices(Purpose p) => switch (p) {
-        Purpose.rent => const [10000, 20000, 30000, 50000, 80000, 120000, 200000],
-        Purpose.sale => const [3000000, 5000000, 10000000, 20000000, 50000000],
-        Purpose.shortStay => const [3000, 5000, 8000, 12000, 20000],
+  /// Top prices offered for each purpose (KES): a month, in all, or a
+  /// night; the last is "that and more".
+  static List<_Price> _prices(Purpose p) => switch (p) {
+        Purpose.rent => const [_Price(max: 10000), _Price(max: 30000), _Price(max: 60000), _Price(min: 60000)],
+        Purpose.sale => const [_Price(max: 3000000), _Price(max: 6000000), _Price(max: 10000000), _Price(min: 10000000)],
+        Purpose.shortStay => const [_Price(max: 3000), _Price(max: 5000), _Price(max: 10000), _Price(min: 10000)],
       };
 
   void _search({String? q, String? type}) {
@@ -69,8 +80,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       q: area == null && typed != null && typed.isNotEmpty ? q : null,
       types: [if (type != null) type],
       areas: [if (area != null) area],
-      minBeds: _minBeds,
-      maxPriceKES: _maxPrice,
+      beds: [if (_beds != null && _beds! < _bedsUpFrom) _beds!],
+      minBeds: _beds != null && _beds! >= _bedsUpFrom ? _beds : null,
+      minPriceKES: _price?.min,
+      maxPriceKES: _price?.max,
     ).toUri().toString());
   }
 
@@ -102,8 +115,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         if (tenant.features.isOn(p.feature)) p
     ];
     if (!purposes.contains(_purpose) && purposes.isNotEmpty) _purpose = purposes.first;
-    if (_maxPrice != null && !_prices(_purpose).contains(_maxPrice)) _maxPrice = null;
-    final whatsapp = tenant.whatsappLink('Hello ${tenant.name}, I am looking for a home.');
+    if (_price != null && !_prices(_purpose).contains(_price)) _price = null;
     final wide = MediaQuery.sizeOf(context).width >= wideLayoutFrom;
     final hero = tenant.home.hero ?? HomeBand(title: tenant.tagline ?? tenant.name);
     final banner = tenant.home.banner;
@@ -133,14 +145,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               orElse: _Filters(
                 area: _area,
                 type: _type,
-                minBeds: _minBeds,
-                maxPrice: _maxPrice,
-                types: _types,
+                beds: _beds,
+                bedsUpFrom: _bedsUpFrom,
+                price: _price,
+                types: _searchTypes,
                 prices: _prices(_purpose),
                 period: _purpose.period,
                 onType: (v) => setState(() => _type = v),
-                onBeds: (v) => setState(() => _minBeds = v),
-                onPrice: (v) => setState(() => _maxPrice = v),
+                onBeds: (v) => setState(() => _beds = v),
+                onPrice: (v) => setState(() => _price = v),
                 onSearch: () => _search(q: _area.text, type: _type),
                 onClear: _clear,
               ),
@@ -180,6 +193,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     ];
 
+    // The page scrolls across the whole window, so its scrollbar is at the
+    // window's edge, as on the big portals; the content keeps its width.
+    final side = ((MediaQuery.sizeOf(context).width - maxContentWidth) / 2).clamp(0.0, double.infinity) + b.spacing.gutter;
     return Scaffold(
       // Wide screens have the logo in the top navigation instead.
       drawer: wide ? null : const AppDrawer(),
@@ -187,7 +203,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: CustomScrollView(slivers: [
         if (!wide) const PhoneTopBar(),
         SliverPadding(
-          padding: EdgeInsets.all(b.spacing.gutter),
+          padding: EdgeInsets.fromLTRB(side, b.spacing.gutter, side, b.spacing.gutter),
           sliver: SliverList.list(children: [
             _PhotoBand(key: const Key('home-hero'), band: hero, name: 'hero', minHeight: wide ? 220 : 120, large: true),
             // The search sits over the bottom edge of the photo.
@@ -213,21 +229,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ]),
         ),
         // The site footer runs the width of the window.
-        SliverToBoxAdapter(child: Padding(padding: EdgeInsets.only(top: b.spacing.xl), child: const SiteFooter())),
+        SliverToBoxAdapter(child: Padding(padding: EdgeInsets.only(top: b.spacing.xl), child: SiteFooter(width: maxContentWidth + 2 * b.spacing.gutter))),
       ]),
-      // In-app chat lives in its own section when on; otherwise WhatsApp handoff.
-      bottomNavigationBar: !tenant.features.chat && whatsapp != null
-          ? SafeArea(
-              child: Padding(
-                padding: EdgeInsets.all(b.spacing.md),
-                child: FilledButton.icon(
-                  onPressed: () => ref.read(urlOpenerProvider)(whatsapp),
-                  icon: const Icon(Icons.chat),
-                  label: const Text('Enquire on WhatsApp'),
-                ),
-              ),
-            )
-          : null,
     );
   }
 }
@@ -361,8 +364,9 @@ class _Filters extends StatelessWidget {
   const _Filters({
     required this.area,
     required this.type,
-    required this.minBeds,
-    required this.maxPrice,
+    required this.beds,
+    required this.bedsUpFrom,
+    required this.price,
     required this.types,
     required this.prices,
     required this.period,
@@ -374,11 +378,14 @@ class _Filters extends StatelessWidget {
   });
   final TextEditingController area;
   final String? type, period;
-  final int? minBeds, maxPrice;
+  final int? beds;
+  final int bedsUpFrom;
+  final _Price? price;
   final List<String> types;
-  final List<int> prices;
+  final List<_Price> prices;
   final ValueChanged<String?> onType;
-  final ValueChanged<int?> onBeds, onPrice;
+  final ValueChanged<int?> onBeds;
+  final ValueChanged<_Price?> onPrice;
   final VoidCallback onSearch, onClear;
 
   @override
@@ -397,21 +404,27 @@ class _Filters extends StatelessWidget {
           onChanged: onChanged,
         );
     final fields = <Widget>[
-      TextField(
+      // Areas are suggested while typing (as on the big portals).
+      AreaSuggestField(
         controller: area,
-        textInputAction: TextInputAction.search,
-        onSubmitted: (_) => onSearch(),
-        decoration: const InputDecoration(
-          hintText: 'Area or estate, e.g. Kilimani, Ruaka',
-          prefixIcon: Icon(Icons.search),
+        field: (context, controller, focus) => TextField(
+          key: const Key('home-area'),
+          controller: controller,
+          focusNode: focus,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) => onSearch(),
+          decoration: const InputDecoration(
+            hintText: 'Area or estate, e.g. Kilimani, Ruaka',
+            prefixIcon: Icon(Icons.search),
+          ),
         ),
       ),
       menu<String>('Property type', type, [for (final t in types) (t, typeName(t))], onType),
-      menu<int>('Bedrooms', minBeds, const [(1, '1+'), (2, '2+'), (3, '3+'), (4, '4+')], onBeds),
-      menu<int>(
+      menu<int>('Bedrooms', beds, [for (var n = 1; n <= bedsUpFrom; n++) (n, n == bedsUpFrom ? '$n +' : '$n')], onBeds),
+      menu<_Price>(
         period == null ? 'Top price' : 'Top price a $period',
-        maxPrice,
-        [for (final p in prices) (p, formatKes(p))],
+        price,
+        [for (final p in prices) (p, p.label)],
         onPrice,
       ),
     ];
@@ -462,4 +475,17 @@ class _Newest extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// One top-price choice: up to [max], or [min] and more.
+class _Price {
+  const _Price({this.min, this.max});
+  final int? min, max;
+
+  String get label => max != null ? formatKes(max!, compact: max! >= 1000000) : '${formatKes(min!, compact: min! >= 1000000)} +';
+
+  @override
+  bool operator ==(Object other) => other is _Price && other.min == min && other.max == max;
+  @override
+  int get hashCode => Object.hash(min, max);
 }

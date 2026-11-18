@@ -798,7 +798,7 @@ class _ListingMapState extends ConsumerState<ListingMap> {
           Marker(
             point: _here,
             width: 280,
-            height: widget.label == null ? 64 : 116,
+            height: widget.label == null ? 60 : 112,
             alignment: Alignment.topCenter,
             child: HomePin(label: widget.label),
           ),
@@ -905,36 +905,55 @@ class HomePin extends StatelessWidget {
         ),
         const SizedBox(height: 8),
       ],
-      DecoratedBox(
-        decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle, boxShadow: shadow),
-        child: SizedBox.square(dimension: 46, child: Icon(Icons.home_rounded, size: 26, color: scheme.onPrimary)),
-      ),
-      CustomPaint(size: const Size(14, 8), painter: _PinTip(scheme.primary)),
-      const SizedBox(height: 2),
-      DecoratedBox(
-        decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle, border: Border.all(color: scheme.surface, width: 1.5)),
-        child: const SizedBox.square(dimension: 7),
-      ),
+      // One drawn shape (no icon font to wait for): a teardrop in the brand
+      // colour with a white rim and a house in it, and a soft spot on the ground.
+      CustomPaint(size: const Size(44, 60), painter: _HomePinPainter(fill: scheme.primary, rim: scheme.surface, shade: scheme.scrim)),
     ]);
   }
 }
 
-class _PinTip extends CustomPainter {
-  _PinTip(this.color);
-  final Color color;
+class _HomePinPainter extends CustomPainter {
+  _HomePinPainter({required this.fill, required this.rim, required this.shade});
+  final Color fill, rim, shade;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = ui.Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width, 0)
-      ..lineTo(size.width / 2, size.height)
+    final w = size.width, r = w / 2, tip = size.height - 6;
+    // The spot on the ground under the point.
+    canvas.drawOval(Rect.fromCenter(center: Offset(r, size.height - 4), width: 14, height: 5), Paint()..color = shade.withValues(alpha: 0.25));
+    // A teardrop: a circle whose sides run down to the point.
+    final drop = ui.Path()
+      ..moveTo(r, tip)
+      ..cubicTo(r - 6, tip - 10, 1, r + 12, 1, r)
+      ..arcToPoint(Offset(w - 1, r), radius: Radius.circular(r - 1))
+      ..cubicTo(w - 1, r + 12, r + 6, tip - 10, r, tip)
       ..close();
-    canvas.drawPath(path.shift(const Offset(0, -1)), Paint()..color = color);
+    canvas.drawShadow(drop, shade, 3, false);
+    canvas.drawPath(drop, Paint()..color = fill);
+    canvas.drawPath(
+        drop,
+        Paint()
+          ..color = rim
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2);
+    // The house: a roof and a body with a door.
+    final ink = Paint()..color = rim;
+    final cx = r, cy = r + 1;
+    final roof = ui.Path()
+      ..moveTo(cx - 11, cy - 1)
+      ..lineTo(cx, cy - 10)
+      ..lineTo(cx + 11, cy - 1)
+      ..close();
+    canvas.drawPath(roof, ink);
+    final body = ui.Path()
+      ..addRRect(RRect.fromLTRBR(cx - 8, cy - 2, cx + 8, cy + 9, const Radius.circular(1.5)))
+      ..addRect(Rect.fromLTWH(cx - 2.5, cy + 3, 5, 6))
+      ..fillType = PathFillType.evenOdd;
+    canvas.drawPath(body, ink);
   }
 
   @override
-  bool shouldRepaint(_PinTip old) => old.color != color;
+  bool shouldRepaint(_HomePinPainter old) => old.fill != fill || old.rim != rim || old.shade != shade;
 }
 
 /// Plays a listing video where it is: the poster shows while it loads

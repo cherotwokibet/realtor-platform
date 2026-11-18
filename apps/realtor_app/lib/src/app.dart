@@ -190,11 +190,14 @@ class _SectionShell extends ConsumerWidget {
     // at the window's edge; they lay the menu and the page width out themselves.
     final first = location.split('/').where((s) => s.isNotEmpty).firstOrNull;
     if (first != null && Purpose.fromPath(first) != null) return backToSearch(Scaffold(body: child));
+    final nav = PreferredSize(
+      preferredSize: const Size.fromHeight(TopNav.height),
+      child: TopNav(sections: sections, location: location),
+    );
+    // Home runs the window's width too (its scrollbar at the edge) and keeps its own content width.
+    if (first == null) return backToSearch(Scaffold(appBar: nav, body: child));
     return backToSearch(Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(TopNav.height),
-        child: TopNav(sections: sections, location: location),
-      ),
+      appBar: nav,
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: maxContentWidth), child: child),

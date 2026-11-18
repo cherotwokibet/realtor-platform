@@ -8,11 +8,9 @@ import '../providers.dart';
 /// How long a lead's details are kept (D12); quoted on the consent tick.
 const _retentionMonths = 24;
 
-Future<void> showEnquirySheet(BuildContext context, {required ListingSummary listing}) =>
-    _show(context, (_) => _LeadSheet(listing: listing, viewing: false));
+Future<void> showEnquirySheet(BuildContext context, {required ListingSummary listing}) => _show(context, (_) => _LeadSheet(listing: listing, viewing: false));
 
-Future<void> showViewingSheet(BuildContext context, {required ListingSummary listing}) =>
-    _show(context, (_) => _LeadSheet(listing: listing, viewing: true));
+Future<void> showViewingSheet(BuildContext context, {required ListingSummary listing}) => _show(context, (_) => _LeadSheet(listing: listing, viewing: true));
 
 Future<void> _show(BuildContext context, WidgetBuilder builder) => showModalBottomSheet<void>(
       context: context,
@@ -169,10 +167,12 @@ class _LeadSheetState extends ConsumerState<_LeadSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Viewing requested', style: text.titleLarge),
+          Row(children: [
+            Expanded(child: Text('Viewing requested', style: text.titleLarge)),
+            IconButton(key: const Key('sheet-close'), tooltip: 'Close', icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+          ]),
           SizedBox(height: b.spacing.sm),
-          Text('${tenant.name} will call or WhatsApp you to confirm the time. This home has a viewing fee of $fee, paid by M-Pesa.',
-              style: text.bodyMedium),
+          Text('${tenant.name} will call or WhatsApp you to confirm the time. This home has a viewing fee of $fee, paid by M-Pesa.', style: text.bodyMedium),
           if (_notice != null) ...[
             SizedBox(height: b.spacing.md),
             Text(_notice!, style: text.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.error)),
@@ -204,7 +204,11 @@ class _LeadSheetState extends ConsumerState<_LeadSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(widget.viewing ? 'Book a viewing' : 'Ask about this home', style: text.titleLarge),
+          Row(children: [
+            Expanded(child: Text(widget.viewing ? 'Book a viewing' : 'Ask about this home', style: text.titleLarge)),
+            // A clear way out, besides dragging the sheet down.
+            IconButton(key: const Key('sheet-close'), tooltip: 'Close', icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+          ]),
           SizedBox(height: b.spacing.xs),
           Text(widget.listing.title, style: text.bodyMedium?.copyWith(color: b.textMuted)),
           if (_notice != null) ...[
@@ -279,9 +283,7 @@ class _LeadSheetState extends ConsumerState<_LeadSheet> {
               'for up to $_retentionMonths months (Data Protection Act 2019).',
               style: text.bodySmall,
             ),
-            subtitle: err('consent') == null
-                ? null
-                : Text(err('consent')!, style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error)),
+            subtitle: err('consent') == null ? null : Text(err('consent')!, style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error)),
           ),
           SizedBox(height: b.spacing.md),
           FilledButton(

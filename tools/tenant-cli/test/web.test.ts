@@ -77,19 +77,43 @@ test('old #/ links are rewritten to paths before Flutter starts, once', () => {
   assert.equal(patchIndexHtml(once, tenant('demo-homes')), once);
 });
 
-test('the app paints an outline of the page at once (logo, search, cards), gone on Flutter\'s first frame (P3-s01)', () => {
+test('the home page paints at once from the HTML: logo, hero photo and headline, search card; results get an outline (P3-s01)', () => {
   const t = tenant('realtime-estates');
-  const out = patchIndexHtml(flutterIndex, t);
-  assert.match(out, /<div id="loading" class="sk" aria-hidden="true">/);
+  const fonts = ['assets/tenant/fonts/Poppins-Regular.ttf', 'assets/tenant/fonts/Poppins-SemiBold.ttf', 'assets/tenant/fonts/Inter-Regular.ttf'];
+  const out = patchIndexHtml(flutterIndex, t, fonts);
+  assert.match(out, /<div id="loading" aria-hidden="true">/);
   assert.match(out, /<img src="assets\/assets\/tenant\/logo-horizontal.png" alt="">/);
-  assert.match(out, /class="sk-c"/);
-  assert.match(out, /<p class="sk-name">Realtime Estates Ltd<small>Live where you love<\/small><\/p>/);
+  assert.match(out, /<h1>Rent, buy or sell property in Kenya<\/h1><p>Apartments, houses and commercial spaces, hassle-free.<\/p>/);
+  assert.match(out, /url\(assets\/assets\/tenant\/home-hero-1.webp\)/);
+  assert.match(out, /@font-face\{font-family:"Poppins";font-weight:600;font-display:swap;src:url\(assets\/assets\/tenant\/fonts\/Poppins-SemiBold.ttf\)\}/);
+  assert.match(out, /@font-face\{font-family:"Inter";font-weight:400;font-display:swap;src:url\(assets\/assets\/tenant\/fonts\/Inter-Regular.ttf\)\}/);
+  assert.doesNotMatch(out, /Poppins-Regular.ttf\)\}/, 'only the headline weight of the display font');
+  assert.match(out, /class="c"/, 'the results outline');
+  assert.match(out, /e.className='home'/);
   assert.match(out, new RegExp(`#loading\\{[^}]*background:${t.brand.colors.background}`));
   assert.match(out, /prefers-reduced-motion/);
   assert.match(out, /flutter-first-frame/);
   assert.match(out, /rel="preload" href="assets\/assets\/tenant\/logo-horizontal.png" as="image"/);
   assert.match(out, /<link rel="preload" href="\/api\/listings.json" as="fetch" crossorigin="anonymous">/);
-  assert.equal(patchIndexHtml(out, t), out, 'still idempotent');
+  assert.equal(patchIndexHtml(out, t, fonts), out, 'still idempotent');
+});
+
+test('a tenant without hero photos gets the brand colour behind the headline', () => {
+  const t = structuredClone(tenant('realtime-estates'));
+  delete t.home.hero.images;
+  const out = patchIndexHtml(flutterIndex, t);
+  assert.doesNotMatch(out, /home-hero-1.webp/);
+});
+
+test('the previous outline screen is replaced, not doubled', () => {
+  const t = tenant('realtime-estates');
+  const v1 = flutterIndex
+    .replace('<head>', '<head>\n  <style>#loading{position:fixed;inset:0;z-index:9}</style>')
+    .replace('<body>', `<body>\n  <div id="loading" class="sk" aria-hidden="true"><div class="sk-top"></div><p class="sk-name">Realtime Estates Ltd</p></div>\n  <script>(function(){function go(){var e=document.getElementById('loading');if(e)e.remove();}window.addEventListener('flutter-first-frame',go);setTimeout(go,15000);})();</script>`);
+  const out = patchIndexHtml(v1, t);
+  assert.equal(out.match(/id="loading"/g)?.length, 1);
+  assert.equal(out.match(/flutter-first-frame/g)?.length, 1);
+  assert.doesNotMatch(out, /sk-name/);
 });
 
 test('an index.html with the old text-only loading screen is upgraded, not doubled', () => {

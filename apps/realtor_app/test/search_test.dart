@@ -112,29 +112,9 @@ void main() {
     expect(h.location, startsWith('/rent'));
   });
 
-  testWidgets('home WhatsApp button: hidden until a number exists, then opens wa.me', (tester) async {
-    final json = jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>;
-    (json['contact'] as Map<String, Object?>)['whatsapp'] = 'TBC';
-    await tester.pumpWidget(ProviderScope(overrides: [tenantProvider.overrideWithValue(TenantConfig.fromJson(json))], child: const RealtorApp()));
+  testWidgets('home has no WhatsApp bar along the bottom, even with a number (the footer has WhatsApp)', (tester) async {
+    await tester.pumpWidget(ProviderScope(overrides: [tenantProvider.overrideWithValue(tenant('realtime-estates'))], child: const RealtorApp()));
     await tester.pumpAndSettle();
     expect(find.text('Enquire on WhatsApp'), findsNothing);
-
-    (json['contact'] as Map<String, Object?>)['whatsapp'] = '+254700000000';
-    final opened = <Uri>[];
-    await tester.pumpWidget(ProviderScope(
-      key: UniqueKey(),
-      overrides: [
-        tenantProvider.overrideWithValue(TenantConfig.fromJson(json)),
-        urlOpenerProvider.overrideWithValue((u) async {
-          opened.add(u);
-          return true;
-        }),
-      ],
-      child: const RealtorApp(),
-    ));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Enquire on WhatsApp'));
-    expect(opened.single.host, 'wa.me');
-    expect(opened.single.path, '/254700000000');
   });
 }

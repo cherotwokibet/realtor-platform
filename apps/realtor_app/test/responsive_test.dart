@@ -39,8 +39,9 @@ void main() {
       expect(find.descendant(of: nav, matching: find.text(label)), findsOneWidget, reason: label);
     }
     expect(find.descendant(of: nav, matching: find.text('Saved')), findsNothing, reason: 'only for signed-in customers');
-    final list = tester.getSize(find.byType(CustomScrollView).first);
-    expect(list.width, lessThanOrEqualTo(1200));
+    // The page scrolls across the window (its scrollbar at the edge); the content keeps to 1200.
+    expect(tester.getSize(find.byType(CustomScrollView).first).width, 1600);
+    expect(tester.getSize(find.byKey(const Key('home-hero'))).width, lessThanOrEqualTo(1200));
 
     // The wide home page: the realtor's two bands.
     expect(find.byKey(const Key('home-hero')), findsOneWidget);
@@ -59,17 +60,30 @@ void main() {
     for (final label in ['Property type', 'Bedrooms', 'Top price a month']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
-    await tester.enterText(find.byType(TextField).first, 'Kilimani');
+    // Areas are suggested while typing; picking one fills the box.
+    await tester.enterText(find.byKey(const Key('home-area')), 'kil');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('area-suggestions')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('area-suggestion-kilimani')));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, 'Kilimani'), findsOneWidget);
     await tester.tap(find.text('Bedrooms'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('2+').last);
+    expect(find.text('4 +').last, findsOneWidget);
+    await tester.tap(find.text('2').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Top price a month'));
+    await tester.pumpAndSettle();
+    expect(find.text('KES 60,000 +').last, findsOneWidget);
+    await tester.tap(find.text('KES 30,000').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Search'));
     await tester.pumpAndSettle();
     final container = ProviderScope.containerOf(tester.element(find.byType(RealtorApp)));
     final uri = container.read(routerProvider).state.uri;
     expect(uri.path, '/rent/kilimani');
-    expect(uri.queryParameters['beds'], '2');
+    expect(uri.queryParameters['bd'], '2', reason: 'exactly 2 bedrooms');
+    expect(uri.queryParameters['max'], '30000');
   });
 
   testWidgets('BnB shows in the bar only for a tenant that offers short stays', (tester) async {

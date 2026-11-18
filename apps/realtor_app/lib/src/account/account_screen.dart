@@ -502,27 +502,40 @@ class _Searches extends ConsumerWidget {
 
 /// On results: save this search for alerts, or sign in first.
 class AlertButton extends ConsumerWidget {
-  const AlertButton({super.key, required this.filters});
+  const AlertButton({super.key, required this.filters, this.compact = false});
   final ListingFilters filters;
+
+  /// "Save Search" as a plain text button, for the wide filter bar.
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final customer = ref.watch(customerProvider).value;
+    Future<void> save() async {
+      final messenger = ScaffoldMessenger.of(context);
+      if (customer == null) {
+        // Account shows this search and offers it again after sign-in.
+        ref.read(pendingAlertProvider.notifier).set(filters);
+        context.go('/account');
+        return;
+      }
+      await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, filters);
+      messenger.showSnackBar(SnackBar(content: Text('Saved: ${describeSearch(filters)}. New matches will show in Account.')));
+      await offerPush(ref, customer.uid);
+    }
+
+    if (compact) {
+      return TextButton(
+        key: const Key('save-search'),
+        style: TextButton.styleFrom(textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+        onPressed: save,
+        child: const Text('Save Search'),
+      );
+    }
     return OutlinedButton.icon(
       icon: const Icon(Icons.notifications_active_outlined),
       label: const Text('Get alerts for new matches'),
-      onPressed: () async {
-        final messenger = ScaffoldMessenger.of(context);
-        if (customer == null) {
-          // Account shows this search and offers it again after sign-in.
-          ref.read(pendingAlertProvider.notifier).set(filters);
-          context.go('/account');
-          return;
-        }
-        await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, filters);
-        messenger.showSnackBar(SnackBar(content: Text('Saved: ${describeSearch(filters)}. New matches will show in Account.')));
-        await offerPush(ref, customer.uid);
-      },
+      onPressed: save,
     );
   }
 }

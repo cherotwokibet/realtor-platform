@@ -14,6 +14,7 @@ import '../phone_nav.dart';
 import '../saved/favourites.dart';
 import '../site_footer.dart';
 import '../sections.dart';
+import 'area_suggest.dart';
 import 'filters_sheet.dart';
 import 'purpose.dart';
 import 'results_map.dart';
@@ -47,7 +48,7 @@ class ResultsScreen extends ConsumerWidget {
         );
     // Wide: one row of 48. Phones: the 44 location box over the 36 pills.
     // (A back arrow, when there is a screen behind, makes the first row 48.)
-    final barHeight = wide ? 48 + b.spacing.sm * 2 + 1 : (context.canPop() ? 48 : 44) + 36 + b.spacing.sm * 3 + 1;
+    final barHeight = wide ? 48 + wideActionsHeight + b.spacing.sm * 2 + 1 : (context.canPop() ? 48 : 44) + 36 + b.spacing.sm * 3 + 1;
     final bar = Material(
       color: Theme.of(context).colorScheme.surface,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -247,6 +248,9 @@ ListingFilters _withPurpose(ListingFilters f, Purpose p) => ListingFilters(
 /// and BnB are pages of their own (the top menu; pills over the list on
 /// phones), so the bar has no purpose control. The dropdowns open under their button on wide
 /// screens and as bottom sheets on phones.
+/// The height of the wide bar's row of Clear Filters and Save Search.
+const wideActionsHeight = 40.0;
+
 class SearchBarRow extends ConsumerStatefulWidget {
   const SearchBarRow({super.key, required this.filters, required this.onChange});
   final ListingFilters filters;
@@ -385,23 +389,28 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
     final edge = OutlineInputBorder(borderRadius: BorderRadius.circular(b.radiusSm), borderSide: BorderSide(color: scheme.outline));
     final location = SizedBox(
       height: 48,
-      child: TextField(
-        key: const Key('filter-location'),
+      child: AreaSuggestField(
         controller: _location,
-        textInputAction: TextInputAction.search,
-        onSubmitted: (_) => _search(),
-        expands: true,
-        maxLines: null,
-        textAlignVertical: TextAlignVertical.center,
-        decoration: InputDecoration(
-          hintText: 'Area, estate or location',
-          filled: false,
-          contentPadding: EdgeInsets.symmetric(horizontal: b.spacing.md),
-          border: edge,
-          enabledBorder: edge,
-          focusedBorder: edge.copyWith(borderSide: BorderSide(color: scheme.primary, width: 2)),
-          prefixIcon: Icon(Icons.place_outlined, color: scheme.primary),
-          suffixIcon: IconButton(tooltip: 'Search', icon: const Icon(Icons.search), onPressed: _search),
+        onPicked: (_) => _search(),
+        field: (context, controller, focus) => TextField(
+          key: const Key('filter-location'),
+          controller: controller,
+          focusNode: focus,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) => _search(),
+          expands: true,
+          maxLines: null,
+          textAlignVertical: TextAlignVertical.center,
+          decoration: InputDecoration(
+            hintText: 'Area, estate or location',
+            filled: false,
+            contentPadding: EdgeInsets.symmetric(horizontal: b.spacing.md),
+            border: edge,
+            enabledBorder: edge,
+            focusedBorder: edge.copyWith(borderSide: BorderSide(color: scheme.primary, width: 2)),
+            prefixIcon: Icon(Icons.place_outlined, color: scheme.primary),
+            suffixIcon: IconButton(tooltip: 'Search', icon: const Icon(Icons.search), onPressed: _search),
+          ),
         ),
       ),
     );
@@ -419,10 +428,26 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
         // Wide: the same 24 edges as the homes and the column beside them.
         padding: EdgeInsets.symmetric(horizontal: wide ? 24 : b.spacing.gutter, vertical: b.spacing.sm),
         child: wide
-            ? Row(children: [
-                Expanded(child: location),
-                // A long choice ("Studio, 2, 3 beds · 6+ baths") shortens with "…".
-                for (final d in drops) ...[gap, ConstrainedBox(constraints: const BoxConstraints(maxWidth: 200), child: d)],
+            ? Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(children: [
+                  Expanded(child: location),
+                  // A long choice ("Studio, 2, 3 beds · 6+ baths") shortens with "…".
+                  for (final d in drops) ...[gap, ConstrainedBox(constraints: const BoxConstraints(maxWidth: 200), child: d)],
+                ]),
+                // Under the filters, at the right, as on Bayut: clear them all, or save this search for alerts.
+                SizedBox(
+                  height: wideActionsHeight,
+                  child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                    TextButton(
+                      key: const Key('filter-clear'),
+                      style: TextButton.styleFrom(textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+                      onPressed: all > 0 ? () => _apply(_cleared) : null,
+                      child: const Text('Clear Filters'),
+                    ),
+                    gap,
+                    AlertButton(filters: f, compact: true),
+                  ]),
+                ),
               ])
             // Phones, as on the big portals: the location box, then one
             // row of small pills that scrolls sideways, the filters button
