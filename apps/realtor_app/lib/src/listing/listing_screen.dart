@@ -146,8 +146,14 @@ class _ListingView extends ConsumerWidget {
       );
     }
     return Scaffold(
+      // As on the big portals' apps: back, the logo in the middle, Share and Save.
       appBar: AppBar(
         leading: const AppBack(),
+        centerTitle: true,
+        title: GestureDetector(
+          onTap: () => context.go('/'),
+          child: Image.asset(b.logoAsset, height: 40, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
+        ),
         actions: [
           IconButton(tooltip: 'Share', icon: const Icon(Icons.ios_share), onPressed: () => shareListing(context, link)),
           FavouriteButton(listing: l),
@@ -156,6 +162,7 @@ class _ListingView extends ConsumerWidget {
       // Call and WhatsApp stay in reach while the page scrolls.
       bottomNavigationBar: SafeArea(
         child: Material(
+          key: const Key('contact-bar'),
           elevation: 8,
           child: Padding(padding: EdgeInsets.all(b.spacing.md), child: actions.copyWith(compact: true)),
         ),
@@ -168,6 +175,10 @@ class _ListingView extends ConsumerWidget {
             title: l.title,
             verified: l.verified,
             onOpen: (i) => showPhotoViewer(context, items: items, title: l.title, initial: i, autoplay: items[i].video != null),
+            onWhatsApp: whatsapp == null
+                ? null
+                : () =>
+                    contact('whatsapp', Uri.https('wa.me', '/${whatsapp.replaceAll('+', '')}', {'text': 'Hi, I saw "${l.title}" ($link). I have a question.'})),
           ),
           Padding(padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.sm, b.spacing.gutter, 0), child: _Breadcrumbs(detail: detail, compact: true)),
           Padding(padding: EdgeInsets.all(b.spacing.gutter), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [body, recommended])),
@@ -476,10 +487,11 @@ class _SafetyTips extends StatelessWidget {
     final b = context.brand;
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
+    // Each tip with an icon that says it at a glance.
     const tips = [
-      'Always visit the home before you pay anything.',
-      "Don't rush into paying for a home.",
-      'Pay only to the official M-Pesa or bank details on the agreement, never to a personal number.',
+      (Icons.directions_walk, 'Always visit the home before you pay anything.'),
+      (Icons.hourglass_bottom, "Don't rush into paying for a home."),
+      (Icons.receipt_long_outlined, 'Pay only to the official M-Pesa or bank details on the agreement, never to a personal number.'),
     ];
     return Container(
       key: const Key('safety-tips'),
@@ -488,16 +500,20 @@ class _SafetyTips extends StatelessWidget {
       decoration: BoxDecoration(color: b.primarySoft, borderRadius: BorderRadius.circular(b.radiusMd)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Icon(Icons.shield_outlined, color: scheme.primary),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle),
+            child: Icon(Icons.health_and_safety_outlined, color: scheme.onPrimary, size: 20),
+          ),
           SizedBox(width: b.spacing.sm),
-          Expanded(child: Text('Tips for your safety', style: text.titleMedium)),
+          Expanded(child: Text('Tips for your safety', style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
         ]),
         SizedBox(height: b.spacing.sm),
-        for (final t in tips)
+        for (final (icon, t) in tips)
           Padding(
-            padding: EdgeInsets.only(top: b.spacing.xs),
+            padding: EdgeInsets.only(top: b.spacing.sm),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.check_circle, size: 18, color: scheme.primary),
+              Icon(icon, size: 20, color: scheme.primary),
               SizedBox(width: b.spacing.sm),
               Expanded(child: Text(t, style: text.bodyMedium)),
             ]),
@@ -802,7 +818,17 @@ class _Reviews extends ConsumerWidget {
           ));
         return;
       }
-      final sent = await showDialog<bool>(context: context, builder: (_) => _ReviewDialog(listing: listing));
+      // Phones: a sheet that rises above the keyboard; computers: a window.
+      final sent = MediaQuery.sizeOf(context).width < wideListingLayout
+          ? await showModalBottomSheet<bool>(
+              context: context,
+              isScrollControlled: true,
+              useSafeArea: true,
+              useRootNavigator: true,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(context.brand.radiusMd * 2))),
+              builder: (_) => _ReviewDialog(listing: listing, sheet: true),
+            )
+          : await showDialog<bool>(context: context, builder: (_) => _ReviewDialog(listing: listing));
       if (sent == true && context.mounted) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
@@ -856,8 +882,11 @@ class _Reviews extends ConsumerWidget {
 
 /// Stars, a comment and a first name; sent to be checked.
 class _ReviewDialog extends ConsumerStatefulWidget {
-  const _ReviewDialog({required this.listing});
+  const _ReviewDialog({required this.listing, this.sheet = false});
   final ListingSummary listing;
+
+  /// Laid out as a bottom sheet (phones) rather than a window.
+  final bool sheet;
 
   @override
   ConsumerState<_ReviewDialog> createState() => _ReviewDialogState();
@@ -897,45 +926,87 @@ class _ReviewDialogState extends ConsumerState<_ReviewDialog> {
     }
   }
 
+  static const _words = ['', 'Poor', 'Fair', 'Good', 'Very good', 'Excellent'];
+
   @override
   Widget build(BuildContext context) {
     final b = context.brand;
-    return AlertDialog(
-      title: const Text('Review this home'),
-      content: SizedBox(
-        width: 420,
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(widget.listing.title, style: Theme.of(context).textTheme.bodyMedium),
-          SizedBox(height: b.spacing.md),
-          Row(children: [
-            for (var i = 1; i <= 5; i++)
-              IconButton(
-                key: Key('star-$i'),
-                tooltip: '$i ${i == 1 ? 'star' : 'stars'}',
-                onPressed: () => setState(() => _rating = i),
-                icon: Icon(_rating >= i ? Icons.star : Icons.star_border, color: b.accent, size: 32),
-              ),
-          ]),
-          SizedBox(height: b.spacing.sm),
-          TextField(
-            key: const Key('review-comment'),
-            controller: _comment,
-            maxLines: 4,
-            maxLength: 1000,
-            decoration: const InputDecoration(labelText: 'Your review', hintText: 'Water, security, the neighbours, the landlord...'),
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final form = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(widget.listing.title, style: text.bodyMedium?.copyWith(color: b.textMuted)),
+      SizedBox(height: b.spacing.lg),
+      Text('Your rating', style: text.titleSmall),
+      SizedBox(height: b.spacing.xs),
+      Row(children: [
+        for (var i = 1; i <= 5; i++)
+          IconButton(
+            key: Key('star-$i'),
+            tooltip: '$i ${i == 1 ? 'star' : 'stars'}',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => setState(() => _rating = i),
+            icon: Icon(_rating >= i ? Icons.star_rounded : Icons.star_outline_rounded, color: b.accent, size: 36),
           ),
-          TextField(
-            key: const Key('review-name'),
-            controller: _name,
-            maxLength: 40,
-            decoration: const InputDecoration(labelText: 'First name (optional)', helperText: 'Only your first name is shown.'),
-          ),
-          if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        SizedBox(width: b.spacing.sm),
+        Text(_words[_rating], style: text.titleSmall?.copyWith(color: b.textMuted)),
+      ]),
+      SizedBox(height: b.spacing.md),
+      TextField(
+        key: const Key('review-comment'),
+        controller: _comment,
+        minLines: 3,
+        maxLines: 5,
+        maxLength: 1000,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(labelText: 'Your review', alignLabelWithHint: true, hintText: 'Water, security, the neighbours, the landlord...'),
+      ),
+      SizedBox(height: b.spacing.sm),
+      TextField(
+        key: const Key('review-name'),
+        controller: _name,
+        maxLength: 40,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(labelText: 'First name (optional)', helperText: 'Only your first name is shown.'),
+      ),
+      if (_error != null) Padding(padding: EdgeInsets.only(top: b.spacing.sm), child: Text(_error!, style: TextStyle(color: scheme.error))),
+      Padding(
+        padding: EdgeInsets.only(top: b.spacing.sm),
+        child: Row(children: [
+          Icon(Icons.verified_user_outlined, size: 16, color: b.textMuted),
+          SizedBox(width: b.spacing.xs),
+          Expanded(child: Text('Reviews are checked before they show.', style: text.bodySmall?.copyWith(color: b.textMuted))),
         ]),
       ),
+    ]);
+    final send = FilledButton(
+      key: const Key('send-review'),
+      style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+      onPressed: _sending ? null : _send,
+      child: Text(_sending ? 'Sending…' : 'Send review'),
+    );
+    if (widget.sheet) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.sm, b.spacing.gutter, b.spacing.lg),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Expanded(child: Text('Review this home', style: text.titleLarge)),
+              IconButton(tooltip: 'Close', onPressed: () => Navigator.pop(context, false), icon: const Icon(Icons.close)),
+            ]),
+            form,
+            SizedBox(height: b.spacing.lg),
+            send,
+          ]),
+        ),
+      );
+    }
+    return AlertDialog(
+      title: const Text('Review this home'),
+      content: SizedBox(width: 440, child: SingleChildScrollView(child: form)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-        FilledButton(key: const Key('send-review'), onPressed: _sending ? null : _send, child: Text(_sending ? 'Sending…' : 'Send review')),
+        send,
       ],
     );
   }
@@ -944,27 +1015,53 @@ class _ReviewDialogState extends ConsumerState<_ReviewDialog> {
 /// An icon for each feature or amenity the filters and the admin use;
 /// anything else gets a tick.
 IconData amenityIcon(String key) => switch (key.toLowerCase().replaceAll(' ', '-')) {
+      // One outlined set, so the tiles look alike.
       'furnished' => Icons.chair_outlined,
-      'parking' => Icons.local_parking,
-      'security' => Icons.security,
-      'borehole' => Icons.water_drop_outlined,
+      'parking' => Icons.local_parking_outlined,
+      'security' => Icons.shield_outlined,
+      'cctv' => Icons.videocam_outlined,
+      'borehole' => Icons.water_outlined,
       'water' => Icons.water_drop_outlined,
       'wifi' || 'wi-fi' => Icons.wifi,
+      'internet' || 'fibre' => Icons.router_outlined,
       'lift' || 'elevator' => Icons.elevator_outlined,
-      'gym' => Icons.fitness_center,
-      'swimming-pool' || 'pool' => Icons.pool,
-      'garden' => Icons.yard_outlined,
+      'gym' => Icons.fitness_center_outlined,
+      'swimming-pool' || 'pool' => Icons.pool_outlined,
+      'garden' => Icons.park_outlined,
       'balcony' => Icons.balcony_outlined,
-      'backup-generator' || 'generator' || 'electricity-backup' => Icons.electrical_services,
-      'cctv' => Icons.videocam_outlined,
-      'pets' || 'pet-friendly' => Icons.pets,
-      'playground' => Icons.child_care,
+      'backup-generator' || 'generator' || 'electricity-backup' => Icons.electric_bolt_outlined,
+      'pets' || 'pet-friendly' => Icons.pets_outlined,
+      'playground' => Icons.toys_outlined,
       'servant-quarters' || 'dsq' => Icons.bedroom_child_outlined,
       'solar' || 'solar-water-heating' => Icons.solar_power_outlined,
-      'air-conditioning' || 'ac' => Icons.ac_unit,
-      'internet' || 'fibre' => Icons.router_outlined,
+      'air-conditioning' || 'ac' => Icons.ac_unit_outlined,
       'shops' => Icons.storefront_outlined,
       _ => Icons.check_circle_outline,
+    };
+
+/// The groups amenities are shown in, in order.
+const amenityGroups = ['Features', 'Building', 'Security', 'Health and fitness', 'Utilities', 'Outdoors', 'Other'];
+
+/// Which group an amenity belongs to.
+String amenityGroup(String key) => switch (key.toLowerCase().replaceAll(' ', '-')) {
+      'furnished' || 'balcony' || 'air-conditioning' || 'ac' || 'servant-quarters' || 'dsq' || 'pets' || 'pet-friendly' => 'Features',
+      'parking' || 'lift' || 'elevator' || 'shops' => 'Building',
+      'security' || 'cctv' => 'Security',
+      'gym' || 'swimming-pool' || 'pool' => 'Health and fitness',
+      'borehole' ||
+      'water' ||
+      'wifi' ||
+      'wi-fi' ||
+      'internet' ||
+      'fibre' ||
+      'backup-generator' ||
+      'generator' ||
+      'electricity-backup' ||
+      'solar' ||
+      'solar-water-heating' =>
+        'Utilities',
+      'garden' || 'playground' => 'Outdoors',
+      _ => 'Other',
     };
 
 /// Features and amenities as tiles with an icon, as on the big portals: the
@@ -1005,20 +1102,58 @@ class _Amenities extends StatelessWidget {
           SizedBox(height: b.spacing.sm),
           Text(typeName(a), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodySmall),
         ]);
-    void showAll() => showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
-            title: Text('Features & amenities (${amenities.length})'),
-            content: SizedBox(
-              width: 520,
-              child: SingleChildScrollView(
-                child: Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [for (final a in amenities) tile(amenity(a))]),
+    // Everything, grouped as the portals group it; full screen on phones.
+    void showAll() {
+      final groups = <String, List<String>>{};
+      for (final a in amenities) {
+        groups.putIfAbsent(amenityGroup(a), () => []).add(a);
+      }
+      final body = ListView(
+        padding: EdgeInsets.fromLTRB(b.spacing.lg, 0, b.spacing.lg, b.spacing.xl),
+        children: [
+          for (final g in amenityGroups)
+            if (groups[g] case final items?) ...[
+              Padding(
+                padding: EdgeInsets.only(top: b.spacing.lg, bottom: b.spacing.sm),
+                child: Text(g.toUpperCase(), style: text.labelLarge?.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700)),
               ),
-            ),
-            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-          ),
-        );
+              Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [for (final a in items) tile(amenity(a))]),
+            ],
+        ],
+      );
+      Widget header(BuildContext context) => Padding(
+            padding: EdgeInsets.fromLTRB(b.spacing.sm, b.spacing.sm, b.spacing.sm, 0),
+            child: Row(children: [
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(left: b.spacing.md),
+                  child: Text('FEATURES & AMENITIES', style: text.titleSmall?.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w700)),
+                ),
+              ),
+              IconButton(tooltip: 'Close', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+            ]),
+          );
+      showDialog<void>(
+        context: context,
+        builder: (context) => wide
+            ? Dialog(
+                key: const Key('all-amenities'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 680, maxHeight: 640),
+                  child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    header(context),
+                    Flexible(child: body),
+                  ]),
+                ),
+              )
+            : Dialog.fullscreen(
+                key: const Key('all-amenities'),
+                child: SafeArea(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [header(context), Expanded(child: body)])),
+              ),
+      );
+    }
+
     return Wrap(key: const Key('amenities'), spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: [
       for (final a in amenities.take(more > 0 ? shown : amenities.length)) tile(amenity(a)),
       if (more > 0)

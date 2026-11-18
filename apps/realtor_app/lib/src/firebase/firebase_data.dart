@@ -1,15 +1,21 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:realtor_core/realtor_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../search/demo_search.dart';
 
 /// Public URL of a media-pipeline variant in the project's media bucket
 /// (`<project>-media`, made by Terraform).
-String mediaUrl(String bucket, String path) =>
-    'https://firebasestorage.googleapis.com/v0/b/$bucket/o/${Uri.encodeComponent(path)}?alt=media';
+String mediaUrl(String bucket, String path) => 'https://firebasestorage.googleapis.com/v0/b/$bucket/o/${Uri.encodeComponent(path)}?alt=media';
 
-DateTime? _time(Object? v) => v is Timestamp ? v.toDate() : v is DateTime ? v : null;
+DateTime? _time(Object? v) => v is Timestamp
+    ? v.toDate()
+    : v is DateTime
+        ? v
+        : null;
 
 /// A `{kind: 'video'}` media entry as a playable video, or null for anything else.
 ListingVideo? videoFromMedia(Object? m, String bucket) {
@@ -32,7 +38,10 @@ ListingSummary summaryFromDoc(String id, Map<String, Object?> d, {required Strin
     for (final m in (d['media'] as List<Object?>?) ?? const [])
       if (m is Map) m,
   ];
-  final photos = [for (final m in media) if (m['kind'] == 'photo') m];
+  final photos = [
+    for (final m in media)
+      if (m['kind'] == 'photo') m
+  ];
   // Card-size copies of the first few photos, for the card's carousel.
   final cards = [
     for (final m in photos.take(ListingSummary.maxCardPhotos))
@@ -61,7 +70,10 @@ ListingSummary summaryFromDoc(String id, Map<String, Object?> d, {required Strin
     hasFloorPlan: media.any((m) => m['kind'] == 'floor-plan'),
     hasVideo: media.any((m) => m['kind'] == 'video'),
     has360: media.any((m) => m['kind'] == 'tour-360'),
-    videoPoster: switch ([for (final m in media) if (m['kind'] == 'video') m].firstOrNull?['variants']) {
+    videoPoster: switch ([
+      for (final m in media)
+        if (m['kind'] == 'video') m
+    ].firstOrNull?['variants']) {
       {'poster': final String path} => mediaUrl(bucket, path),
       _ => null,
     },
@@ -81,15 +93,13 @@ class FirestoreListingSearch implements ListingSearch {
   final DateTime Function() _clock;
   final _cache = <Purpose, ({DateTime at, List<ListingSummary> rows})>{};
 
+  /// Every live listing for [purpose] (cached in memory for [maxAge]).
+  Future<List<ListingSummary>> rows(Purpose purpose) => _live(purpose);
+
   Future<List<ListingSummary>> _live(Purpose purpose) async {
     final now = _clock(), hit = _cache[purpose];
     if (hit != null && now.difference(hit.at) < maxAge) return hit.rows;
-    final snap = await _db
-        .collection('listings')
-        .where('status', isEqualTo: 'live')
-        .where('purpose', isEqualTo: purpose.value)
-        .limit(2000)
-        .get();
+    final snap = await _db.collection('listings').where('status', isEqualTo: 'live').where('purpose', isEqualTo: purpose.value).limit(2000).get();
     final rows = [for (final d in snap.docs) summaryFromDoc(d.id, d.data(), bucket: bucket, now: now)];
     _cache[purpose] = (at: now, rows: rows);
     return rows;
@@ -112,7 +122,9 @@ class FirestoreListingRepository implements ListingRepository {
     if (snap.docs.isEmpty) return null;
     final doc = snap.docs.single, d = doc.data();
     final agentId = d['agentId'] as String?;
-    final agentDoc = agentId == null ? null : await _db.collection('agents').doc(agentId).get().then<DocumentSnapshot<Map<String, Object?>>?>((s) => s, onError: (Object _) => null);
+    final agentDoc = agentId == null
+        ? null
+        : await _db.collection('agents').doc(agentId).get().then<DocumentSnapshot<Map<String, Object?>>?>((s) => s, onError: (Object _) => null);
     final a = agentDoc?.data();
     return ListingDetail(
       summary: summaryFromDoc(doc.id, d, bucket: bucket, now: _clock()),
@@ -237,8 +249,7 @@ class CallableLeadRepository implements LeadRepository {
   }
 
   @override
-  Future<void> logTap({required String listingId, required String channel}) =>
-      _run('logContactTap', {'listingId': listingId, 'channel': channel});
+  Future<void> logTap({required String listingId, required String channel}) => _run('logContactTap', {'listingId': listingId, 'channel': channel});
 
   @override
   Future<void> logRecommendation({required String listingId, required String event}) =>
@@ -285,5 +296,82 @@ class FirestoreListingReviews implements ListingReviews {
       final code = e.code.replaceFirst('functions/', '');
       throw LeadException(code, (e.message ?? code).replaceFirst(RegExp(r'\s*\[\d{3}\]$'), ''));
     }
+  }
+}
+
+/// Where the last listings seen are kept on the device (the browser's local
+/// storage on the web), so the next visit shows homes at once.
+abstract interface class ListingSnapshotStore {
+  Future<({DateTime at, List<ListingSummary> rows})?> load(Purpose purpose);
+  Future<void> save(Purpose purpose, DateTime at, List<ListingSummary> rows);
+}
+
+class PrefsListingSnapshotStore implements ListingSnapshotStore {
+  static String _key(Purpose p) => 'listings_snapshot_${p.value}';
+
+  @override
+  Future<({DateTime at, List<ListingSummary> rows})?> load(Purpose purpose) async {
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(_key(purpose));
+      if (raw == null) return null;
+      final j = jsonDecode(raw) as Map<String, Object?>;
+      return (
+        at: DateTime.fromMillisecondsSinceEpoch((j['at'] as num).toInt()),
+        rows: [
+          for (final r in j['rows'] as List)
+            if (ListingSummary.fromJson(r) case final ListingSummary l) l
+        ],
+      );
+    } on Object {
+      return null; // a damaged copy is ignored
+    }
+  }
+
+  @override
+  Future<void> save(Purpose purpose, DateTime at, List<ListingSummary> rows) async {
+    try {
+      await (await SharedPreferences.getInstance()).setString(
+          _key(purpose),
+          jsonEncode({
+            'at': at.millisecondsSinceEpoch,
+            'rows': [for (final r in rows) r.toJson()]
+          }));
+    } on Object {
+      // Storage full or blocked: the next visit just waits for the network.
+    }
+  }
+}
+
+/// Search that answers at once from the listings kept on the device, then
+/// refreshes them from Firestore in the background (stale-while-revalidate),
+/// so a returning visitor sees homes before Firebase has even started. The
+/// first visit, or a copy older than [maxStale], waits for Firestore.
+class SnapshotListingSearch implements ListingSearch {
+  SnapshotListingSearch(this._live, {required this.store, DateTime Function()? clock, this.maxStale = const Duration(hours: 12)})
+      : _clock = clock ?? DateTime.now;
+  final Future<FirestoreListingSearch> _live;
+  final ListingSnapshotStore store;
+  final Duration maxStale;
+  final DateTime Function() _clock;
+  final _fresh = <Purpose, Future<List<ListingSummary>>>{};
+
+  /// Reads Firestore once per purpose per visit, and keeps the result.
+  Future<List<ListingSummary>> _refresh(Purpose p) => _fresh[p] ??= _live.then((s) => s.rows(p)).then((rows) {
+        store.save(p, _clock(), rows).ignore();
+        return rows;
+      });
+
+  @override
+  Future<SearchResult> search(ListingFilters filters) async {
+    final p = filters.purpose;
+    final fresh = _fresh[p];
+    if (fresh == null) {
+      final kept = await store.load(p);
+      if (kept != null && _clock().difference(kept.at) < maxStale) {
+        _refresh(p).ignore();
+        return DemoListingSearch(kept.rows).search(filters);
+      }
+    }
+    return DemoListingSearch(await _refresh(p)).search(filters);
   }
 }

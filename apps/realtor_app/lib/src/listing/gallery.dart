@@ -180,11 +180,14 @@ class GalleryMosaic extends StatelessWidget {
 /// Phones: the photos across the width, to swipe; "2 / 8" says where you are
 /// and a tap opens them full screen.
 class PhotoStrip extends StatefulWidget {
-  const PhotoStrip({super.key, required this.items, required this.title, required this.onOpen, this.verified = false});
+  const PhotoStrip({super.key, required this.items, required this.title, required this.onOpen, this.verified = false, this.onWhatsApp});
   final List<GalleryItem> items;
   final String title;
   final ValueChanged<int> onOpen;
   final bool verified;
+
+  /// When set, a last slide after the photos asks for questions on WhatsApp.
+  final VoidCallback? onWhatsApp;
 
   @override
   State<PhotoStrip> createState() => _PhotoStripState();
@@ -205,18 +208,20 @@ class _PhotoStripState extends State<PhotoStrip> {
           ? ColoredBox(color: b.surfaceAlt, child: Center(child: Icon(Icons.home_work_outlined, size: 64, color: b.textMuted, semanticLabel: 'No photos yet')))
           : Stack(fit: StackFit.expand, children: [
               PageView.builder(
-                itemCount: items.length,
+                itemCount: items.length + (widget.onWhatsApp == null ? 0 : 1),
                 onPageChanged: (i) => setState(() => _at = i),
-                itemBuilder: (context, i) => GestureDetector(
-                  onTap: () => widget.onOpen(i),
-                  child: Stack(fit: StackFit.expand, children: [
-                    _image(context, items[i].image, label: '${widget.title}, ${items[i].video == null ? 'photo' : 'video'} ${i + 1} of ${items.length}'),
-                    if (items[i].video != null) Center(child: Icon(Icons.play_circle_fill, size: 64, color: scheme.surface.withValues(alpha: 0.9))),
-                  ]),
-                ),
+                itemBuilder: (context, i) => i == items.length
+                    ? AskOnWhatsApp(background: items.last.image, onTap: widget.onWhatsApp!)
+                    : GestureDetector(
+                        onTap: () => widget.onOpen(i),
+                        child: Stack(fit: StackFit.expand, children: [
+                          _image(context, items[i].image, label: '${widget.title}, ${items[i].video == null ? 'photo' : 'video'} ${i + 1} of ${items.length}'),
+                          if (items[i].video != null) Center(child: Icon(Icons.play_circle_fill, size: 64, color: scheme.surface.withValues(alpha: 0.9))),
+                        ]),
+                      ),
               ),
               if (widget.verified) Positioned(left: b.spacing.md, top: b.spacing.md, child: const VerifiedBadge()),
-              if (items.length > 1)
+              if (items.length > 1 && _at < items.length)
                 Positioned(
                   right: b.spacing.md,
                   bottom: b.spacing.md,
@@ -224,6 +229,43 @@ class _PhotoStripState extends State<PhotoStrip> {
                 ),
             ]),
     );
+  }
+}
+
+/// The slide after the last photo, as on the big portals: the last photo
+/// dimmed behind "Do you have more questions? Reach out to us!" and a
+/// WhatsApp button.
+class AskOnWhatsApp extends StatelessWidget {
+  const AskOnWhatsApp({super.key, required this.background, required this.onTap});
+  final String background;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final ink = scheme.surface;
+    return Stack(key: const Key('ask-on-whatsapp'), fit: StackFit.expand, children: [
+      _image(context, background),
+      ColoredBox(color: scheme.scrim.withValues(alpha: 0.6)),
+      Center(
+        child: Padding(
+          padding: EdgeInsets.all(b.spacing.lg),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Do you have more questions?', textAlign: TextAlign.center, style: text.titleMedium?.copyWith(color: ink, fontWeight: FontWeight.w700)),
+            Text('Reach out to us!', textAlign: TextAlign.center, style: text.titleMedium?.copyWith(color: ink)),
+            SizedBox(height: b.spacing.md),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: ink, foregroundColor: b.success, shape: const StadiumBorder()),
+              onPressed: onTap,
+              icon: const WhatsAppIcon(size: 20),
+              label: const Text('Open WhatsApp'),
+            ),
+          ]),
+        ),
+      ),
+    ]);
   }
 }
 
@@ -278,10 +320,17 @@ class _GalleryDialog extends StatefulWidget {
   State<_GalleryDialog> createState() => _GalleryDialogState();
 }
 
+enum _GalleryTab { photos, videos, map }
+
 class _GalleryDialogState extends State<_GalleryDialog> {
-  late bool _map = widget.startOnMap;
+  late _GalleryTab _tab = widget.startOnMap
+      ? _GalleryTab.map
+      : (widget.initial < widget.items.length && widget.items[widget.initial].video != null ? _GalleryTab.videos : _GalleryTab.photos);
   final _grid = ScrollController();
   static const _gap = 8.0;
+
+  /// The scrollbar's lane at the right edge; the close button sits above it.
+  static const _lane = 28.0;
   double _tileWidth = 0;
 
   @override
@@ -289,10 +338,11 @@ class _GalleryDialogState extends State<_GalleryDialog> {
     super.initState();
     // Open where the visitor clicked, as the portals do: the row with that
     // photo at the top, once the grid has its size.
-    if (widget.initial > 1) {
+    final at = _shown.indexOf(widget.initial);
+    if (at > 1) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_grid.hasClients) return;
-        _grid.jumpTo(((widget.initial ~/ 2) * (_tileWidth * 9 / 16 + _gap)).clamp(0.0, _grid.position.maxScrollExtent));
+        _grid.jumpTo(((at ~/ 2) * (_tileWidth * 9 / 16 + _gap)).clamp(0.0, _grid.position.maxScrollExtent));
       });
     }
   }
@@ -303,6 +353,12 @@ class _GalleryDialogState extends State<_GalleryDialog> {
     super.dispose();
   }
 
+  /// Indexes into [GalleryItem]s of the tab: photos or videos, kept apart.
+  List<int> get _shown => [
+        for (var i = 0; i < widget.items.length; i++)
+          if ((widget.items[i].video != null) == (_tab == _GalleryTab.videos)) i,
+      ];
+
   @override
   Widget build(BuildContext context) {
     final b = context.brand;
@@ -310,28 +366,41 @@ class _GalleryDialogState extends State<_GalleryDialog> {
     final text = Theme.of(context).textTheme;
     final items = widget.items;
     final hasMap = widget.lat != null && widget.lng != null;
-    Widget tab(bool map, IconData icon, String label) {
-      final on = _map == map;
+    final photos = items.where((i) => i.video == null).length;
+    final videos = items.length - photos;
+    Widget tab(_GalleryTab t, IconData icon, String label, String key) {
+      final on = _tab == t;
       return Expanded(
         child: Material(
           color: on ? b.primarySoft : Colors.transparent,
           borderRadius: BorderRadius.circular(b.radiusSm),
           child: InkWell(
-            key: Key(map ? 'gallery-tab-map' : 'gallery-tab-photos'),
+            key: Key(key),
             borderRadius: BorderRadius.circular(b.radiusSm),
-            onTap: () => setState(() => _map = map),
+            onTap: () => setState(() {
+              _tab = t;
+              if (_grid.hasClients) _grid.jumpTo(0);
+            }),
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: b.spacing.sm),
               child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Icon(icon, size: 18, color: on ? scheme.primary : b.textMuted),
                 SizedBox(width: b.spacing.sm),
-                Text(label, style: text.labelLarge?.copyWith(color: on ? scheme.primary : b.textMuted)),
+                Text(label, style: text.labelLarge?.copyWith(color: on ? scheme.primary : b.textMuted, fontWeight: on ? FontWeight.w700 : null)),
               ]),
             ),
           ),
         ),
       );
     }
+
+    Widget divider() => SizedBox(height: 20, child: VerticalDivider(width: b.spacing.sm, color: scheme.outlineVariant));
+    final tabs = <Widget>[
+      tab(_GalleryTab.photos, Icons.photo_outlined, 'Photos ($photos)', 'gallery-tab-photos'),
+      if (videos > 0) ...[divider(), tab(_GalleryTab.videos, Icons.play_circle_outline, 'Videos ($videos)', 'gallery-tab-videos')],
+      if (hasMap) ...[divider(), tab(_GalleryTab.map, Icons.place_outlined, 'Map', 'gallery-tab-map')],
+    ];
+    final shown = _shown;
 
     return Dialog(
       key: const Key('gallery'),
@@ -343,76 +412,91 @@ class _GalleryDialogState extends State<_GalleryDialog> {
         constraints: const BoxConstraints(maxWidth: 1000, maxHeight: 760),
         child: Stack(children: [
           Padding(
-            // Room at the top right for the close button, in the corner.
-            padding: EdgeInsets.fromLTRB(b.spacing.lg, b.spacing.xl, b.spacing.lg, b.spacing.lg),
+            // The right edge is the scrollbar's lane; the close button is
+            // above it, so the two line up, as on the big portals.
+            padding: EdgeInsets.fromLTRB(b.spacing.lg, b.spacing.lg + 8, 0, b.spacing.lg),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Row(children: [
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(border: Border.all(color: b.borderStrong), borderRadius: BorderRadius.circular(b.radiusSm)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Row(children: [
-                        tab(false, Icons.photo_outlined, 'Photos (${items.length})'),
-                        if (hasMap) tab(true, Icons.place_outlined, 'Map'),
-                      ]),
-                    ),
-                  ),
+              Padding(
+                padding: const EdgeInsets.only(right: _lane),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(border: Border.all(color: b.borderStrong), borderRadius: BorderRadius.circular(b.radiusSm)),
+                  child: Padding(padding: const EdgeInsets.all(4), child: Row(children: tabs)),
                 ),
-              ]),
+              ),
               SizedBox(height: b.spacing.md),
               Expanded(
-                child: _map && hasMap
-                    ? ClipRRect(borderRadius: BorderRadius.circular(b.radiusMd), child: ListingMap(lat: widget.lat!, lng: widget.lng!, title: widget.title))
+                child: _tab == _GalleryTab.map && hasMap
+                    ? Padding(
+                        padding: const EdgeInsets.only(right: _lane),
+                        child: ClipRRect(
+                            borderRadius: BorderRadius.circular(b.radiusSm), child: ListingMap(lat: widget.lat!, lng: widget.lng!, title: widget.title)),
+                      )
                     : LayoutBuilder(builder: (context, box) {
-                        // The scrollbar sits at the right edge, beside the photos, always shown.
-                        const bar = 14.0;
-                        _tileWidth = (box.maxWidth - bar - _gap) / 2;
-                        return Scrollbar(
+                        _tileWidth = (box.maxWidth - _lane - _gap) / 2;
+                        return RawScrollbar(
                           controller: _grid,
                           thumbVisibility: true,
+                          trackVisibility: true,
+                          thickness: 6,
+                          radius: const Radius.circular(3),
+                          // The thumb runs down the middle of the lane, under the close button.
+                          crossAxisMargin: (_lane - 6) / 2,
+                          thumbColor: b.borderStrong,
+                          trackColor: b.surfaceAlt,
+                          trackRadius: const Radius.circular(3),
+                          trackBorderColor: Colors.transparent,
                           child: ScrollConfiguration(
                             behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                             child: GridView.builder(
                               controller: _grid,
-                              padding: const EdgeInsets.only(right: bar),
+                              padding: const EdgeInsets.only(right: _lane),
                               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: 2, mainAxisSpacing: _gap, crossAxisSpacing: _gap, childAspectRatio: 16 / 9),
-                              itemCount: items.length,
-                              itemBuilder: (context, i) => DecoratedBox(
-                                // The photo that was clicked stays marked.
-                                position: DecorationPosition.foreground,
-                                decoration: BoxDecoration(
-                                  border: i == widget.initial && widget.initial > 0 ? Border.all(color: scheme.primary, width: 3) : null,
-                                  borderRadius: BorderRadius.circular(b.radiusSm),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(b.radiusSm),
-                                  child: InkWell(
-                                    key: Key('gallery-photo-$i'),
-                                    onTap: () => showPhotoViewer(context,
-                                        items: items, title: widget.title, initial: i, fromGallery: true, autoplay: items[i].video != null),
-                                    child: Stack(fit: StackFit.expand, children: [
-                                      _image(context, items[i].image, label: '${widget.title}, ${items[i].video == null ? 'photo' : 'video'} ${i + 1}'),
-                                      if (items[i].video != null)
-                                        Center(child: Icon(Icons.play_circle_fill, size: 56, color: scheme.surface.withValues(alpha: 0.9))),
-                                    ]),
+                              itemCount: shown.length,
+                              itemBuilder: (context, n) {
+                                final i = shown[n];
+                                return DecoratedBox(
+                                  // The photo that was clicked stays marked.
+                                  position: DecorationPosition.foreground,
+                                  decoration: BoxDecoration(
+                                    border: i == widget.initial && widget.initial > 0 ? Border.all(color: scheme.primary, width: 3) : null,
+                                    borderRadius: BorderRadius.circular(b.radiusSm),
                                   ),
-                                ),
-                              ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(b.radiusSm),
+                                    child: InkWell(
+                                      key: Key('gallery-photo-$i'),
+                                      onTap: () => showPhotoViewer(context,
+                                          items: items, title: widget.title, initial: i, fromGallery: true, autoplay: items[i].video != null),
+                                      child: Stack(fit: StackFit.expand, children: [
+                                        _image(context, items[i].image, label: '${widget.title}, ${items[i].video == null ? 'photo' : 'video'} ${n + 1}'),
+                                        if (items[i].video != null)
+                                          Center(child: Icon(Icons.play_circle_fill, size: 56, color: scheme.surface.withValues(alpha: 0.9))),
+                                      ]),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         );
                       }),
               ),
-              const Divider(height: 24),
-              widget.contact,
+              Padding(padding: const EdgeInsets.only(right: _lane), child: const Divider(height: 24)),
+              Padding(padding: const EdgeInsets.only(right: _lane), child: widget.contact),
             ]),
           ),
           Positioned(
-            top: 2,
-            right: 2,
-            child: IconButton(tooltip: 'Close', visualDensity: VisualDensity.compact, onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+            top: 4,
+            right: 0,
+            width: _lane + 8,
+            child: IconButton(
+              tooltip: 'Close',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close),
+            ),
           ),
         ]),
       ),
@@ -581,10 +665,14 @@ class _ViewerState extends State<_Viewer> {
   }
 }
 
-/// Where the home is: the realtor's map tiles with a pin. Drag to move and
-/// pinch to zoom; on a computer, the + and - buttons or Ctrl + scroll zoom
-/// (a plain scroll keeps scrolling the page, as on the big portals), and
-/// the corner button opens it full screen.
+/// Where the home is: the realtor's map tiles with a pin.
+///
+/// In the page ([fullScreen] false) it behaves like the maps on the big
+/// portals: on a phone it is a picture that never catches the page's scroll,
+/// with Open map and Directions on it; on a computer it can be dragged,
+/// zoomed with + and − or Ctrl + scroll (a plain scroll keeps scrolling the
+/// page and says how to zoom), and opened full screen. Full screen, every
+/// gesture works: drag, pinch, scroll and double-tap.
 class ListingMap extends ConsumerStatefulWidget {
   const ListingMap({super.key, required this.lat, required this.lng, required this.title, this.fullScreen = false});
   final double lat, lng;
@@ -607,17 +695,64 @@ class _ListingMapState extends ConsumerState<ListingMap> {
     _map.move(cam.center, (cam.zoom + by).clamp(3.0, 19.0));
   }
 
+  void _showHint() {
+    if (_hint) return;
+    setState(() => _hint = true);
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _hint = false);
+    });
+  }
+
+  Uri get _directions => Uri.https('www.google.com', '/maps/dir/', {'api': '1', 'destination': '${widget.lat},${widget.lng}'});
+
+  void _openFull() => showDialog<void>(
+        context: context,
+        builder: (_) => Dialog.fullscreen(child: ListingMap(lat: widget.lat, lng: widget.lng, title: widget.title, fullScreen: true)),
+      );
+
   @override
   Widget build(BuildContext context) {
     final tenant = ref.watch(tenantProvider);
     final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
     final b = context.brand;
-    Widget control(IconData icon, String tip, VoidCallback onTap, {Key? key}) => Material(
-          color: scheme.surface,
-          elevation: 2,
-          borderRadius: BorderRadius.circular(b.radiusSm),
-          child: IconButton(key: key, tooltip: tip, visualDensity: VisualDensity.compact, icon: Icon(icon), onPressed: onTap),
+    final phone = MediaQuery.sizeOf(context).width < 840;
+    // A phone page shows a still map; computers and full screen move.
+    final still = phone && !widget.fullScreen;
+    final shadow = [BoxShadow(color: scheme.scrim.withValues(alpha: 0.18), blurRadius: 6, offset: const Offset(0, 2))];
+
+    // One white box for the zoom buttons, as on Google's maps.
+    final zoom = DecoratedBox(
+      decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(b.radiusSm), boxShadow: shadow),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(key: const Key('map-zoom-in'), tooltip: 'Zoom in', icon: const Icon(Icons.add), onPressed: () => _zoom(1)),
+        SizedBox(width: 28, child: Divider(height: 1, color: scheme.outlineVariant)),
+        IconButton(key: const Key('map-zoom-out'), tooltip: 'Zoom out', icon: const Icon(Icons.remove), onPressed: () => _zoom(-1)),
+      ]),
+    );
+    Widget round(IconData icon, String tip, VoidCallback onTap, {Key? key}) => DecoratedBox(
+          decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(b.radiusSm), boxShadow: shadow),
+          child: IconButton(key: key, tooltip: tip, icon: Icon(icon), onPressed: onTap),
         );
+    Widget pill(String label, IconData icon, VoidCallback onTap, {Key? key, bool primary = false}) => Material(
+          color: primary ? scheme.primary : scheme.surface,
+          shape: const StadiumBorder(),
+          elevation: 3,
+          child: InkWell(
+            key: key,
+            customBorder: const StadiumBorder(),
+            onTap: onTap,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.md, vertical: b.spacing.sm),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(icon, size: 18, color: primary ? scheme.onPrimary : scheme.primary),
+                SizedBox(width: b.spacing.xs),
+                Text(label, style: text.labelLarge?.copyWith(color: primary ? scheme.onPrimary : scheme.primary, fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ),
+        );
+
     final map = FlutterMap(
       key: const Key('listing-map'),
       mapController: _map,
@@ -626,32 +761,53 @@ class _ListingMapState extends ConsumerState<ListingMap> {
         initialZoom: _start,
         minZoom: 3,
         maxZoom: 19,
-        // Full screen: every gesture. In the page: wheel zoom only with Ctrl.
         interactionOptions: InteractionOptions(
-          flags: widget.fullScreen
-              ? InteractiveFlag.all & ~InteractiveFlag.rotate
-              : InteractiveFlag.all & ~InteractiveFlag.scrollWheelZoom & ~InteractiveFlag.rotate,
+          flags: still
+              ? InteractiveFlag.none
+              : widget.fullScreen
+                  ? InteractiveFlag.all & ~InteractiveFlag.rotate
+                  : InteractiveFlag.all & ~InteractiveFlag.scrollWheelZoom & ~InteractiveFlag.rotate,
         ),
+        onTap: still ? (_, __) => _openFull() : null,
       ),
       children: [
         if (ref.watch(mapTilesEnabledProvider)) TileLayer(urlTemplate: tenant.mapTiles, userAgentPackageName: tenant.androidId, maxZoom: 19),
         MarkerLayer(markers: [
-          Marker(point: _here, width: 44, height: 44, alignment: Alignment.topCenter, child: Icon(Icons.location_on, size: 44, color: scheme.primary)),
+          Marker(
+            point: _here,
+            width: 48,
+            height: 48,
+            alignment: Alignment.topCenter,
+            child: Icon(Icons.location_on, size: 48, color: scheme.primary, shadows: [Shadow(color: scheme.scrim.withValues(alpha: 0.35), blurRadius: 6)]),
+          ),
         ]),
+        // The tiles' owners ask to be named.
+        Align(
+          alignment: Alignment.bottomLeft,
+          child: Container(
+            margin: const EdgeInsets.all(4),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            color: scheme.surface.withValues(alpha: 0.8),
+            child: Text(tenant.mapAttribution, style: text.labelSmall?.copyWith(fontSize: 10)),
+          ),
+        ),
       ],
     );
+
     return Semantics(
       label: 'Map of where ${widget.title} is',
       child: Listener(
         onPointerSignal: (e) {
-          if (widget.fullScreen || e is! PointerScrollEvent) return;
-          if (HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed) {
-            GestureBinding.instance.pointerSignalResolver.register(e, (_) => _zoom(e.scrollDelta.dy < 0 ? 1 : -1));
-          } else if (!_hint) {
-            setState(() => _hint = true);
-            Future.delayed(const Duration(milliseconds: 1500), () {
-              if (mounted) setState(() => _hint = false);
-            });
+          if (widget.fullScreen || still) return;
+          // Browsers send Ctrl + wheel (and a trackpad pinch) as a zoom gesture.
+          if (e is PointerScaleEvent) {
+            GestureBinding.instance.pointerSignalResolver.register(e, (_) => _zoom(e.scale > 1 ? 1 : -1));
+          } else if (e is PointerScrollEvent) {
+            if (HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed) {
+              GestureBinding.instance.pointerSignalResolver.register(e, (_) => _zoom(e.scrollDelta.dy < 0 ? 1 : -1));
+            } else {
+              _showHint();
+            }
           }
         },
         child: Stack(children: [
@@ -663,36 +819,42 @@ class _ListingMapState extends ConsumerState<ListingMap> {
                 duration: const Duration(milliseconds: 200),
                 child: ColoredBox(
                   color: scheme.scrim.withValues(alpha: 0.45),
-                  child: Center(
-                    child: Text('Use Ctrl + scroll to zoom the map', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: scheme.surface)),
-                  ),
+                  child: Center(child: Text('Use Ctrl + scroll to zoom the map', style: text.titleMedium?.copyWith(color: scheme.surface))),
                 ),
               ),
             ),
           ),
-          Positioned(
-            right: b.spacing.sm,
-            bottom: b.spacing.sm,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              control(Icons.my_location, 'Back to the home', () => _map.move(_here, _start)),
-              SizedBox(height: b.spacing.sm),
-              control(Icons.add, 'Zoom in', () => _zoom(1), key: const Key('map-zoom-in')),
-              SizedBox(height: 2),
-              control(Icons.remove, 'Zoom out', () => _zoom(-1), key: const Key('map-zoom-out')),
-            ]),
-          ),
-          Positioned(
-            right: b.spacing.sm,
-            top: b.spacing.sm,
-            child: widget.fullScreen
-                ? control(Icons.close, 'Close', () => Navigator.pop(context))
-                : control(Icons.fullscreen, 'Full screen map', key: const Key('map-full-screen'), () {
-                    showDialog<void>(
-                      context: context,
-                      builder: (_) => Dialog.fullscreen(child: ListingMap(lat: widget.lat, lng: widget.lng, title: widget.title, fullScreen: true)),
-                    );
-                  }),
-          ),
+          if (still)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: b.spacing.md,
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                pill('Open map', Icons.map_outlined, _openFull, key: const Key('map-open'), primary: true),
+                SizedBox(width: b.spacing.sm),
+                pill('Directions', Icons.directions, () => ref.read(urlOpenerProvider)(_directions), key: const Key('map-directions')),
+              ]),
+            )
+          else ...[
+            Positioned(right: b.spacing.md, bottom: b.spacing.xl, child: zoom),
+            Positioned(
+              right: b.spacing.md,
+              top: b.spacing.md,
+              child: Column(children: [
+                if (widget.fullScreen)
+                  round(Icons.close, 'Close', () => Navigator.pop(context))
+                else
+                  round(Icons.fullscreen, 'Full screen map', _openFull, key: const Key('map-full-screen')),
+                SizedBox(height: b.spacing.sm),
+                round(Icons.my_location, 'Back to the home', () => _map.move(_here, _start)),
+              ]),
+            ),
+            Positioned(
+              left: b.spacing.md,
+              top: b.spacing.md,
+              child: pill('Directions', Icons.directions, () => ref.read(urlOpenerProvider)(_directions), key: const Key('map-directions')),
+            ),
+          ],
         ]),
       ),
     );

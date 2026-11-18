@@ -6,6 +6,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers.dart';
+import '../saved/favourites.dart';
 import '../search/purpose.dart';
 import 'account_data.dart';
 import 'push.dart';
@@ -164,92 +165,257 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   Widget build(BuildContext context) {
     final b = context.brand;
     final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     final customer = ref.watch(customerProvider).value;
     final pendingAlert = ref.watch(pendingAlertProvider);
+    final tenant = ref.watch(tenantProvider);
+    final saved = ref.watch(favouritesProvider).value?.length ?? 0;
+    final notes = <Widget>[
+      if (_status != null) _Note(text: _status!, icon: Icons.mark_email_read_outlined),
+      if (_error != null) _Note(text: _error!, icon: Icons.error_outline, error: true),
+    ];
+    Widget benefit(IconData icon, String title, String line) => Padding(
+          padding: EdgeInsets.only(bottom: b.spacing.md),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: b.primarySoft, borderRadius: BorderRadius.circular(b.radiusSm)),
+              child: Icon(icon, color: scheme.primary, size: 22),
+            ),
+            SizedBox(width: b.spacing.md),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: text.titleSmall),
+                Text(line, style: text.bodySmall?.copyWith(color: b.textMuted)),
+              ]),
+            ),
+          ]),
+        );
+
+    final signedOut = <Widget>[
+      Text('Log in or sign up', style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+      SizedBox(height: b.spacing.xs),
+      Text('Browsing and saving homes need no account. Sign in to keep them on every device and to hear about new homes first.',
+          style: text.bodyMedium?.copyWith(color: b.textMuted)),
+      SizedBox(height: b.spacing.lg),
+      if (pendingAlert != null) ...[
+        Card(
+          color: b.primarySoft,
+          child: ListTile(
+            leading: Icon(Icons.notifications_active_outlined, color: scheme.primary),
+            // What the alert will match: typed words are not part of alerts.
+            title: Text('Sign in to get alerts for: ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}'),
+            subtitle: pendingAlert.q == null ? null : Text('Alerts match the filters, not the words "${pendingAlert.q}".'),
+          ),
+        ),
+        SizedBox(height: b.spacing.lg),
+      ],
+      OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        onPressed: _busy ? null : _google,
+        icon: const Icon(Icons.g_mobiledata, size: 28),
+        label: const Text('Continue with Google'),
+      ),
+      Padding(
+        padding: EdgeInsets.symmetric(vertical: b.spacing.md),
+        child: Row(children: [
+          const Expanded(child: Divider()),
+          Padding(
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.md), child: Text('or with your email', style: text.bodySmall?.copyWith(color: b.textMuted))),
+          const Expanded(child: Divider()),
+        ]),
+      ),
+      TextField(
+        key: const Key('email'),
+        controller: _email,
+        keyboardType: TextInputType.emailAddress,
+        autofillHints: const [AutofillHints.email],
+        textInputAction: TextInputAction.send,
+        onSubmitted: (_) => _busy ? null : (_finishing ? _complete(_email.text.trim()) : _sendLink()),
+        decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.mail_outline)),
+      ),
+      SizedBox(height: b.spacing.md),
+      FilledButton(
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        onPressed: _busy ? null : (_finishing ? () => _complete(_email.text.trim()) : _sendLink),
+        child: Text(_finishing ? 'Finish signing in' : 'Email me a sign-in link'),
+      ),
+      SizedBox(height: b.spacing.xs),
+      Text('No password: we email you a link that signs you in.', style: text.bodySmall?.copyWith(color: b.textMuted), textAlign: TextAlign.center),
+      ...notes,
+      SizedBox(height: b.spacing.xl),
+      Text('With an account', style: text.titleMedium),
+      SizedBox(height: b.spacing.md),
+      benefit(Icons.favorite_border, 'Your saved homes, everywhere', 'Homes you save on this phone show on your computer too.'),
+      benefit(Icons.notifications_active_outlined, 'Alerts for new homes', 'Save a search and hear as soon as a matching home is listed.'),
+      benefit(Icons.rate_review_outlined, 'Reviews', 'Say what a home you lived in or viewed is like.'),
+    ];
+
+    final signedIn = customer == null
+        ? const <Widget>[]
+        : <Widget>[
+            Row(children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: b.primarySoft,
+                child: Text((customer.email ?? '?').characters.first.toUpperCase(), style: text.titleLarge?.copyWith(color: scheme.primary)),
+              ),
+              SizedBox(width: b.spacing.md),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(customer.email ?? 'Signed in', style: text.titleMedium, overflow: TextOverflow.ellipsis),
+                  Text('Signed in', style: text.bodySmall?.copyWith(color: b.textMuted)),
+                ]),
+              ),
+            ]),
+            SizedBox(height: b.spacing.lg),
+            Row(children: [
+              Expanded(child: _Stat(icon: Icons.favorite_border, label: 'Saved homes', value: '$saved', onTap: () => context.go('/saved'))),
+              SizedBox(width: b.spacing.sm),
+              Expanded(
+                child: _Stat(
+                  icon: Icons.search,
+                  label: 'Saved searches',
+                  value: '${ref.watch(savedSearchesProvider(customer.uid)).value?.length ?? 0}',
+                ),
+              ),
+            ]),
+            if (pendingAlert != null) ...[
+              SizedBox(height: b.spacing.md),
+              FilledButton.icon(
+                icon: const Icon(Icons.notifications_active_outlined),
+                label: Text('Get alerts for ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}'),
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, pendingAlert);
+                  ref.read(pendingAlertProvider.notifier).set(null);
+                  messenger.showSnackBar(
+                      SnackBar(content: Text('Saved: ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}. New matches will show here.')));
+                  await offerPush(ref, customer.uid);
+                },
+              ),
+            ],
+            ...notes,
+            SizedBox(height: b.spacing.lg),
+            _Section(title: 'New homes for you', child: _Alerts(uid: customer.uid)),
+            SizedBox(height: b.spacing.md),
+            _Section(title: 'Saved searches', child: _Searches(uid: customer.uid)),
+            SizedBox(height: b.spacing.md),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                // This phone stops getting this account's pushes.
+                try {
+                  await ref.read(pushAlertsProvider).disable(customer.uid);
+                } on Object {
+                  // Signing out still works; the sweep forgets dead tokens.
+                }
+                await ref.read(customerAccountProvider).signOut();
+              },
+              label: const Text('Sign out'),
+            ),
+          ];
+
     return Scaffold(
       appBar: AppBar(title: const Text('Account')),
-      body: ListView(padding: EdgeInsets.all(b.spacing.gutter), children: [
-        if (customer == null) ...[
-          Text('Get alerts for new homes', style: text.titleLarge),
-          if (pendingAlert != null) ...[
-            SizedBox(height: b.spacing.sm),
-            Card(
-              color: b.primarySoft,
-              child: ListTile(
-                leading: const Icon(Icons.notifications_active_outlined),
-                // What the alert will match: typed words are not part of alerts.
-                title: Text('Sign in to get alerts for: ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}'),
-                subtitle: pendingAlert.q == null ? null : Text('Alerts match the filters, not the words "${pendingAlert.q}".'),
-              ),
-            ),
-          ],
-          SizedBox(height: b.spacing.sm),
-          Text('You can browse and save homes without an account. Sign in to be told when new homes match a search you save.',
-              style: text.bodyMedium),
-          SizedBox(height: b.spacing.lg),
-          TextField(
-            key: const Key('email'),
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            autofillHints: const [AutofillHints.email],
-            decoration: const InputDecoration(labelText: 'Email'),
-          ),
-          SizedBox(height: b.spacing.md),
-          FilledButton(
-            onPressed: _busy ? null : (_finishing ? () => _complete(_email.text.trim()) : _sendLink),
-            child: Text(_finishing ? 'Finish signing in' : 'Email me a sign-in link'),
-          ),
-          SizedBox(height: b.spacing.sm),
-          OutlinedButton(onPressed: _busy ? null : _google, child: const Text('Continue with Google')),
-        ] else ...[
-          Text(customer.email ?? 'Signed in', style: text.titleMedium),
-          TextButton(
-            onPressed: () async {
-              // This phone stops getting this account's pushes.
-              try {
-                await ref.read(pushAlertsProvider).disable(customer.uid);
-              } on Object {
-                // Signing out still works; the sweep forgets dead tokens.
-              }
-              await ref.read(customerAccountProvider).signOut();
-            },
-            child: const Text('Sign out'),
-          ),
-          if (pendingAlert != null) ...[
-            FilledButton.icon(
-              icon: const Icon(Icons.notifications_active_outlined),
-              label: Text('Get alerts for ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}'),
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, pendingAlert);
-                ref.read(pendingAlertProvider.notifier).set(null);
-                messenger.showSnackBar(
-                    SnackBar(content: Text('Saved: ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}. New matches will show here.')));
-                await offerPush(ref, customer.uid);
-              },
-            ),
-          ],
-          SizedBox(height: b.spacing.md),
-          _Alerts(uid: customer.uid),
-          SizedBox(height: b.spacing.lg),
-          _Searches(uid: customer.uid),
-        ],
-        if (_status != null) Padding(padding: EdgeInsets.only(top: b.spacing.md), child: Text(_status!, style: text.bodyMedium)),
-        SizedBox(height: b.spacing.xl),
-        // Site pages live on the share site (P5-s07); they open in the browser.
-        Wrap(spacing: b.spacing.sm, children: [
-          for (final (slug, name) in const [('about', 'About'), ('privacy', 'Privacy'), ('terms', 'Terms')])
-            TextButton(
-              onPressed: () => ref.read(urlOpenerProvider)(Uri.https(ref.read(tenantProvider).shareDomain, '/$slug')),
-              child: Text(name),
-            ),
-        ]),
-        if (_error != null)
-          Padding(
-            padding: EdgeInsets.only(top: b.spacing.md),
-            child: Text(_error!, style: text.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.error)),
-          ),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: ListView(padding: EdgeInsets.all(b.spacing.gutter), children: [
+            ...(customer == null ? signedOut : signedIn),
+            SizedBox(height: b.spacing.xl),
+            const Divider(),
+            // Site pages live on the share site (P5-s07); they open in the browser.
+            Wrap(alignment: WrapAlignment.center, spacing: b.spacing.sm, children: [
+              for (final (slug, name) in const [('about', 'About'), ('contact', 'Contact'), ('privacy', 'Privacy'), ('terms', 'Terms')])
+                TextButton(onPressed: () => ref.read(urlOpenerProvider)(Uri.https(tenant.shareDomain, '/$slug')), child: Text(name)),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// A message under the sign-in form: what happened, or what went wrong.
+class _Note extends StatelessWidget {
+  const _Note({required this.text, required this.icon, this.error = false});
+  final String text;
+  final IconData icon;
+  final bool error;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    final ink = error ? scheme.error : scheme.primary;
+    return Container(
+      margin: EdgeInsets.only(top: b.spacing.md),
+      padding: EdgeInsets.all(b.spacing.md),
+      decoration: BoxDecoration(color: error ? scheme.errorContainer.withValues(alpha: 0.4) : b.primarySoft, borderRadius: BorderRadius.circular(b.radiusSm)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: ink, size: 20),
+        SizedBox(width: b.spacing.sm),
+        Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyMedium)),
       ]),
+    );
+  }
+}
+
+/// A count to tap: saved homes, saved searches.
+class _Stat extends StatelessWidget {
+  const _Stat({required this.icon, required this.label, required this.value, this.onTap});
+  final IconData icon;
+  final String label, value;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final text = Theme.of(context).textTheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.all(b.spacing.md),
+          child: Row(children: [
+            Icon(icon, color: Theme.of(context).colorScheme.primary),
+            SizedBox(width: b.spacing.sm),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(value, style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                Text(label, style: text.bodySmall?.copyWith(color: b.textMuted)),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// A titled card on the Account page.
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.child});
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(b.spacing.md, b.spacing.md, b.spacing.md, b.spacing.sm),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          SizedBox(height: b.spacing.sm),
+          child,
+        ]),
+      ),
     );
   }
 }
@@ -260,16 +426,29 @@ class _Alerts extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.brand;
     final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     final alerts = ref.watch(alertsProvider(uid)).value ?? const [];
     final repo = ref.read(alertsRepositoryProvider);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('New homes for you', style: text.titleMedium),
-      if (alerts.isEmpty) Text('Nothing new yet. We check every few minutes.', style: text.bodySmall),
+    if (alerts.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: b.spacing.sm),
+        child: Row(children: [
+          Icon(Icons.notifications_none, color: b.textMuted),
+          SizedBox(width: b.spacing.sm),
+          Expanded(child: Text('Nothing new yet. We check every few minutes.', style: text.bodyMedium?.copyWith(color: b.textMuted))),
+        ]),
+      );
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       for (final a in alerts)
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: Icon(a.read ? Icons.home_outlined : Icons.fiber_new_outlined),
+          leading: CircleAvatar(
+            backgroundColor: a.read ? b.surfaceAlt : b.primarySoft,
+            child: Icon(a.read ? Icons.home_outlined : Icons.fiber_new_outlined, color: a.read ? b.textMuted : scheme.primary),
+          ),
           title: Text(a.title, style: a.read ? null : const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: PriceText(a.priceKES, period: a.purpose.period, compact: a.purpose == Purpose.sale),
           trailing: IconButton(tooltip: 'Clear', icon: const Icon(Icons.close), onPressed: () => repo.clear(uid, a.id)),
@@ -288,15 +467,28 @@ class _Searches extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.brand;
     final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     final searches = ref.watch(savedSearchesProvider(uid)).value ?? const [];
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Saved searches', style: text.titleMedium),
-      if (searches.isEmpty) Text('Search for homes, then tap "Get alerts".', style: text.bodySmall),
+    if (searches.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: b.spacing.sm),
+        child: Row(children: [
+          Icon(Icons.search, color: b.textMuted),
+          SizedBox(width: b.spacing.sm),
+          Expanded(child: Text('Search for homes, then tap "Get alerts".', style: text.bodyMedium?.copyWith(color: b.textMuted))),
+        ]),
+      );
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       for (final s in searches)
         ListTile(
           contentPadding: EdgeInsets.zero,
+          leading: CircleAvatar(backgroundColor: b.primarySoft, child: Icon(Icons.notifications_active_outlined, color: scheme.primary, size: 20)),
           title: Text(describeSearch(s.filters)),
+          subtitle: Text(s.filters.types.isEmpty && s.filters.areas.isEmpty ? 'Any home, anywhere · alerts on' : 'Alerts on',
+              style: text.bodySmall?.copyWith(color: b.textMuted)),
           onTap: () => context.push(s.filters.toUri().toString()),
           trailing: IconButton(
             tooltip: 'Stop these alerts',

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,8 +25,15 @@ void main() {
         'verifiedAt': Timestamp.fromDate(now.subtract(const Duration(days: 3))),
         'expiresAt': Timestamp.fromDate(now.add(const Duration(days: 27))),
         'media': [
-          {'kind': 'photo', 'variants': {'thumb': 'media/listings/x/a/thumb.webp', 'card': 'media/listings/x/a/card.webp'}, 'blurhash': 'LKO2'},
-          {'kind': 'video', 'variants': {'hls': 'media/listings/x/v/hls/master.m3u8'}},
+          {
+            'kind': 'photo',
+            'variants': {'thumb': 'media/listings/x/a/thumb.webp', 'card': 'media/listings/x/a/card.webp'},
+            'blurhash': 'LKO2'
+          },
+          {
+            'kind': 'video',
+            'variants': {'hls': 'media/listings/x/v/hls/master.m3u8'}
+          },
         ],
       };
 
@@ -63,6 +72,27 @@ void main() {
     expect((await search.search(const ListingFilters(purpose: Purpose.rent))).found, 3);
   });
 
+  test('a returning visitor sees the homes kept from last time at once; fresh ones are fetched and kept for next time', () async {
+    final store = _MemorySnapshots();
+    // First visit: nothing kept, so it waits for Firestore, then keeps the homes.
+    final first = SnapshotListingSearch(Future.value(FirestoreListingSearch(db, bucket: 'b', clock: () => now)), store: store, clock: () => now);
+    expect((await first.search(const ListingFilters(purpose: Purpose.rent))).found, 2);
+    await Future<void>.delayed(Duration.zero);
+    expect(store.kept[Purpose.rent]!.rows, hasLength(2));
+
+    // Next visit, Firebase still starting (never ready here): the kept homes show.
+    final slow = Completer<FirestoreListingSearch>();
+    final next = SnapshotListingSearch(slow.future, store: store, clock: () => now.add(const Duration(hours: 1)));
+    final r = await next.search(const ListingFilters(purpose: Purpose.rent, maxPriceKES: 60000));
+    expect(r.hits.map((h) => h.slug), ['flat-1'], reason: 'filtered from the kept copy, without waiting');
+
+    // A copy older than half a day is not trusted: the search waits for fresh homes.
+    final stale = SnapshotListingSearch(Future.value(FirestoreListingSearch(db, bucket: 'b', clock: () => now)),
+        store: store, clock: () => now.add(const Duration(days: 2)));
+    await db.collection('listings').doc('l6').set(listing('flat-6'));
+    expect((await stale.search(const ListingFilters(purpose: Purpose.rent))).found, 3);
+  });
+
   test('details by slug: live only, card photos, the agent while active', () async {
     final repo = FirestoreListingRepository(db, bucket: 'b', clock: () => now);
     final d = (await repo.bySlug('flat-1'))!;
@@ -77,7 +107,9 @@ void main() {
   test('open times come from openSlots; on any failure the app shows every time', () async {
     final ok = CallableLeadRepository((name, data) async {
       expect((name, data['listingId'], data['day']), ('openSlots', 'l1', '2026-10-30'));
-      return {'times': ['08:00', '09:30']};
+      return {
+        'times': ['08:00', '09:30']
+      };
     });
     expect(await ok.openTimes(listingId: 'l1', day: '2026-10-30'), ['08:00', '09:30']);
     final down = CallableLeadRepository((name, data) async => throw FirebaseException(plugin: 'functions', code: 'unavailable'));
@@ -113,7 +145,12 @@ void main() {
     });
     await leads.enquire(listingId: 'l1', phone: '+254712345678', name: 'Amina');
     expect(calls.single.$1, 'createLead');
-    expect(calls.single.$2, {'listingId': 'l1', 'channel': 'form', 'contact': {'phone': '+254712345678', 'name': 'Amina'}, 'consent': true});
+    expect(calls.single.$2, {
+      'listingId': 'l1',
+      'channel': 'form',
+      'contact': {'phone': '+254712345678', 'name': 'Amina'},
+      'consent': true
+    });
     await leads.logTap(listingId: 'l1', channel: 'whatsapp');
     expect(calls.last.$2, {'listingId': 'l1', 'channel': 'whatsapp'});
     await expectLater(
@@ -144,8 +181,33 @@ void main() {
     expect(v.hls, 'https://firebasestorage.googleapis.com/v0/b/b/o/media%2Flistings%2Fl%2Fm%2Fhls%2Fmaster.m3u8?alt=media');
     expect(v.mp4, endsWith('video.mp4?alt=media'));
     expect(v.poster, endsWith('poster.jpg?alt=media'));
-    expect(videoFromMedia({'kind': 'video', 'variants': {'hls': 'a', 'poster': 'b'}}, bucket)!.mp4, isNull, reason: 'older videos have no MP4');
-    expect(videoFromMedia({'kind': 'photo', 'variants': {'card': 'x'}}, bucket), isNull);
-    expect(videoFromMedia({'kind': 'video', 'variants': {'hls': 'a'}}, bucket), isNull);
+    expect(
+        videoFromMedia({
+          'kind': 'video',
+          'variants': {'hls': 'a', 'poster': 'b'}
+        }, bucket)!
+            .mp4,
+        isNull,
+        reason: 'older videos have no MP4');
+    expect(
+        videoFromMedia({
+          'kind': 'photo',
+          'variants': {'card': 'x'}
+        }, bucket),
+        isNull);
+    expect(
+        videoFromMedia({
+          'kind': 'video',
+          'variants': {'hls': 'a'}
+        }, bucket),
+        isNull);
   });
+}
+
+class _MemorySnapshots implements ListingSnapshotStore {
+  final kept = <Purpose, ({DateTime at, List<ListingSummary> rows})>{};
+  @override
+  Future<({DateTime at, List<ListingSummary> rows})?> load(Purpose purpose) async => kept[purpose];
+  @override
+  Future<void> save(Purpose purpose, DateTime at, List<ListingSummary> rows) async => kept[purpose] = (at: at, rows: rows);
 }

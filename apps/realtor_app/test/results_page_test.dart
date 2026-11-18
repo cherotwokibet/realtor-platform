@@ -14,7 +14,8 @@ import 'package:realtor_core/realtor_core.dart';
 
 import 'feature_flags_test.dart' show tenantWith;
 
-ListingSummary home(int i, {List<String> photos = const [], List<String> amenities = const [], bool verified = false, bool plan = false, String? poster}) => ListingSummary(
+ListingSummary home(int i, {List<String> photos = const [], List<String> amenities = const [], bool verified = false, bool plan = false, String? poster}) =>
+    ListingSummary(
       id: 'h$i',
       slug: 'home-$i',
       title: 'Home $i',
@@ -66,8 +67,7 @@ Future<List<Uri>> pump(WidgetTester tester, Size size, List<ListingSummary> home
   return opened;
 }
 
-String location(WidgetTester tester) =>
-    ProviderScope.containerOf(tester.element(find.byType(RealtorApp))).read(routerProvider).state.uri.toString();
+String location(WidgetTester tester) => ProviderScope.containerOf(tester.element(find.byType(RealtorApp))).read(routerProvider).state.uri.toString();
 
 void main() {
   const phone = Size(412, 900), desktop = Size(1366, 900);
@@ -95,10 +95,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(find.text('Home 1')).dy, lessThan(was.dy), reason: 'the list scrolled');
       if (size == phone) {
-        // The phone's top bar (menu, logo, Log in) scrolls away; the search bar stops at the top.
+        // Phones: scrolling down, the top bar and the search bar both slide away;
+        // a small scroll up brings the search bar straight back.
         expect(before.dy, greaterThan(0));
-        expect(tester.getTopLeft(bar).dy, 0);
+        expect(find.byKey(const Key('filter-location')).hitTestable(), findsNothing, reason: 'hidden while reading down');
         expect(find.byTooltip('Open navigation menu').hitTestable(), findsNothing);
+        await tester.dragFrom(const Offset(200, 500), const Offset(0, 60));
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(bar).dy, 0, reason: 'back at the top of the screen');
+        expect(find.byKey(const Key('filter-location')).hitTestable(), findsOneWidget);
         await tester.dragFrom(const Offset(200, 600), const Offset(0, 2000));
         await tester.pumpAndSettle();
         expect(find.byTooltip('Open navigation menu').hitTestable(), findsOneWidget, reason: 'back at the top');
@@ -175,7 +180,10 @@ void main() {
   });
 
   testWidgets('over the list: All / Furnished / Unfurnished, the order, and List | Map', (tester) async {
-    await pump(tester, desktop, [home(1, amenities: ['furnished']), home(2, verified: true)]);
+    await pump(tester, desktop, [
+      home(1, amenities: ['furnished']),
+      home(2, verified: true)
+    ]);
     final heading = find.byKey(const Key('list-heading'));
     expect(tester.getTopLeft(heading).dy, greaterThan(tester.getTopLeft(find.text('Homes to rent')).dy));
     await tester.tap(find.byKey(const Key('furnished-false')));
@@ -353,7 +361,8 @@ void main() {
 
   testWidgets('phones: after a filter is picked, the pill row keeps its place, then glides back to the start; Reset all filters clears them', (tester) async {
     await pump(tester, phone, [home(1), home(2)]);
-    double offset() => tester.state<ScrollableState>(find.descendant(of: find.byKey(const Key('filter-pills')), matching: find.byType(Scrollable))).position.pixels;
+    double offset() =>
+        tester.state<ScrollableState>(find.descendant(of: find.byKey(const Key('filter-pills')), matching: find.byType(Scrollable))).position.pixels;
     await tester.ensureVisible(find.byKey(const Key('filter-price')));
     await tester.pumpAndSettle();
     final scrolled = offset();
@@ -375,6 +384,6 @@ void main() {
     await tester.tap(find.byKey(const Key('filter-reset-all')));
     await tester.pumpAndSettle();
     expect(location(tester), '/rent');
-    expect(find.byKey(const Key('filter-reset-all')), findsNothing);
+    expect(tester.widget<TextButton>(find.byKey(const Key('filter-reset-all'))).onPressed, isNull, reason: 'nothing left to reset');
   });
 }
