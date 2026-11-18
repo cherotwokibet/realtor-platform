@@ -119,42 +119,75 @@ class AppDrawer extends ConsumerWidget {
       context.go(path);
     }
 
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final email = ref.watch(customerProvider).value?.email;
+    final whatsapp = tenant.hasContactNumbers ? tenant.whatsappLink('Hello ${tenant.name}') : null;
+    Widget item(String label, VoidCallback onTap, {Key? key}) => InkWell(
+          key: key,
+          onTap: onTap,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: b.spacing.lg, vertical: b.spacing.md),
+            child: Text(label, style: text.bodyLarge),
+          ),
+        );
+    Widget heading(String label) => Padding(
+          padding: EdgeInsets.fromLTRB(b.spacing.lg, b.spacing.lg, b.spacing.lg, b.spacing.xs),
+          child: Text(label.toUpperCase(), style: text.labelSmall?.copyWith(color: b.textMuted, letterSpacing: 0.8)),
+        );
+    void openUrl(Uri uri) {
+      Navigator.pop(context);
+      open(uri);
+    }
+
+    // As on the big portals' apps: a close button, the account first, then
+    // plain rows to tap; the page behind is dimmed.
     return Drawer(
       key: const Key('app-drawer'),
+      width: (MediaQuery.sizeOf(context).width * 0.86).clamp(0, 360),
+      shape: const RoundedRectangleBorder(),
       child: SafeArea(
-        child: ListView(padding: EdgeInsets.symmetric(vertical: b.spacing.md), children: [
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(tooltip: 'Close menu', icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+          ),
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: b.spacing.gutter, vertical: b.spacing.md),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Image.asset(b.logoAsset, height: 48, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
-            ),
+            padding: EdgeInsets.symmetric(horizontal: b.spacing.lg),
+            child: signedIn
+                ? Row(children: [
+                    CircleAvatar(backgroundColor: b.primarySoft, child: Icon(Icons.person, color: scheme.primary)),
+                    SizedBox(width: b.spacing.md),
+                    Expanded(child: Text(email ?? 'Signed in', style: text.titleSmall, overflow: TextOverflow.ellipsis)),
+                  ])
+                : OutlinedButton(
+                    key: const Key('drawer-login'),
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                    onPressed: () => go('/account'),
+                    child: const Text('Sign up or Log in'),
+                  ),
           ),
-          ListTile(leading: const Icon(Icons.home_outlined), title: const Text('Home'), onTap: () => go('/')),
-          for (final p in Purpose.values)
-            if (tenant.features.isOn(p.feature))
-              ListTile(leading: const Icon(Icons.search), title: Text('Homes ${p.heading}'), onTap: () => go('/${p.pathSegment}')),
-          for (final s in enabledSections(tenant.features))
-            if (s.path != '/' && s.path != '/account')
-              ListTile(
-                leading: Icon(s.icon),
-                title: Text(s.label),
-                onTap: () => go(s.path == '/saved' && !signedIn ? '/account' : s.path),
-              ),
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: Text(signedIn ? 'Account' : 'Log in / Sign up'),
-            onTap: () => go('/account'),
+          SizedBox(height: b.spacing.sm),
+          Expanded(
+            child: ListView(padding: EdgeInsets.only(bottom: b.spacing.lg), children: [
+              item('Home', () => go('/')),
+              for (final p in Purpose.values)
+                if (tenant.features.isOn(p.feature)) item('Homes ${p.heading}', () => go('/${p.pathSegment}')),
+              for (final s in enabledSections(tenant.features))
+                if (s.path != '/' && s.path != '/account') item(s.label, () => go(s.path == '/saved' && !signedIn ? '/account' : s.path)),
+              item(signedIn ? 'Account' : 'Saved searches and alerts', () => go('/account')),
+              const Divider(height: 24),
+              heading('Company'),
+              for (final (slug, name) in const [('about', 'About us'), ('contact', 'Contact us'), ('faq', 'FAQs')])
+                item(name, () => openUrl(Uri.https(tenant.shareDomain, '/$slug'))),
+              heading('Get in touch'),
+              if (tenant.hasContactNumbers) item('Call ${tenant.phone}', () => openUrl(Uri(scheme: 'tel', path: tenant.phone))),
+              if (whatsapp != null) item('WhatsApp us', () => openUrl(whatsapp)),
+              item(tenant.email, () => openUrl(Uri(scheme: 'mailto', path: tenant.email))),
+              const Divider(height: 24),
+              for (final (slug, name) in const [('privacy', 'Privacy'), ('terms', 'Terms')]) item(name, () => openUrl(Uri.https(tenant.shareDomain, '/$slug'))),
+            ]),
           ),
-          const Divider(),
-          for (final (slug, name) in const [('about', 'About us'), ('contact', 'Contact'), ('faq', 'FAQs'), ('privacy', 'Privacy'), ('terms', 'Terms')])
-            ListTile(
-              title: Text(name),
-              onTap: () {
-                Navigator.pop(context);
-                open(Uri.https(tenant.shareDomain, '/$slug'));
-              },
-            ),
         ]),
       ),
     );

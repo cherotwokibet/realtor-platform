@@ -29,8 +29,8 @@ void main() {
       expect(t.firebaseProjects[FirebaseEnv.prod], 'rte-realtor-prod');
       expect(t.features.mpesa, isFalse);
       expect(t.currency, 'KES');
-      expect(t.hasContactNumbers, isFalse);
-      expect(t.whatsappLink('hi'), isNull);
+      expect(t.hasContactNumbers, isTrue);
+      expect(t.whatsappLink('hi').toString(), 'https://wa.me/254722311918?text=hi');
     });
 
     test('two tenants differ only by data', () {

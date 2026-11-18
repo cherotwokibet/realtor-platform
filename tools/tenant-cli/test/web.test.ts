@@ -77,13 +77,29 @@ test('old #/ links are rewritten to paths before Flutter starts, once', () => {
   assert.equal(patchIndexHtml(once, tenant('demo-homes')), once);
 });
 
-test('a loading screen paints the tenant name at once, and goes on Flutter\'s first frame (P3-s01)', () => {
+test('the app paints an outline of the page at once (logo, search, cards), gone on Flutter\'s first frame (P3-s01)', () => {
   const t = tenant('realtime-estates');
   const out = patchIndexHtml(flutterIndex, t);
-  assert.match(out, /<div id="loading" aria-hidden="true">Realtime Estates Ltd<small>Live where you love<\/small><\/div>/);
-  assert.match(out, new RegExp(`#loading\\{[^}]*background:${t.brand.colors.background};color:${t.brand.colors.primary}`));
+  assert.match(out, /<div id="loading" class="sk" aria-hidden="true">/);
+  assert.match(out, /<img src="assets\/assets\/tenant\/logo-horizontal.png" alt="">/);
+  assert.match(out, /class="sk-c"/);
+  assert.match(out, /<p class="sk-name">Realtime Estates Ltd<small>Live where you love<\/small><\/p>/);
+  assert.match(out, new RegExp(`#loading\\{[^}]*background:${t.brand.colors.background}`));
+  assert.match(out, /prefers-reduced-motion/);
   assert.match(out, /flutter-first-frame/);
+  assert.match(out, /rel="preload" href="assets\/assets\/tenant\/logo-horizontal.png" as="image"/);
   assert.equal(patchIndexHtml(out, t), out, 'still idempotent');
+});
+
+test('an index.html with the old text-only loading screen is upgraded, not doubled', () => {
+  const t = tenant('realtime-estates');
+  const old = flutterIndex
+    .replace('<head>', '<head>\n  <style>#loading{position:fixed;inset:0}</style>')
+    .replace('<body>', `<body>\n  <div id="loading" aria-hidden="true">Realtime Estates Ltd<small>Live where you love</small></div>\n  <script>(function(){function go(){var e=document.getElementById('loading');if(e)e.remove();}window.addEventListener('flutter-first-frame',go);setTimeout(go,10000);})();</script>`);
+  const out = patchIndexHtml(old, t);
+  assert.equal(out.match(/id="loading"/g)?.length, 1);
+  assert.equal(out.match(/flutter-first-frame/g)?.length, 1);
+  assert.doesNotMatch(out, /#loading\{position:fixed;inset:0\}<\/style>/);
 });
 
 test('the admin shell: tenant title, kept out of search, robots.txt disallows all', () => {

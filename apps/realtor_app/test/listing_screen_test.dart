@@ -15,8 +15,7 @@ import 'package:realtor_core/realtor_core.dart';
 
 import 'favourites_test.dart' show MemoryStore;
 
-TenantConfig tenant() =>
-    TenantConfig.fromJson(jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>);
+TenantConfig tenant() => TenantConfig.fromJson(jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>);
 
 /// A lead repository that can fail like the Functions do.
 /// Demo listings, with three photos on each.
@@ -24,7 +23,10 @@ class ThreePhotos extends DemoListingRepository {
   @override
   Future<ListingDetail?> bySlug(String slug) async {
     final d = await super.bySlug(slug);
-    return d == null ? null : ListingDetail(summary: d.summary, description: d.description, photos: const ['https://x/1.webp', 'https://x/2.webp', 'https://x/3.webp'], videos: videos);
+    return d == null
+        ? null
+        : ListingDetail(
+            summary: d.summary, description: d.description, photos: const ['https://x/1.webp', 'https://x/2.webp', 'https://x/3.webp'], videos: videos);
   }
 
   List<ListingVideo> videos = const [];
@@ -34,14 +36,14 @@ class FailingLeads extends DemoLeadRepository {
   FailingLeads(this.error);
   final LeadException error;
   @override
-  Future<BookedViewing> bookViewing({required String listingId, required String slot, required String name, required String phone}) =>
-      Future.error(error);
+  Future<BookedViewing> bookViewing({required String listingId, required String slot, required String name, required String phone}) => Future.error(error);
 }
 
 late DemoLeadRepository leads;
 late List<Uri> opened;
 
-Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size size = const Size(412, 1600), TenantConfig? tenantConfig, ListingRepository? listings}) async {
+Future<void> open(WidgetTester tester, String path,
+    {LeadRepository? repo, Size size = const Size(412, 1600), TenantConfig? tenantConfig, ListingRepository? listings}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -68,6 +70,9 @@ Future<void> open(WidgetTester tester, String path, {LeadRepository? repo, Size 
 
 const kilimani = '/listing/2-bedroom-apartment-kilimani';
 
+/// Call and WhatsApp, fixed at the bottom of a phone's listing page.
+final bar = find.byKey(const Key('contact-bar'));
+
 /// The page's own (vertical) scroll, not a row of cards or the map.
 final page = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first;
 
@@ -83,7 +88,10 @@ void main() {
     expect(find.text('KES 3,000 a month'), findsOneWidget, reason: 'the service charge');
     expect(find.textContaining('A 2-bedroom, 2-bathroom apartment to let in Kilimani.'), findsOneWidget, reason: 'the description (P7-s02)');
     expect(find.text('Listed by Wanjiku Mwangi'), findsOneWidget);
-    for (final action in ['WhatsApp', 'Call', 'Enquire', 'Book a viewing']) {
+    for (final action in ['WhatsApp', 'Call']) {
+      expect(find.descendant(of: bar, matching: find.text(action)), findsOneWidget, reason: action);
+    }
+    for (final action in ['Enquire', 'Book a viewing']) {
       expect(find.text(action), findsOneWidget, reason: action);
     }
     for (final section in ['Property details', 'Tips for your safety', 'Extra payments', 'Description', 'Location']) {
@@ -101,9 +109,9 @@ void main() {
 
   testWidgets('WhatsApp and Call count the tap and open the agent with the listing link', (tester) async {
     await open(tester, kilimani);
-    await tester.tap(find.text('WhatsApp'));
+    await tester.tap(find.descendant(of: bar, matching: find.text('WhatsApp')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Call'));
+    await tester.tap(find.descendant(of: bar, matching: find.text('Call')));
     await tester.pumpAndSettle();
     expect(leads.taps, ['demo-1/whatsapp', 'demo-1/call']);
     expect(opened[0].host, 'wa.me');
@@ -266,8 +274,9 @@ void main() {
     await open(tester, kilimani);
     final photos = tester.getRect(find.byKey(const ValueKey('listing-photos')));
     expect(photos.width, 412);
-    expect(tester.getRect(find.text('WhatsApp')).top, greaterThan(photos.bottom));
-    expect(tester.getRect(find.text('WhatsApp')).bottom, lessThanOrEqualTo(1600), reason: 'Call and WhatsApp stay in the bottom bar');
+    expect(tester.getRect(find.descendant(of: bar, matching: find.text('WhatsApp'))).top, greaterThan(photos.bottom));
+    expect(tester.getRect(find.descendant(of: bar, matching: find.text('WhatsApp'))).bottom, lessThanOrEqualTo(1600),
+        reason: 'Call and WhatsApp stay in the bottom bar');
   });
 
   testWidgets('a viewing with a fee offers M-Pesa to the booking phone (P6-s01)', (tester) async {
@@ -322,7 +331,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('2 / 3'), findsOneWidget);
     // A mouse drag also turns the page on the web.
-    await tester.drag(find.descendant(of: find.byKey(const Key('photo-viewer')), matching: find.byType(PageView)), const Offset(-900, 0), kind: PointerDeviceKind.mouse);
+    await tester.drag(find.descendant(of: find.byKey(const Key('photo-viewer')), matching: find.byType(PageView)), const Offset(-900, 0),
+        kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
     expect(find.text('3 / 3'), findsOneWidget);
   });
@@ -448,7 +458,13 @@ void main() {
     expect(find.text('Gym'), findsNothing);
     await tester.tap(find.byKey(const Key('more-amenities')));
     await tester.pumpAndSettle();
-    expect(find.text('Features & amenities (8)'), findsOneWidget);
+    expect(find.text('FEATURES & AMENITIES'), findsOneWidget);
+    for (final group in ['BUILDING', 'SECURITY']) {
+      expect(find.text(group), findsOneWidget, reason: 'grouped: $group');
+    }
+    final list = find.descendant(of: find.byKey(const Key('all-amenities')), matching: find.byType(Scrollable));
+    await tester.scrollUntilVisible(find.text('Gym'), 200, scrollable: list.first);
+    expect(find.text('HEALTH AND FITNESS'), findsOneWidget);
     expect(find.text('Gym'), findsOneWidget);
   });
 
@@ -476,8 +492,18 @@ class _Amenities8 extends DemoListingRepository {
     final s = d.summary;
     return ListingDetail(
       summary: ListingSummary(
-        id: s.id, slug: s.slug, title: s.title, purpose: s.purpose, type: s.type, beds: s.beds, baths: s.baths,
-        priceKES: s.priceKES, area: s.area, lat: s.lat, lng: s.lng, amenities: amenities,
+        id: s.id,
+        slug: s.slug,
+        title: s.title,
+        purpose: s.purpose,
+        type: s.type,
+        beds: s.beds,
+        baths: s.baths,
+        priceKES: s.priceKES,
+        area: s.area,
+        lat: s.lat,
+        lng: s.lng,
+        amenities: amenities,
       ),
       description: d.description,
       agent: d.agent,

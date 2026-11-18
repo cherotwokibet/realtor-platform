@@ -387,7 +387,7 @@ class _FiltersSheetState extends ConsumerState<FiltersSheet> {
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(foregroundColor: scheme.primary, side: BorderSide(color: scheme.primary)),
                 onPressed: _reset,
-                child: const Text('Reset'),
+                child: Text(_section == FilterSection.all ? 'Reset all filters' : 'Reset'),
               ),
             ),
             SizedBox(width: b.spacing.md),

@@ -41,7 +41,7 @@ void main() {
     expect(find.text('Wanjiku Mwangi'), findsWidgets);
     expect(find.textContaining('EARB reg.'), findsOneWidget);
     expect(find.textContaining('Rated 4.5 of 5'), findsOneWidget);
-    await tester.tap(find.text('WhatsApp'));
+    await tester.tap(find.text('WhatsApp').first);
     await tester.pump();
     expect(opened.single.host, 'wa.me');
     expect(find.byType(Card), findsWidgets);

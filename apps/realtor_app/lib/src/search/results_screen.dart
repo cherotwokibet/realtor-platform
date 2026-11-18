@@ -101,7 +101,25 @@ class ResultsScreen extends ConsumerWidget {
                     slivers: [
                       // The top menu scrolls away with the page and is back at the top.
                       if (wide) SliverToBoxAdapter(child: menu) else const PhoneTopBar(),
-                      SliverPersistentHeader(pinned: true, delegate: _PinnedBar(height: barHeight, child: bar)),
+                      // Wide: the search bar stays at the top. Phones, as on the big
+                      // portals' apps: it slides away as you scroll down the homes and
+                      // straight back as soon as you scroll up.
+                      if (wide)
+                        SliverPersistentHeader(pinned: true, delegate: _PinnedBar(height: barHeight, child: bar))
+                      else
+                        SliverAppBar(
+                          key: const Key('floating-filters'),
+                          primary: false,
+                          floating: true,
+                          snap: true,
+                          automaticallyImplyLeading: false,
+                          toolbarHeight: barHeight,
+                          elevation: 0,
+                          scrolledUnderElevation: 0,
+                          backgroundColor: Theme.of(context).colorScheme.surface,
+                          surfaceTintColor: Colors.transparent,
+                          flexibleSpace: bar,
+                        ),
                       result.when(
                         loading: () => const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator())),
                         error: (e, _) => SliverFillRemaining(
@@ -428,15 +446,18 @@ class _SearchBarRowState extends ConsumerState<SearchBarRow> {
                       SizedBox(width: b.spacing.sm),
                       VerticalDivider(width: 1, indent: 6, endIndent: 6, color: b.borderStrong),
                       for (final d in drops) ...[gap, d],
-                      if (all > 0) ...[
-                        gap,
-                        TextButton(
-                          key: const Key('filter-reset-all'),
-                          style: TextButton.styleFrom(minimumSize: const Size(0, 36), padding: EdgeInsets.symmetric(horizontal: b.spacing.sm)),
-                          onPressed: () => _apply(_cleared),
-                          child: const Text('Reset All Filters'),
+                      // Always at the end of the row, as on the big portals; greyed while there is nothing to reset.
+                      gap,
+                      TextButton(
+                        key: const Key('filter-reset-all'),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          padding: EdgeInsets.symmetric(horizontal: b.spacing.sm),
+                          textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
                         ),
-                      ],
+                        onPressed: all > 0 ? () => _apply(_cleared) : null,
+                        child: const Text('Reset All Filters'),
+                      ),
                     ]),
                   ),
                 ),

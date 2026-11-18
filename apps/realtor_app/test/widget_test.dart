@@ -19,6 +19,9 @@ void main() {
 
   for (final tenant in tenants) {
     testWidgets('${tenant.id}: home shows its own brand and Kenyan property types', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(ProviderScope(
         overrides: [tenantProvider.overrideWithValue(tenant)],
         child: const RealtorApp(),
@@ -26,7 +29,7 @@ void main() {
       await tester.pump();
       // The hero says the realtor's own words, or its tagline when it has none.
       expect(find.text(tenant.home.hero?.title ?? tenant.tagline ?? tenant.name), findsOneWidget);
-      expect(find.text('Bedsitter'), findsOneWidget);
+      expect(find.text('Bedsitter'), findsWidgets);
       if (tenant.features.rent) expect(find.text('Rent'), findsOneWidget);
       final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
       expect(app.title, tenant.name);

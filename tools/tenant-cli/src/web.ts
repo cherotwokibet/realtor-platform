@@ -39,7 +39,7 @@ export function patchIndexHtml(html: string, t: any, fonts: string[] = []): stri
   out = setMeta(out, 'property', 'og:image', 'og.png');
   if (!out.includes(SKIP_WEB_MESSAGING)) out = out.replace('</head>', `  ${SKIP_WEB_MESSAGING}\n</head>`);
   if (!out.includes(HASH_REDIRECT)) out = out.replace('</head>', `  ${HASH_REDIRECT}\n</head>`);
-  return withStartupPreloads(withLoadingScreen(out, t, t.tagline ?? ''), fonts);
+  return withStartupPreloads(withAppSkeleton(out, t), fonts);
 }
 
 /**
@@ -81,6 +81,47 @@ function withLoadingScreen(html: string, t: any, line: string): string {
 }
 
 /**
+ * The customer app's loading screen (P3-s01): instead of plain words, the
+ * outline of the page it is about to show (the logo, the search bar, the
+ * filter pills and two home cards, gently shimmering), painted with the
+ * first bytes of HTML. Visitors see the site at once and the wait reads as
+ * the page filling in, as on the big portals. Removed on Flutter's first
+ * frame. Replaces the older text-only screen in an existing index.html.
+ */
+export function withAppSkeleton(html: string, t: any): string {
+  if (html.includes('id="loading" class="sk"')) return html;
+  // An index.html from before: take the text-only screen out first.
+  let out = html
+    .replace(/\s*<style>#loading\{[^<]*<\/style>/, '')
+    .replace(/\s*<div id="loading"[^>]*>.*?<\/div>/, '')
+    .replace(/\s*<script>\(function\(\)\{function go\(\)\{var e=document\.getElementById\('loading'\)[^<]*<\/script>/, '');
+  const c = t.brand.colors;
+  const line = t.tagline ?? '';
+  const style =
+    `<style>#loading{position:fixed;inset:0;z-index:9;overflow:hidden;pointer-events:none;background:${c.background};font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}` +
+    `#loading .sk-in{max-width:1100px;margin:0 auto;padding:0 16px}` +
+    `#loading .sk-top{display:flex;align-items:center;justify-content:space-between;height:64px;border-bottom:1px solid ${c.border};padding:0 16px}` +
+    `#loading .sk-top img{height:44px}` +
+    `#loading .sk-b,#loading .sk-c i{background:linear-gradient(90deg,${c.surfaceAlt} 25%,${c.surface} 50%,${c.surfaceAlt} 75%);background-size:200% 100%;animation:sk 1.2s ease-in-out infinite;border-radius:${t.brand.radius.sm}px;display:block}` +
+    `#loading .sk-login{width:84px;height:36px;border-radius:999px}` +
+    `#loading .sk-search{height:44px;margin:12px 0 8px}` +
+    `#loading .sk-pills{display:flex;gap:8px;margin-bottom:16px}#loading .sk-pills .sk-b{height:32px;width:96px;border-radius:999px}` +
+    `#loading .sk-c{margin-bottom:16px;border:1px solid ${c.border};border-radius:${t.brand.radius.md}px;overflow:hidden}` +
+    `#loading .sk-c i.p{height:200px;border-radius:0}#loading .sk-c i{height:14px;margin:12px}#loading .sk-c i.w6{width:60%}#loading .sk-c i.w4{width:40%}` +
+    `#loading .sk-name{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}` +
+    `@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}@media (prefers-reduced-motion:reduce){#loading .sk-b,#loading .sk-c i{animation:none}}</style>`;
+  const card = '<div class="sk-c"><i class="p"></i><i class="w6"></i><i class="w4"></i></div>';
+  const div =
+    `<div id="loading" class="sk" aria-hidden="true">` +
+    `<div class="sk-top"><img src="assets/assets/tenant/logo-horizontal.png" alt=""><span class="sk-b sk-login"></span></div>` +
+    `<div class="sk-in"><span class="sk-b sk-search"></span><div class="sk-pills"><span class="sk-b"></span><span class="sk-b"></span><span class="sk-b"></span></div>${card}${card}</div>` +
+    `<p class="sk-name">${esc(t.name)}${line ? `<small>${esc(line)}</small>` : ''}</p></div>`;
+  // Gone on Flutter's first frame; after 15 s at the latest, so it can never cover the app.
+  const remove = `<script>(function(){function go(){var e=document.getElementById('loading');if(e)e.remove();}window.addEventListener('flutter-first-frame',go);setTimeout(go,15000);})();</script>`;
+  return out.replace(/<head>/, `<head>\n  ${style}`).replace(/<body>/, `<body>\n  ${div}\n  ${remove}`);
+}
+
+/**
  * The app's first frame waits on a chain: flutter_bootstrap.js, then the
  * engine and app code, then the tenant file, fonts and Hosting's Firebase
  * settings, then the Firebase SDK. Requesting them all with the HTML puts
@@ -95,6 +136,8 @@ export function withStartupPreloads(html: string, fonts: string[]): string {
     // Flutter serves asset <key> at assets/<key>.
     ...['assets/tenant/tenant.json', 'assets/tenant/fonts.json', ...fonts].map((key) => fetchLink(`assets/${key}`)),
     fetchLink('/__/firebase/init.json'),
+    // The loading screen's logo, before anything else on the page.
+    '<link rel="preload" href="assets/assets/tenant/logo-horizontal.png" as="image">',
     // The engine and Firebase SDK come from gstatic, the fallback font from fonts.gstatic.
     '<link rel="preconnect" href="https://www.gstatic.com" crossorigin>',
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',

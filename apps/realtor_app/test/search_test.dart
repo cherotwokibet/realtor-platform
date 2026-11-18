@@ -114,6 +114,7 @@ void main() {
 
   testWidgets('home WhatsApp button: hidden until a number exists, then opens wa.me', (tester) async {
     final json = jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>;
+    (json['contact'] as Map<String, Object?>)['whatsapp'] = 'TBC';
     await tester.pumpWidget(ProviderScope(overrides: [tenantProvider.overrideWithValue(TenantConfig.fromJson(json))], child: const RealtorApp()));
     await tester.pumpAndSettle();
     expect(find.text('Enquire on WhatsApp'), findsNothing);

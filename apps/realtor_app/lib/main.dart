@@ -46,7 +46,10 @@ Future<void> main() async {
     final bucket = '${firebase.projectId}-media';
     // On the web, "Get alerts" sign-in links come back to this site.
     overrides.addAll([
-      listingSearchProvider.overrideWithValue(DeferredListingSearch(once(() => FirestoreListingSearch(FirebaseFirestore.instance, bucket: bucket)))),
+      // Homes from the last visit show at once; fresh ones follow (P3-s01).
+      listingSearchProvider.overrideWithValue(
+        SnapshotListingSearch(once(() => FirestoreListingSearch(FirebaseFirestore.instance, bucket: bucket)), store: PrefsListingSnapshotStore()),
+      ),
       listingRepositoryProvider.overrideWithValue(
         DeferredListingRepository(once(() => FirestoreListingRepository(FirebaseFirestore.instance, bucket: bucket))),
       ),
