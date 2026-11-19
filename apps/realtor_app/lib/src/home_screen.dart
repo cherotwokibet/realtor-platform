@@ -505,7 +505,13 @@ class _Newest extends ConsumerWidget {
     if (hits.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: EdgeInsets.only(top: context.brand.spacing.xl),
-      child: HomeRow(key: const Key('newest-row'), title: 'Newest ${purpose.heading}', listings: hits.take(12).toList(), onSeeAll: onSeeAll),
+      child: HomeRow(
+          key: const Key('newest-row'),
+          title: 'Newest ${purpose.heading}',
+          // A sparkle for "new", beside Hot properties' flame.
+          icon: Icons.auto_awesome,
+          listings: hits.take(12).toList(),
+          onSeeAll: onSeeAll),
     );
   }
 }
