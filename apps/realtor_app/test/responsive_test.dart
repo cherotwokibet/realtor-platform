@@ -54,7 +54,8 @@ void main() {
     expect(nav, findsOneWidget, reason: 'the bar stays over the results');
   });
 
-  testWidgets('desktop home scrolls as a whole: the top menu goes with it; the advert is a low band; rows slide with arrows', (tester) async {
+  testWidgets('desktop home scrolls as a whole: the top menu goes with it; the advert is a band above the property types; rows slide with arrows',
+      (tester) async {
     await pumpAt(tester, const Size(1400, 900), tenantId: 'realtime-estates');
     final nav = find.byKey(const Key('top-nav'));
     expect(nav.hitTestable(), findsOneWidget);
@@ -69,8 +70,13 @@ void main() {
       expect(find.descendant(of: hot, matching: find.byKey(const Key('row-back'))), findsOneWidget);
     }
     final ad = find.byKey(const Key('ad-card'));
-    await tester.scrollUntilVisible(ad, 300, scrollable: find.byType(Scrollable).first);
-    expect(tester.getSize(ad).height, lessThanOrEqualTo(180), reason: 'a low band, not a full-width photo');
+    await tester.scrollUntilVisible(ad, -300, scrollable: find.byType(Scrollable).first);
+    expect(tester.getTopLeft(ad).dy, lessThan(tester.getTopLeft(find.text('Browse by type')).dy), reason: 'above the property types');
+    expect(find.byKey(const Key('ad-card')), findsOneWidget, reason: 'one advert on the home page, not two');
+    // Browse by type, in the realtor's order.
+    final chips = [for (final c in tester.widgetList<ActionChip>(find.byType(ActionChip))) (c.label as Text).data];
+    expect(chips, ['Bedsitter', 'Single room', 'Studio', 'Apartment', 'Maisonette', 'Hostel']);
+    expect(tester.getSize(ad).height, lessThanOrEqualTo(220), reason: 'a band, not a full-width photo');
     await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -400));
     await tester.pumpAndSettle();
     expect(nav.hitTestable(), findsNothing, reason: 'the menu scrolled away with the page');

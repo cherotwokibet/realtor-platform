@@ -21,8 +21,8 @@ class AdSlot extends ConsumerWidget {
   /// A box for the side of a wide page; otherwise a band across the list.
   final bool tall;
 
-  /// A low band for a wide page's full width (the home page): the photo on
-  /// the left, the words and Enquire now beside it.
+  /// The home page's photo band as the advert: words and Enquire now over
+  /// the photo, the width of the page.
   final bool banner;
 
   /// Homes between two adverts in a list.
@@ -54,64 +54,68 @@ class AdSlot extends ConsumerWidget {
         child: Text('AD', style: text.labelMedium?.copyWith(color: scheme.surface, fontWeight: FontWeight.w700)),
       ),
     );
-    final enquireButton = OutlinedButton(
-      key: const Key('ad-enquire'),
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 44),
-        padding: EdgeInsets.symmetric(horizontal: b.spacing.xl),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
-        side: BorderSide(color: scheme.primary.withValues(alpha: 0.4)),
-        textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-      ),
-      onPressed: () => open(enquire),
-      child: const Text('Enquire now'),
-    );
     if (banner) {
-      // Low and wide, so it does not take over the page.
+      // The home page's photo band, carrying the advert: the photo under a
+      // dark veil, AD and the advertiser's logo, the bold line and its
+      // words, and Enquire now; at the right on wide screens, under the
+      // words on phones.
+      final wide = MediaQuery.sizeOf(context).width >= 760;
+      final onPhoto = scheme.surface;
+      final words = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          adMark,
+          SizedBox(width: b.spacing.sm),
+          // The logo on a white tab, so it reads on any photo.
+          DecoratedBox(
+            decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(b.radiusSm)),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.sm, vertical: 2),
+              child: Image.asset(b.logoAsset, height: 28, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
+            ),
+          ),
+        ]),
+        SizedBox(height: b.spacing.md),
+        Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.titleLarge?.copyWith(color: onPhoto, fontWeight: FontWeight.w700)),
+        SizedBox(height: b.spacing.xs),
+        Text(promo?.text ?? 'Reach people looking for a home with ${tenant.name}.',
+            maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyLarge?.copyWith(color: onPhoto)),
+      ]);
+      final button = FilledButton(
+        key: const Key('ad-enquire'),
+        style: FilledButton.styleFrom(
+          backgroundColor: scheme.surface,
+          foregroundColor: scheme.primary,
+          minimumSize: const Size(0, 44),
+          padding: EdgeInsets.symmetric(horizontal: b.spacing.xl),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
+          textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        onPressed: () => open(enquire),
+        child: const Text('Enquire now'),
+      );
       return Semantics(
         container: true,
         label: 'Advert',
         child: Material(
           key: const Key('ad-card'),
-          color: scheme.surface,
           clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusMd), side: BorderSide(color: scheme.outlineVariant)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusMd)),
           child: InkWell(
             onTap: () => open(enquire),
-            child: SizedBox(
-              height: 168,
-              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                SizedBox(
-                  width: 300,
-                  child: Stack(fit: StackFit.expand, children: [
-                    if (promo?.hasImage ?? false)
-                      Image.asset(homePhotoAsset('banner', 1), fit: BoxFit.cover, excludeFromSemantics: true, errorBuilder: (_, __, ___) => plain)
-                    else
-                      plain,
-                    Positioned(left: b.spacing.md, top: b.spacing.md, child: adMark),
-                  ]),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: b.spacing.xl, vertical: b.spacing.lg),
-                    child: Row(children: [
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Image.asset(b.logoAsset, height: 36, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
-                          SizedBox(height: b.spacing.sm),
-                          Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                          SizedBox(height: b.spacing.xs),
-                          Text(promo?.text ?? 'Reach people looking for a home with ${tenant.name}.',
-                              maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyMedium?.copyWith(height: 1.45)),
-                        ]),
-                      ),
-                      SizedBox(width: b.spacing.xl),
-                      enquireButton,
-                    ]),
-                  ),
-                ),
-              ]),
-            ),
+            child: Stack(children: [
+              Positioned.fill(
+                child: (promo?.hasImage ?? false)
+                    ? Image.asset(homePhotoAsset('banner', 1), fit: BoxFit.cover, excludeFromSemantics: true, errorBuilder: (_, __, ___) => plain)
+                    : ColoredBox(color: scheme.primary),
+              ),
+              Positioned.fill(child: ColoredBox(color: scheme.scrim.withValues(alpha: 0.5))),
+              Padding(
+                padding: EdgeInsets.all(b.spacing.xl),
+                child: wide
+                    ? Row(children: [Expanded(child: words), SizedBox(width: b.spacing.xl), button])
+                    : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [words, SizedBox(height: b.spacing.lg), button]),
+              ),
+            ]),
           ),
         ),
       );
