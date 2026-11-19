@@ -17,6 +17,7 @@ import 'sections.dart';
 import 'search/area_suggest.dart';
 import 'search/purpose.dart';
 import 'site_footer.dart';
+import 'window_scroll.dart';
 import 'search/recent_searches.dart';
 import 'search/results_screen.dart';
 
@@ -210,42 +211,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Wide screens have the logo in the top navigation instead.
       drawer: wide ? null : const AppDrawer(),
       // Phones: the top bar scrolls away with the page and is back at the top.
-      body: _WindowScroll(
+      // Wide: the page's own browser-like scrollbar, the window's full height.
+      body: WindowScroll(
+          enabled: wide,
           child: CustomScrollView(primary: true, slivers: [
-        if (!wide) const PhoneTopBar(),
-        // Wide: the top menu scrolls away with the page, as on Bayut's home page.
-        if (wide)
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: TopNav.height,
-              child: TopNav(
-                sections: visibleSections(enabledSections(tenant.features), signedIn: ref.watch(customerProvider).value != null),
-                location: '/',
+            if (!wide) const PhoneTopBar(),
+            // Wide: the top menu scrolls away with the page, as on Bayut's home page.
+            if (wide)
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: TopNav.height,
+                  child: TopNav(
+                    sections: visibleSections(enabledSections(tenant.features), signedIn: ref.watch(customerProvider).value != null),
+                    location: '/',
+                  ),
+                ),
               ),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(side, b.spacing.gutter, side, b.spacing.gutter),
+              sliver: SliverList.list(children: [
+                _PhotoBand(key: const Key('home-hero'), band: hero, name: 'hero', minHeight: wide ? 220 : 120, large: true),
+                // The search sits over the bottom edge of the photo.
+                Transform.translate(
+                  offset: Offset(0, -b.spacing.xl),
+                  child: Padding(padding: EdgeInsets.symmetric(horizontal: wide ? b.spacing.xl : b.spacing.sm), child: searchCard),
+                ),
+                // The advert (or promotion) band, then the property types.
+                ...promo,
+                ...types,
+                const RecentSearches(),
+                // Two rows of homes, as the big portals' home pages have them:
+                // the realtor's Hot Properties, then the newest.
+                const _HotRow(),
+                _Newest(purpose: _purpose, onSeeAll: () => _search()),
+              ]),
             ),
-          ),
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(side, b.spacing.gutter, side, b.spacing.gutter),
-          sliver: SliverList.list(children: [
-            _PhotoBand(key: const Key('home-hero'), band: hero, name: 'hero', minHeight: wide ? 220 : 120, large: true),
-            // The search sits over the bottom edge of the photo.
-            Transform.translate(
-              offset: Offset(0, -b.spacing.xl),
-              child: Padding(padding: EdgeInsets.symmetric(horizontal: wide ? b.spacing.xl : b.spacing.sm), child: searchCard),
-            ),
-            // The advert (or promotion) band, then the property types.
-            ...promo,
-            ...types,
-            const RecentSearches(),
-            // Two rows of homes, as the big portals' home pages have them:
-            // the realtor's Hot Properties, then the newest.
-            const _HotRow(),
-            _Newest(purpose: _purpose, onSeeAll: () => _search()),
-          ]),
-        ),
-        // The site footer runs the width of the window.
-        SliverToBoxAdapter(child: Padding(padding: EdgeInsets.only(top: b.spacing.xl), child: SiteFooter(width: maxContentWidth + 2 * b.spacing.gutter))),
-      ])),
+            // The site footer runs the width of the window.
+            SliverToBoxAdapter(child: Padding(padding: EdgeInsets.only(top: b.spacing.xl), child: SiteFooter(width: maxContentWidth + 2 * b.spacing.gutter))),
+          ])),
     );
   }
 }
@@ -461,19 +464,6 @@ class _Filters extends StatelessWidget {
       ]);
     });
   }
-}
-
-/// The page's own scrollbar, always shown and the window's full height, as
-/// a browser's is on Bayut's home page.
-class _WindowScroll extends StatelessWidget {
-  const _WindowScroll({required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Scrollbar(
-        thumbVisibility: true,
-        child: ScrollConfiguration(behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false), child: child),
-      );
 }
 
 /// The realtor's Hot Properties (managers choose them in the admin); nothing
