@@ -49,10 +49,19 @@ class FavouritesNotifier extends AsyncNotifier<List<ListingSummary>> {
   Future<void> toggle(ListingSummary listing) async {
     final current = await future;
     final next = current.any((l) => l.id == listing.id)
-        ? [for (final l in current) if (l.id != listing.id) l]
+        ? [
+            for (final l in current)
+              if (l.id != listing.id) l
+          ]
         : [listing, ...current].take(maxSaved).toList();
     state = AsyncData(next);
     await ref.read(favouritesStoreProvider).save([for (final l in next) jsonEncode(l.toJson())]);
+  }
+
+  /// Removes every saved home (Saved > Delete All).
+  Future<void> clear() async {
+    state = const AsyncData([]);
+    await ref.read(favouritesStoreProvider).save(const []);
   }
 }
 

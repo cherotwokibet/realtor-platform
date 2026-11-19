@@ -41,6 +41,7 @@ class _SavedScreenState extends ConsumerState<SavedScreen> {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final saved = ref.watch(favouritesProvider);
+    final wide = MediaQuery.sizeOf(context).width >= wideLayoutFrom;
     final customer = ref.watch(customerProvider).value;
     final signedIn = customer != null;
     final purposes = [
@@ -89,20 +90,32 @@ class _SavedScreenState extends ConsumerState<SavedScreen> {
                     action: 'Start searching',
                     onTap: () => context.go(purposes.isEmpty ? '/' : '/${purposes.first.pathSegment}'),
                   )
-                : Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1100),
-                      child: ListView(
-                        padding: EdgeInsets.all(b.spacing.gutter),
+                : wide
+                    // Computers, as on Property Finder: one wide card a row, then Delete All.
+                    ? ListView(
+                        key: const Key('saved-list'),
+                        padding: EdgeInsets.fromLTRB(0, b.spacing.lg, 0, b.spacing.xxl),
+                        children: [
+                          for (final l in list) ...[ListingCard(listing: l, layout: CardLayout.wide), SizedBox(height: b.spacing.lg)],
+                          Center(
+                            child: TextButton.icon(
+                              key: const Key('saved-delete-all'),
+                              onPressed: () => _deleteAll(context),
+                              icon: const Icon(Icons.delete_outline),
+                              label: const Text('Delete All'),
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView(
+                        key: const Key('saved-list'),
+                        padding: EdgeInsets.fromLTRB(b.spacing.gutter, 0, b.spacing.gutter, b.spacing.gutter),
                         children: [
                           Text('${list.length} ${list.length == 1 ? 'home' : 'homes'}, newest first', style: text.labelLarge?.copyWith(color: b.textMuted)),
                           SizedBox(height: b.spacing.md),
                           ListingGrid(listings: list),
                         ],
                       ),
-                    ),
-                  ),
           );
     // Favourites | Searches, two boxes across the top, as on Bayut.
     Widget tab(String label, bool on, VoidCallback onTap, Key key) => Expanded(
@@ -133,13 +146,52 @@ class _SavedScreenState extends ConsumerState<SavedScreen> {
             action: 'Log in / Sign up',
             onTap: () => showSignIn(context),
           )
-        : Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: ListView(padding: EdgeInsets.all(b.spacing.gutter), children: [SavedSearchesList(uid: customer.uid)]),
+        : ListView(
+            padding: wide ? EdgeInsets.only(top: b.spacing.lg) : EdgeInsets.fromLTRB(b.spacing.gutter, 0, b.spacing.gutter, b.spacing.gutter),
+            children: [SavedSearchesList(uid: customer.uid)],
+          );
+    final count = saved.value?.length ?? 0;
+    final alerts = customer == null ? 0 : (ref.watch(savedSearchesProvider(customer.uid)).value?.length ?? 0);
+    if (wide) {
+      // Computers, as on Property Finder: the page's name, then underlined tabs with their counts.
+      Widget line(String label, bool on, VoidCallback onTap, Key key) => Expanded(
+            child: InkWell(
+              key: key,
+              onTap: onTap,
+              child: Container(
+                padding: EdgeInsets.symmetric(vertical: b.spacing.md),
+                decoration: BoxDecoration(border: Border(bottom: BorderSide(color: on ? scheme.primary : Colors.transparent, width: 3))),
+                child: Text(label,
+                    textAlign: TextAlign.center,
+                    style: text.titleSmall?.copyWith(color: on ? scheme.primary : b.textMuted, fontWeight: on ? FontWeight.w700 : FontWeight.w400)),
+              ),
             ),
           );
+      return Scaffold(
+        body: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1030),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.lg),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                SizedBox(height: b.spacing.xl),
+                Text('Saved', style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
+                SizedBox(height: b.spacing.sm),
+                DecoratedBox(
+                  decoration: BoxDecoration(border: Border(bottom: BorderSide(color: scheme.outlineVariant))),
+                  child: Row(children: [
+                    line('Saved properties ($count)', !_searches, () => setState(() => _searches = false), const Key('saved-tab-favourites')),
+                    line('Search alerts ($alerts)', _searches, () => setState(() => _searches = true), const Key('saved-tab-searches')),
+                  ]),
+                ),
+                Expanded(child: _searches ? searches : favourites),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       // Back, and the page's name in the middle; no logo, as on Bayut.
       appBar: AppBar(
@@ -154,7 +206,8 @@ class _SavedScreenState extends ConsumerState<SavedScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
             child: Padding(
-              padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.lg, b.spacing.gutter, 0),
+              // Space under the tabs that stays while the homes scroll, as above them.
+              padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.lg, b.spacing.gutter, b.spacing.lg),
               child: Row(children: [
                 tab('Favourites', !_searches, () => setState(() => _searches = false), const Key('saved-tab-favourites')),
                 SizedBox(width: b.spacing.md),
@@ -166,5 +219,20 @@ class _SavedScreenState extends ConsumerState<SavedScreen> {
         Expanded(child: _searches ? searches : favourites),
       ]),
     );
+  }
+
+  Future<void> _deleteAll(BuildContext context) async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove all saved homes?'),
+        content: const Text('They are removed from this list. You can save them again from their pages.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep them')),
+          FilledButton(key: const Key('confirm-delete-all'), onPressed: () => Navigator.pop(context, true), child: const Text('Delete All')),
+        ],
+      ),
+    );
+    if (sure == true) await ref.read(favouritesProvider.notifier).clear();
   }
 }

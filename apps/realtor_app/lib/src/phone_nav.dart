@@ -148,9 +148,18 @@ class AppDrawer extends ConsumerWidget {
         );
     IconData purposeIcon(Purpose p) =>
         switch (p) { Purpose.rent => Icons.key_outlined, Purpose.sale => Icons.sell_outlined, Purpose.shortStay => Icons.bed_outlined };
+    // Both stores, as on Bayut; a store the app is not on yet says so.
+    void store(String? url, String name) {
+      if (url != null) {
+        open(Uri.parse(url));
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('The ${tenant.name} app is coming soon to the $name.')));
+    }
+
     final badges = [
-      if (tenant.googlePlayUrl case final String url) StoreBadge.googlePlay(onTap: () => open(Uri.parse(url))),
-      if (tenant.appStoreUrl case final String url) StoreBadge.appStore(onTap: () => open(Uri.parse(url))),
+      StoreBadge.googlePlay(onTap: () => store(tenant.googlePlayUrl, 'Google Play Store')),
+      StoreBadge.appStore(onTap: () => store(tenant.appStoreUrl, 'App Store')),
     ];
 
     // As on the big portals' apps: a close button, the account first, then
@@ -211,32 +220,43 @@ class AppDrawer extends ConsumerWidget {
               signedIn
                   ? item('Account', Icons.person_outline, () => go('/account'))
                   : item('Saved searches and alerts', Icons.notifications_none, () => go('/account')),
-              if (badges.isNotEmpty) ...[
-                const Divider(height: 32),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: b.spacing.lg),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Download the ${tenant.name} app', style: text.titleSmall),
-                    SizedBox(height: b.spacing.md),
-                    Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: badges),
-                  ]),
-                ),
-              ],
+              // As on Bayut: a rule, the app in bold, both store badges, a rule,
+              // then Logout as a full-width outlined button.
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: b.spacing.lg),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Divider(height: b.spacing.xl * 2, color: scheme.outlineVariant),
+                  Text('Download the ${tenant.name} app:', key: const Key('drawer-download'), style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  SizedBox(height: b.spacing.md),
+                  Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: badges),
+                  // Log out, only for someone signed in.
+                  if (customer != null) ...[
+                    Divider(height: b.spacing.xl * 2, color: scheme.outlineVariant),
+                    OutlinedButton(
+                      key: const Key('drawer-logout'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
+                        side: BorderSide(color: scheme.outlineVariant),
+                        foregroundColor: scheme.onSurface,
+                        textStyle: text.titleSmall,
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        try {
+                          await ref.read(pushAlertsProvider).disable(customer.uid);
+                        } on Object {
+                          // Signing out still works; the sweep forgets dead tokens.
+                        }
+                        await ref.read(customerAccountProvider).signOut();
+                      },
+                      child: const Text('Logout'),
+                    ),
+                  ],
+                ]),
+              ),
             ]),
           ),
-          // Log out at the foot, only for someone signed in.
-          if (customer != null) ...[
-            const Divider(height: 1),
-            item('Log out', Icons.logout, () async {
-              Navigator.pop(context);
-              try {
-                await ref.read(pushAlertsProvider).disable(customer.uid);
-              } on Object {
-                // Signing out still works; the sweep forgets dead tokens.
-              }
-              await ref.read(customerAccountProvider).signOut();
-            }, key: const Key('drawer-logout')),
-          ],
         ]),
       ),
     );

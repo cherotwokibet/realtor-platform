@@ -6,6 +6,8 @@ import 'package:realtor_app/src/account/account_screen.dart';
 import 'package:realtor_app/src/account/activity.dart';
 import 'package:realtor_app/src/app.dart';
 import 'package:realtor_app/src/providers.dart';
+import 'package:realtor_app/src/saved/favourites.dart';
+import 'package:realtor_app/src/search/results_screen.dart' show ListingCard;
 import 'package:realtor_app/src/search/demo_search.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -188,19 +190,58 @@ void main() {
     for (final gone in ['COMPANY', 'GET IN TOUCH', 'Privacy', 'Terms', 'About us']) {
       expect(find.descendant(of: drawer, matching: find.text(gone)), findsNothing, reason: gone);
     }
-    expect(find.text('Download the Realtime Estates Ltd app'), findsOneWidget);
+    expect(find.text('Download the Realtime Estates Ltd app:'), findsOneWidget);
+    // Both stores; one the app is not on yet says so.
+    await tester.ensureVisible(find.byKey(const Key('badge-app-store')));
+    await tester.tap(find.byKey(const Key('badge-app-store')));
+    await tester.pump();
+    expect(find.text('The Realtime Estates Ltd app is coming soon to the App Store.'), findsOneWidget);
     await tester.tap(find.byKey(const Key('badge-google-play')));
     await tester.pumpAndSettle();
     expect(opened.last.host, 'play.google.com');
 
-    await tester.tap(find.byTooltip('Open navigation menu'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('drawer-logout')));
+    // Logout: a full-width button under the badges.
+    final logout = find.byKey(const Key('drawer-logout'));
+    await tester.ensureVisible(logout);
+    expect(tester.getTopLeft(logout).dy, greaterThan(tester.getTopLeft(find.byKey(const Key('badge-google-play'))).dy));
+    await tester.tap(logout);
     await tester.pumpAndSettle();
     expect(c.read(customerProvider).value, isNull);
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('drawer-logout')), findsNothing);
+  });
+
+  testWidgets('Saved on a computer, as on Property Finder: underlined tabs with counts, wide cards, Delete All', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1200);
+    final c = await open(tester, '/saved');
+    tester.view.physicalSize = const Size(1400, 1200);
+    for (final l in demoListings.take(2)) {
+      await c.read(favouritesProvider.notifier).toggle(l);
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('Saved properties (2)'), findsOneWidget);
+    expect(find.text('Search alerts (0)'), findsOneWidget);
+    expect(find.byType(ListingCard), findsNWidgets(2));
+    expect(tester.getSize(find.byType(ListingCard).first).width, greaterThan(800), reason: 'one wide card a row');
+    await tester.tap(find.byKey(const Key('saved-delete-all')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-delete-all')));
+    await tester.pumpAndSettle();
+    expect(c.read(favouritesProvider).value, isEmpty);
+    expect(find.text('Saved properties (0)'), findsOneWidget);
+  });
+
+  testWidgets('Saved on a phone: a gap under the tabs that stays while the homes scroll', (tester) async {
+    final c = await open(tester, '/saved');
+    for (final l in demoListings.take(3)) {
+      await c.read(favouritesProvider.notifier).toggle(l);
+    }
+    await tester.pumpAndSettle();
+    await tester.drag(find.byKey(const Key('saved-list')), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    final tabsBottom = tester.getBottomLeft(find.byKey(const Key('saved-tab-favourites'))).dy;
+    expect(tester.getTopLeft(find.byKey(const Key('saved-list'))).dy - tabsBottom, greaterThanOrEqualTo(16));
   });
 
   testWidgets('the phone top bar says Saved in words, not a solid block', (tester) async {
