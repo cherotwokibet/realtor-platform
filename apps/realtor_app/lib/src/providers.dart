@@ -48,7 +48,7 @@ final projectProvider = FutureProvider.family<OffPlanProject?, String>((ref, slu
 /// The home page's Hot Properties: live homes a manager marked hot, newest first.
 final hotHomesProvider = FutureProvider<List<ListingSummary>>((ref) async {
   final live = await ref.watch(listingRepositoryProvider).live(limit: 500);
-  return live.where((l) => l.hot).take(12).toList();
+  return live.where((l) => l.hot).toList();
 });
 
 /// Live listings in an area (`area`) or by an agent (`agent`), newest first.

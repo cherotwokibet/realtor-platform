@@ -968,15 +968,18 @@ class GroupedChoice<T> extends StatelessWidget {
 
 /// Homes as cards: one column on phones, two or three side by side wider.
 class ListingGrid extends StatelessWidget {
-  const ListingGrid({super.key, required this.listings, this.onOpen});
+  const ListingGrid({super.key, required this.listings, this.onOpen, this.maxAcross = 3});
   final List<ListingSummary> listings;
   final void Function(ListingSummary)? onOpen;
+
+  /// The most cards side by side on a wide page (4, as the home page's rows).
+  final int maxAcross;
 
   @override
   Widget build(BuildContext context) {
     final gap = context.brand.spacing.md;
     return LayoutBuilder(builder: (context, c) {
-      final cols = c.maxWidth >= 960 ? 3 : (c.maxWidth >= 600 ? 2 : 1);
+      final cols = maxAcross >= 4 && c.maxWidth >= 1000 ? 4 : (c.maxWidth >= 960 ? 3 : (c.maxWidth >= 600 ? 2 : 1));
       final width = (c.maxWidth - gap * (cols - 1)) / cols;
       return Wrap(spacing: gap, runSpacing: gap, children: [
         for (final l in listings) SizedBox(width: width, child: ListingCard(listing: l, onOpen: onOpen == null ? null : () => onOpen!(l))),
