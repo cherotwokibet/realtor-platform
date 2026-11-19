@@ -228,6 +228,31 @@ export async function featureListing(db: Firestore, caller: Caller, input: unkno
   return { featuredUntil: until?.toISOString() ?? null };
 }
 
+export const setHotListingInput = z.object({ listingId: docId, hot: z.boolean() });
+
+/**
+ * Managers put a live listing in the home page's Hot Properties (`hot`),
+ * or take it out. The customer app only reads the flag.
+ */
+export async function setHotListing(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ hot: boolean }> {
+  requireManager(caller);
+  const req = parseInput(setHotListingInput, input);
+  const ref = db.collection('listings').doc(req.listingId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'no such listing');
+    if (req.hot && snap.get('status') !== 'live') throw new HttpsError('failed-precondition', 'only a live listing can be a hot property');
+    tx.update(ref, { hot: req.hot, updatedAt: now });
+    audit(tx, db, caller, {
+      action: 'listing.hot',
+      target: { collection: 'listings', id: ref.id, label: snap.get('title') as string | undefined },
+      from: snap.get('hot') === true ? 'hot' : 'none',
+      to: req.hot ? 'hot' : 'none',
+    }, now);
+  });
+  return { hot: req.hot };
+}
+
 /** Rows per importListings call; the admin sends bigger files in chunks. */
 export const MAX_IMPORT_ROWS = 100;
 

@@ -105,9 +105,16 @@ void main() {
   testWidgets('home shows the newest real homes, not a placeholder', (tester) async {
     final h = await open(tester, '/');
     expect(find.text('Sample listing'), findsNothing);
-    expect(find.text('Newest to rent'), findsOneWidget);
-    expect(find.byType(ListingCard), findsNWidgets(3));
-    await tester.tap(find.text('See all'));
+    // Two rows: the realtor's Hot properties (marked in the admin), then the newest.
+    final hot = find.byKey(const Key('hot-row'));
+    await tester.scrollUntilVisible(hot, 300, scrollable: find.byType(Scrollable).first);
+    expect(find.descendant(of: hot, matching: find.text('Hot properties')), findsOneWidget);
+    expect(find.descendant(of: hot, matching: find.byType(ListingCard)), findsNWidgets(4), reason: 'the demo has four hot homes');
+    final newest = find.byKey(const Key('newest-row'));
+    await tester.scrollUntilVisible(newest, 300, scrollable: find.byType(Scrollable).first);
+    expect(find.descendant(of: newest, matching: find.text('Newest to rent')), findsOneWidget);
+    expect(find.descendant(of: newest, matching: find.byType(ListingCard)), findsWidgets);
+    await tester.tap(find.descendant(of: newest, matching: find.text('See all')));
     await tester.pumpAndSettle();
     expect(h.location, startsWith('/rent'));
   });

@@ -7,10 +7,13 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'package:go_router/go_router.dart';
 
+import 'account/account_data.dart';
 import 'ad_slot.dart';
+import 'app.dart' show TopNav;
 import 'nav.dart';
 import 'phone_nav.dart';
 import 'providers.dart';
+import 'sections.dart';
 import 'search/area_suggest.dart';
 import 'search/purpose.dart';
 import 'site_footer.dart';
@@ -200,8 +203,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Wide screens have the logo in the top navigation instead.
       drawer: wide ? null : const AppDrawer(),
       // Phones: the top bar scrolls away with the page and is back at the top.
-      body: CustomScrollView(slivers: [
+      body: _WindowScroll(
+          child: CustomScrollView(primary: true, slivers: [
         if (!wide) const PhoneTopBar(),
+        // Wide: the top menu scrolls away with the page, as on Bayut's home page.
+        if (wide)
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: TopNav.height,
+              child: TopNav(
+                sections: visibleSections(enabledSections(tenant.features), signedIn: ref.watch(customerProvider).value != null),
+                location: '/',
+              ),
+            ),
+          ),
         SliverPadding(
           padding: EdgeInsets.fromLTRB(side, b.spacing.gutter, side, b.spacing.gutter),
           sliver: SliverList.list(children: [
@@ -217,20 +232,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ...types,
             const RecentSearches(),
             if (!wide) ...[SizedBox(height: b.spacing.xl), ...promo],
+            // Two rows of homes, as the big portals' home pages have them:
+            // the realtor's Hot Properties, then the newest.
+            const _HotRow(),
+            // The advert between them; a low band on wide screens.
             FeatureGate(
               feature: Feature.ads,
               child: Padding(
                 padding: EdgeInsets.only(top: b.spacing.xl),
-                child: const AdSlot(),
+                child: AdSlot(banner: wide),
               ),
             ),
-            SizedBox(height: b.spacing.xl),
             _Newest(purpose: _purpose, onSeeAll: () => _search()),
           ]),
         ),
         // The site footer runs the width of the window.
         SliverToBoxAdapter(child: Padding(padding: EdgeInsets.only(top: b.spacing.xl), child: SiteFooter(width: maxContentWidth + 2 * b.spacing.gutter))),
-      ]),
+      ])),
     );
   }
 }
@@ -448,6 +466,35 @@ class _Filters extends StatelessWidget {
   }
 }
 
+/// The page's own scrollbar, always shown and the window's full height, as
+/// a browser's is on Bayut's home page.
+class _WindowScroll extends StatelessWidget {
+  const _WindowScroll({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Scrollbar(
+        thumbVisibility: true,
+        child: ScrollConfiguration(behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false), child: child),
+      );
+}
+
+/// The realtor's Hot Properties (managers choose them in the admin); nothing
+/// while loading, on an error or when there are none.
+class _HotRow extends ConsumerWidget {
+  const _HotRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hits = ref.watch(hotHomesProvider).value ?? const [];
+    if (hits.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: EdgeInsets.only(top: context.brand.spacing.xl),
+      child: HomeRow(key: const Key('hot-row'), title: 'Hot properties', icon: Icons.local_fire_department, listings: hits),
+    );
+  }
+}
+
 /// The newest few homes for [purpose]; nothing at all while loading, on an
 /// error or when there are none, so the search above stays the focus.
 class _Newest extends ConsumerWidget {
@@ -459,21 +506,100 @@ class _Newest extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final hits = ref.watch(searchResultsProvider(ListingFilters(purpose: purpose))).value?.hits ?? const [];
     if (hits.isEmpty) return const SizedBox.shrink();
-    final b = context.brand;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(children: [
-          Expanded(child: Text('Newest ${purpose.heading}', style: Theme.of(context).textTheme.titleLarge)),
-          TextButton(onPressed: onSeeAll, child: const Text('See all')),
-        ]),
-        SizedBox(height: b.spacing.sm),
-        // Three across on wide screens, one under another on phones.
-        LayoutBuilder(
-          builder: (context, c) => ListingGrid(listings: hits.take(c.maxWidth >= 960 ? 6 : 3).toList()),
-        ),
-      ],
+    return Padding(
+      padding: EdgeInsets.only(top: context.brand.spacing.xl),
+      child: HomeRow(key: const Key('newest-row'), title: 'Newest ${purpose.heading}', listings: hits.take(12).toList(), onSeeAll: onSeeAll),
     );
+  }
+}
+
+/// One row of homes that slides sideways, as on Bayut's home page: four
+/// across on a computer with round arrows at the ends, three on a tablet,
+/// and on a phone one and a peek of the next, to swipe.
+class HomeRow extends StatefulWidget {
+  const HomeRow({super.key, required this.title, required this.listings, this.icon, this.onSeeAll});
+  final String title;
+  final IconData? icon;
+  final List<ListingSummary> listings;
+  final VoidCallback? onSeeAll;
+
+  @override
+  State<HomeRow> createState() => _HomeRowState();
+}
+
+class _HomeRowState extends State<HomeRow> {
+  final _row = ScrollController();
+  bool _atStart = true, _atEnd = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _row.addListener(_edges);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _edges());
+  }
+
+  void _edges() {
+    if (!_row.hasClients || !mounted) return;
+    final p = _row.position;
+    final start = p.pixels <= 1, end = p.pixels >= p.maxScrollExtent - 1;
+    if (start != _atStart || end != _atEnd) {
+      setState(() {
+        _atStart = start;
+        _atEnd = end;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _row.dispose();
+    super.dispose();
+  }
+
+  void _page(int dir, double by) => _row.animateTo((_row.offset + dir * by).clamp(0.0, _row.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        if (widget.icon != null) ...[Icon(widget.icon, color: scheme.primary), SizedBox(width: b.spacing.sm)],
+        Expanded(child: Text(widget.title, style: text.titleLarge)),
+        if (widget.onSeeAll != null) TextButton(onPressed: widget.onSeeAll, child: const Text('See all')),
+      ]),
+      SizedBox(height: b.spacing.sm),
+      LayoutBuilder(builder: (context, c) {
+        final gap = b.spacing.md;
+        final phone = c.maxWidth < 600;
+        final across = c.maxWidth >= 1000 ? 4 : (c.maxWidth >= 600 ? 3 : 1);
+        // Phones: one card and a peek of the next, so it reads as a row to swipe.
+        final width = phone ? c.maxWidth * 0.86 : (c.maxWidth - gap * (across - 1)) / across;
+        Widget arrow(IconData icon, String tip, int dir, Key key) => Material(
+              color: scheme.surface,
+              shape: const CircleBorder(),
+              elevation: 3,
+              child: IconButton(key: key, tooltip: tip, icon: Icon(icon), onPressed: () => _page(dir, (width + gap) * across)),
+            );
+        return Stack(clipBehavior: Clip.none, children: [
+          SingleChildScrollView(
+            controller: _row,
+            scrollDirection: Axis.horizontal,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final (i, l) in widget.listings.indexed) ...[
+                if (i > 0) SizedBox(width: gap),
+                SizedBox(width: width, child: ListingCard(listing: l)),
+              ],
+            ]),
+          ),
+          if (!phone && !_atStart) Positioned(left: -20, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_left, 'Back', -1, const Key('row-back')))),
+          if (!phone && !_atEnd && widget.listings.length > across)
+            Positioned(right: -20, top: 0, bottom: 0, child: Center(child: arrow(Icons.chevron_right, 'More', 1, const Key('row-more')))),
+        ]);
+      }),
+    ]);
   }
 }
 

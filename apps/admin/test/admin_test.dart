@@ -123,6 +123,13 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<bool> setHotListing(StaffUser who, {required String listingId, required bool hot}) async {
+    calls++;
+    await gate.future;
+    return inner.setHotListing(who, listingId: listingId, hot: hot);
+  }
+
+  @override
   Future<String> submitListing(StaffUser who, ListingDraft draft) async {
     calls++;
     await gate.future;
@@ -221,7 +228,10 @@ void main() {
           throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'failed-precondition')));
       expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-otieno'), ['confirm']);
       expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-wanjiku'), isEmpty);
-      expect(listingActionsFor(manager, status: 'live', agentId: 'x'), [...moderationsFor('live'), 'confirm', 'feature']);
+      expect(listingActionsFor(manager, status: 'live', agentId: 'x'), [...moderationsFor('live'), 'confirm', 'hot', 'feature']);
+      expect(listingActionsFor(manager, status: 'live', agentId: 'x', hot: true), contains('unhot'));
+      expect(listingActionsFor(manager, status: 'pending', agentId: 'x'), isNot(contains('hot')));
+      expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-otieno'), isNot(contains('hot')), reason: 'managers only');
       expect(listingActionsFor(manager, status: 'live', agentId: 'x', featured: true).last, 'unfeature');
       expect(listingActionsFor(manager, status: 'pending', agentId: 'x'), isNot(contains('feature')));
     });
@@ -631,6 +641,26 @@ void main() {
     await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Stop featuring'));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.star), findsOneWidget);
+  });
+
+  testWidgets('a manager adds a live listing to Hot Properties and removes it; the flame follows', (tester) async {
+    await open(tester, as: manager);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Live'));
+    await tester.pumpAndSettle();
+    final rows = (await container.read(adminRepositoryProvider).listings(manager, status: 'live', limit: 50)).rows;
+    final plain = rows.firstWhere((r) => !r.hot);
+    expect(find.byIcon(Icons.local_fire_department), findsNothing);
+    await tapVisible(tester, find.byTooltip('Change ${plain.title}'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Add to Hot Properties'));
+    await tester.pumpAndSettle();
+    expect(find.text('${plain.title}: in Hot Properties on the home page'), findsOneWidget);
+    expect(find.byIcon(Icons.local_fire_department), findsOneWidget);
+    await tapVisible(tester, find.byTooltip('Change ${plain.title}'));
+    await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Remove from Hot Properties'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.local_fire_department), findsNothing);
   });
 
   testWidgets('a manager imports a CSV: checked first, bad lines named, good ones land in Pending', (tester) async {

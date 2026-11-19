@@ -126,6 +126,8 @@ String moderationLabel(String action, String status) => switch ((action, status)
       ('confirm', _) => 'Confirm still available',
       ('feature', _) => 'Feature for $featureDays days',
       ('unfeature', _) => 'Stop featuring',
+      ('hot', _) => 'Add to Hot Properties',
+      ('unhot', _) => 'Remove from Hot Properties',
       _ => label(action),
     };
 
@@ -431,7 +433,7 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
     if (_saving.containsKey(r.id)) return;
     final to = switch (action) {
       'confirm' => 'live',
-      'feature' || 'unfeature' => r.status,
+      'feature' || 'unfeature' || 'hot' || 'unhot' => r.status,
       _ => moderationTargets[action]!,
     };
     setState(() => _saving[r.id] = to);
@@ -442,12 +444,16 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
         'confirm' => actions.confirmListing(who, listingId: r.id),
         'feature' => actions.featureListing(who, listingId: r.id, days: featureDays),
         'unfeature' => actions.featureListing(who, listingId: r.id, days: 0),
+        'hot' => actions.setHotListing(who, listingId: r.id, hot: true),
+        'unhot' => actions.setHotListing(who, listingId: r.id, hot: false),
         _ => actions.moderateListing(who, listingId: r.id, action: action, reason: reason),
       },
       switch (action) {
         'confirm' => '${r.title}: confirmed, verified for 30 days',
         'feature' => '${r.title}: featured for $featureDays days',
         'unfeature' => '${r.title}: no longer featured',
+        'hot' => '${r.title}: in Hot Properties on the home page',
+        'unhot' => '${r.title}: out of Hot Properties',
         _ => '${r.title}: ${label(to)}',
       },
     );
@@ -529,7 +535,7 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
                 message: 'Edit ${r.title}',
                 child: InkWell(onTap: () => _edit(r.id), child: Text(r.title, style: const TextStyle(decoration: TextDecoration.underline))),
               );
-              if (!r.photoMatch && !featured) return title;
+              if (!r.photoMatch && !featured && !r.hot) return title;
               return Row(mainAxisSize: MainAxisSize.min, children: [
                 Flexible(child: title),
                 if (featured) ...[
@@ -537,6 +543,13 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
                   Tooltip(
                     message: 'Featured until ${shortDateTime(r.featuredUntil!)}',
                     child: Icon(Icons.star, size: 18, color: Theme.of(context).colorScheme.primary),
+                  ),
+                ],
+                if (r.hot) ...[
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'In Hot Properties on the home page',
+                    child: Icon(Icons.local_fire_department, size: 18, color: Theme.of(context).colorScheme.primary),
                   ),
                 ],
                 if (r.photoMatch) ...[
@@ -559,7 +572,7 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
                 text: label(status),
                 tooltip: 'Change ${r.title}',
                 // Managers moderate; agents confirm their own. The Functions refuse anything else.
-                options: listingActionsFor(who, status: status, agentId: r.agentId, featured: r.featuredAt(DateTime.now())),
+                options: listingActionsFor(who, status: status, agentId: r.agentId, featured: r.featuredAt(DateTime.now()), hot: r.hot),
                 labelOf: (a) => moderationLabel(a, status),
                 saving: _saving.containsKey(r.id),
                 onSelected: (a) => _moderate(who, r, a),

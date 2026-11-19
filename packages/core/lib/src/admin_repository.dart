@@ -110,6 +110,7 @@ class StaffListingRow {
     this.whatsapps = 0,
     this.expiresAt,
     this.featuredUntil,
+    this.hot = false,
     this.photoMatch = false,
   });
   final String id, slug, title, area, status, agentId, agentName;
@@ -124,10 +125,13 @@ class StaffListingRow {
 
   bool featuredAt(DateTime now) => featuredUntil != null && featuredUntil!.isAfter(now);
 
+  /// In the home page's Hot Properties.
+  final bool hot;
+
   /// A photo here matches another listing's (`photoFlags`, P6-s05). Managers only.
   final bool photoMatch;
 
-  StaffListingRow withStatus(String status, DateTime updatedAt, {DateTime? expiresAt, DateTime? Function()? featuredUntil}) =>
+  StaffListingRow withStatus(String status, DateTime updatedAt, {DateTime? expiresAt, DateTime? Function()? featuredUntil, bool? hot}) =>
       StaffListingRow(
         id: id,
         slug: slug,
@@ -143,6 +147,7 @@ class StaffListingRow {
         whatsapps: whatsapps,
         expiresAt: expiresAt ?? this.expiresAt,
         featuredUntil: featuredUntil == null ? this.featuredUntil : featuredUntil(),
+        hot: hot ?? this.hot,
         photoMatch: photoMatch,
       );
 }

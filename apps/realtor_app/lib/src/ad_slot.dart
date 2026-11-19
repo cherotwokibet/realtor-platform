@@ -16,10 +16,14 @@ import 'providers.dart';
 /// phones (never two on one screen, never above the first homes); beside the
 /// list on wide screens, where it does not push homes down.
 class AdSlot extends ConsumerWidget {
-  const AdSlot({super.key, this.tall = false});
+  const AdSlot({super.key, this.tall = false, this.banner = false});
 
   /// A box for the side of a wide page; otherwise a band across the list.
   final bool tall;
+
+  /// A low band for a wide page's full width (the home page): the photo on
+  /// the left, the words and Enquire now beside it.
+  final bool banner;
 
   /// Homes between two adverts in a list.
   static const every = 5;
@@ -43,6 +47,75 @@ class AdSlot extends ConsumerWidget {
     // As Property Finder lays its adverts out among the homes: a card the
     // width of a home's, the photo marked AD and fading into the card, the
     // advertiser's logo, a bold title, a line or two, and Enquire now.
+    final adMark = DecoratedBox(
+      decoration: BoxDecoration(color: scheme.scrim.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(b.radiusSm)),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: b.spacing.sm, vertical: 2),
+        child: Text('AD', style: text.labelMedium?.copyWith(color: scheme.surface, fontWeight: FontWeight.w700)),
+      ),
+    );
+    final enquireButton = OutlinedButton(
+      key: const Key('ad-enquire'),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 44),
+        padding: EdgeInsets.symmetric(horizontal: b.spacing.xl),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
+        side: BorderSide(color: scheme.primary.withValues(alpha: 0.4)),
+        textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+      ),
+      onPressed: () => open(enquire),
+      child: const Text('Enquire now'),
+    );
+    if (banner) {
+      // Low and wide, so it does not take over the page.
+      return Semantics(
+        container: true,
+        label: 'Advert',
+        child: Material(
+          key: const Key('ad-card'),
+          color: scheme.surface,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusMd), side: BorderSide(color: scheme.outlineVariant)),
+          child: InkWell(
+            onTap: () => open(enquire),
+            child: SizedBox(
+              height: 168,
+              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                SizedBox(
+                  width: 300,
+                  child: Stack(fit: StackFit.expand, children: [
+                    if (promo?.hasImage ?? false)
+                      Image.asset(homePhotoAsset('banner', 1), fit: BoxFit.cover, excludeFromSemantics: true, errorBuilder: (_, __, ___) => plain)
+                    else
+                      plain,
+                    Positioned(left: b.spacing.md, top: b.spacing.md, child: adMark),
+                  ]),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: b.spacing.xl, vertical: b.spacing.lg),
+                    child: Row(children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Image.asset(b.logoAsset, height: 36, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
+                          SizedBox(height: b.spacing.sm),
+                          Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                          SizedBox(height: b.spacing.xs),
+                          Text(promo?.text ?? 'Reach people looking for a home with ${tenant.name}.',
+                              maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyMedium?.copyWith(height: 1.45)),
+                        ]),
+                      ),
+                      SizedBox(width: b.spacing.xl),
+                      enquireButton,
+                    ]),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
     return Semantics(
       container: true,
       label: 'Advert',

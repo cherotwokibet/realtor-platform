@@ -31,7 +31,10 @@ final agentProvider = FutureProvider.family<AgentProfile?, String>((ref, id) => 
 /// until loaded or when it fails: words then stay free text, which still matches.
 final areaNamesProvider = FutureProvider<Map<String, String>>((ref) async {
   try {
-    return {for (final a in await ref.watch(listingRepositoryProvider).areas()) if (a.slug != null) a.slug!: a.name};
+    return {
+      for (final a in await ref.watch(listingRepositoryProvider).areas())
+        if (a.slug != null) a.slug!: a.name
+    };
   } on Exception {
     return const {};
   }
@@ -41,6 +44,12 @@ final areaNamesProvider = FutureProvider<Map<String, String>>((ref) async {
 final projectsProvider = FutureProvider<List<OffPlanProject>>((ref) => ref.watch(listingRepositoryProvider).projects());
 
 final projectProvider = FutureProvider.family<OffPlanProject?, String>((ref, slug) => ref.watch(listingRepositoryProvider).project(slug));
+
+/// The home page's Hot Properties: live homes a manager marked hot, newest first.
+final hotHomesProvider = FutureProvider<List<ListingSummary>>((ref) async {
+  final live = await ref.watch(listingRepositoryProvider).live(limit: 500);
+  return live.where((l) => l.hot).take(12).toList();
+});
 
 /// Live listings in an area (`area`) or by an agent (`agent`), newest first.
 final liveListingsProvider = FutureProvider.family<List<ListingSummary>, ({String? area, String? agent})>(
