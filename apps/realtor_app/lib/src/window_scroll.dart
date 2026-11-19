@@ -135,7 +135,8 @@ class _LaneState extends State<_Lane> {
         return Container(
           key: const Key('window-scrollbar'),
           width: WindowScroll.width,
-          decoration: BoxDecoration(color: b.surfaceAlt, border: Border(left: BorderSide(color: scheme.outlineVariant))),
+          // The page's own colour and no dividing line, as Bayut's: only the arrows and the thumb show.
+          color: Theme.of(context).scaffoldBackgroundColor,
           child: Column(children: [
             arrow(Icons.arrow_drop_up, 'Scroll up', -1, const Key('scroll-up')),
             Expanded(
@@ -154,8 +155,8 @@ class _LaneState extends State<_Lane> {
                   child: Stack(children: [
                     Positioned(
                       top: top,
-                      left: 3,
-                      right: 3,
+                      left: 4,
+                      right: 4,
                       height: len,
                       child: MouseRegion(
                         onEnter: (_) => setState(() => _hover = true),
@@ -167,7 +168,7 @@ class _LaneState extends State<_Lane> {
                           onVerticalDragUpdate: (d) => _by(room <= 0 ? 0 : d.delta.dy * max / room, animate: false),
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: _hover || _dragging ? b.textMuted : b.borderStrong,
+                              color: _hover || _dragging ? b.textMuted : b.textMuted.withValues(alpha: 0.55),
                               borderRadius: BorderRadius.circular(5),
                             ),
                           ),
