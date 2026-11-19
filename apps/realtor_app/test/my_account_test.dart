@@ -225,7 +225,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Create your Realtime Estates Ltd account'), findsOneWidget);
     expect(find.text('Join with Google'), findsOneWidget);
-    expect(find.textContaining('you agree to the Terms'), findsOneWidget);
+    expect(find.textContaining('When creating a new account you agree to Realtime Estates Ltd', findRichText: true), findsOneWidget);
+    await tester.tap(find.byKey(const Key('link-terms')));
+    await tester.pumpAndSettle();
+    expect(opened.last.toString(), 'https://realtimeestates.co.ke/terms');
+    await tester.tap(find.byKey(const Key('link-privacy')));
+    await tester.pumpAndSettle();
+    expect(opened.last.toString(), 'https://realtimeestates.co.ke/privacy');
     expect(find.byKey(const Key('use-password')), findsNothing, reason: 'a password is set later, in Edit Profile');
 
     await tester.tap(find.byKey(const Key('use-link')));

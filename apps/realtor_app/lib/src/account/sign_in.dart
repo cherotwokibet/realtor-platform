@@ -140,6 +140,28 @@ class _SignInPanelState extends ConsumerState<SignInPanel> {
     }, 'We could not send that just now. Please try again.');
   }
 
+  /// A page of the share site as a link inside the disclaimer: bold, underlined, in the brand colour.
+  InlineSpan _link(String label, String slug, Key key) {
+    final scheme = Theme.of(context).colorScheme;
+    final tenant = ref.read(tenantProvider);
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: InkWell(
+        key: key,
+        onTap: () => ref.read(urlOpenerProvider)(Uri.https(tenant.shareDomain, '/$slug')),
+        child: Text(label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.underline,
+                  decorationColor: scheme.primary,
+                  height: 1.5,
+                )),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final b = context.brand;
@@ -275,12 +297,19 @@ class _SignInPanelState extends ConsumerState<SignInPanel> {
         if (_error != null) _Line(text: _error!, icon: Icons.error_outline, ink: scheme.error, fill: scheme.errorContainer.withValues(alpha: 0.4)),
         if (_join) ...[
           SizedBox(height: b.spacing.md),
-          Text('By creating an account you agree to the Terms and the Privacy Policy of ${tenant.name}.',
-              textAlign: TextAlign.center, style: text.bodySmall?.copyWith(color: b.textMuted)),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            for (final (slug, name) in const [('terms', 'Terms'), ('privacy', 'Privacy Policy')])
-              TextButton(onPressed: () => ref.read(urlOpenerProvider)(Uri.https(tenant.shareDomain, '/$slug')), child: Text(name)),
-          ]),
+          // One sentence with the two pages as links in it, as on Bayut.
+          Text.rich(
+            key: const Key('join-disclaimer'),
+            TextSpan(children: [
+              TextSpan(text: 'When creating a new account you agree to ${tenant.name} '),
+              _link('Terms and conditions', 'terms', const Key('link-terms')),
+              const TextSpan(text: ' and '),
+              _link('Privacy Policy', 'privacy', const Key('link-privacy')),
+              const TextSpan(text: '.'),
+            ]),
+            textAlign: TextAlign.center,
+            style: text.bodySmall?.copyWith(color: b.textMuted, height: 1.5),
+          ),
         ],
         SizedBox(height: b.spacing.md),
         Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: [
