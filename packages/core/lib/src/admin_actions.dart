@@ -51,9 +51,10 @@ List<String> nextLeadStages(String stage) => leadStageMoves[stage] ?? const [];
 
 /// What [who] may do to a listing from its status menu: managers moderate,
 /// and the listing's agent (or a manager) confirms a live or expired one.
-List<String> listingActionsFor(StaffUser who, {required String status, required String agentId, bool featured = false}) => [
+List<String> listingActionsFor(StaffUser who, {required String status, required String agentId, bool featured = false, bool hot = false}) => [
       if (who.isManager) ...moderationsFor(status),
       if ((status == 'live' || status == 'expired') && (who.isManager || who.agentId == agentId)) 'confirm',
+      if (who.isManager && status == 'live') hot ? 'unhot' : 'hot',
       if (who.isManager && status == 'live') featured ? 'unfeature' : 'feature',
     ];
 
@@ -147,6 +148,10 @@ abstract interface class AdminActions {
   /// `featureListing` (P5-s02), managers: a live listing ranks first in
   /// search for [days]; 0 stops it. Completes with the new end, or null.
   Future<DateTime?> featureListing(StaffUser who, {required String listingId, required int days});
+
+  /// `setHotListing`, managers: puts a live listing in the home page's Hot
+  /// Properties, or takes it out. Completes with the new state.
+  Future<bool> setHotListing(StaffUser who, {required String listingId, required bool hot});
 
   /// `submitListing` (P5-s02): creates or edits a listing and sends it for
   /// review (pending). Agents submit their own; managers for any agent.

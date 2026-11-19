@@ -54,6 +54,28 @@ void main() {
     expect(nav, findsOneWidget, reason: 'the bar stays over the results');
   });
 
+  testWidgets('desktop home scrolls as a whole: the top menu goes with it; the advert is a low band; rows slide with arrows', (tester) async {
+    await pumpAt(tester, const Size(1400, 900), tenantId: 'realtime-estates');
+    final nav = find.byKey(const Key('top-nav'));
+    expect(nav.hitTestable(), findsOneWidget);
+    final hot = find.byKey(const Key('hot-row'));
+    await tester.scrollUntilVisible(hot, 300, scrollable: find.byType(Scrollable).first);
+    // Four across; an arrow brings the rest.
+    expect(find.byKey(const Key('row-back')), findsNothing);
+    final more = find.descendant(of: hot, matching: find.byKey(const Key('row-more')));
+    if (more.evaluate().isNotEmpty) {
+      await tester.tap(more);
+      await tester.pumpAndSettle();
+      expect(find.descendant(of: hot, matching: find.byKey(const Key('row-back'))), findsOneWidget);
+    }
+    final ad = find.byKey(const Key('ad-card'));
+    await tester.scrollUntilVisible(ad, 300, scrollable: find.byType(Scrollable).first);
+    expect(tester.getSize(ad).height, lessThanOrEqualTo(180), reason: 'a low band, not a full-width photo');
+    await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(nav.hitTestable(), findsNothing, reason: 'the menu scrolled away with the page');
+  });
+
   testWidgets('the filter row searches with what was picked', (tester) async {
     // A tenant without conversational search gets the filter row.
     await pumpAt(tester, const Size(1600, 1000), tenantId: 'realtime-estates');

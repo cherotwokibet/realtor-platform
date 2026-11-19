@@ -318,6 +318,19 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   }
 
   @override
+  Future<bool> setHotListing(StaffUser who, {required String listingId, required bool hot}) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final i = _listings.indexWhere((l) => l.id == listingId);
+    if (i < 0) throw AdminActionException('not-found', 'no such listing');
+    final listing = _listings[i];
+    if (hot && listing.status != 'live') throw AdminActionException('failed-precondition', 'only a live listing can be a hot property');
+    final at = _clock();
+    _listings[i] = listing.withStatus(listing.status, at, hot: hot);
+    _log(who, 'listing.hot', listing.title, listing.hot ? 'hot' : 'none', hot ? 'hot' : 'none', at: at);
+    return hot;
+  }
+
+  @override
   Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows) async {
     if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
     final created = <int>[];

@@ -194,8 +194,8 @@ class _SectionShell extends ConsumerWidget {
       preferredSize: const Size.fromHeight(TopNav.height),
       child: TopNav(sections: sections, location: location),
     );
-    // Home runs the window's width too (its scrollbar at the edge) and keeps its own content width.
-    if (first == null) return backToSearch(Scaffold(appBar: nav, body: child));
+    // Home scrolls as a whole, top menu included, as Bayut's: its scrollbar runs the window's height.
+    if (first == null) return backToSearch(Scaffold(body: child));
     return backToSearch(Scaffold(
       appBar: nav,
       body: Align(

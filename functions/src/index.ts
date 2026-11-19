@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing, submitReview, logRecommendation (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, submitListingReview, savePage, saveProject, setStaffRole, dataRequest.
+ * Callables: createLead, logContactTap, bookViewing, submitReview, logRecommendation (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, setHotListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, submitListingReview, savePage, saveProject, setStaffRole, dataRequest.
  * Scheduled, every 5 minutes: savedSearchAlerts (D18, inbox + push). Nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -103,6 +103,7 @@ export const submitListing = onCall((req) => listings.submitListing(getFirestore
 export const moderateListing = onCall((req) => listings.moderateListing(getFirestore(), callerFrom(req.auth), req.data));
 export const confirmListing = onCall((req) => listings.confirmListing(getFirestore(), callerFrom(req.auth), req.data));
 export const featureListing = onCall((req) => listings.featureListing(getFirestore(), callerFrom(req.auth), req.data));
+export const setHotListing = onCall((req) => listings.setHotListing(getFirestore(), callerFrom(req.auth), req.data));
 export const importListings = onCall({ timeoutSeconds: 120 }, (req) => listings.importListings(getFirestore(), callerFrom(req.auth), req.data));
 export const saveAgent = onCall((req) => agents.saveAgent(getFirestore(), callerFrom(req.auth), req.data));
 export const monthlyReport = onCall((req) => reports.monthlyReport(getFirestore(), callerFrom(req.auth), req.data));

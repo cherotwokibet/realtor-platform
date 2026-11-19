@@ -13,6 +13,7 @@ export interface AuditEvent {
     | 'listing.sold'
     | 'listing.confirm'
     | 'listing.feature'
+    | 'listing.hot'
     | 'viewing.status'
     | 'viewing.reschedule'
     | 'agent.block'

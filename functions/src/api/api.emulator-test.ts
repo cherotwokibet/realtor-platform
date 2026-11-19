@@ -9,7 +9,7 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
-import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateListing, submitListing } from './listings';
+import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateListing, setHotListing, submitListing } from './listings';
 import { bookViewing, openSlots, rescheduleViewing, updateViewingStatus } from './viewings';
 import { addAgentBlock, removeAgentBlock } from './availability';
 import { saveAgent } from './agents';
@@ -560,6 +560,21 @@ describe('featuring and CSV import (P5-s02)', () => {
 
     await featureListing(db, manager, { listingId, days: 3 }, now);
     assert.deepEqual(await featureListing(db, manager, { listingId, days: 0 }, now), { featuredUntil: null });
+  });
+
+  test('a manager puts a live listing in Hot Properties and takes it out; audited', async () => {
+    const { listingId } = await submitListing(db, wanjiku, newListing, now);
+    await rejectsWith(setHotListing(db, manager, { listingId, hot: true }, now), 'failed-precondition'); // still pending
+    await moderateListing(db, manager, { listingId, action: 'approve' }, now);
+    await rejectsWith(setHotListing(db, wanjiku, { listingId, hot: true }, now), 'permission-denied');
+    await rejectsWith(setHotListing(db, manager, { listingId, hot: 'yes' }, now), 'invalid-argument');
+    assert.deepEqual(await setHotListing(db, manager, { listingId, hot: true }, now), { hot: true });
+    const ref = db.collection('listings').doc(listingId);
+    assert.equal((await ref.get()).get('hot'), true);
+    const entry = (await db.collection('audit').where('action', '==', 'listing.hot').get()).docs[0].data();
+    assert.deepEqual([entry.from, entry.to], ['none', 'hot']);
+    await setHotListing(db, manager, { listingId, hot: false }, now);
+    assert.equal((await ref.get()).get('hot'), false);
   });
 
   test('import makes pending listings row by row; bad rows are reported, the rest go in', async () => {

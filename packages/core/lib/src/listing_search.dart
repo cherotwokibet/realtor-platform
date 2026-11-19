@@ -16,6 +16,7 @@ class ListingSummary {
     required this.lng,
     this.verified = false,
     this.featured = false,
+    this.hot = false,
     this.amenities = const [],
     this.thumb,
     this.blurhash,
@@ -34,6 +35,9 @@ class ListingSummary {
   final int beds, baths, priceKES;
   final double lat, lng;
   final bool verified, featured;
+
+  /// A manager put it in the home page's Hot Properties.
+  final bool hot;
   final List<String> amenities;
   final String? thumb, blurhash;
 
@@ -62,6 +66,7 @@ class ListingSummary {
         'lng': lng,
         'verified': verified,
         if (featured) 'featured': true,
+        if (hot) 'hot': true,
         'amenities': amenities,
         if (thumb != null) 'thumb': thumb,
         if (blurhash != null) 'blurhash': blurhash,
@@ -90,6 +95,7 @@ class ListingSummary {
         lng: (j['lng'] as num).toDouble(),
         verified: j['verified'] == true,
         featured: j['featured'] == true,
+        hot: j['hot'] == true,
         amenities: [for (final a in (j['amenities'] as List?) ?? const []) '$a'],
         thumb: j['thumb'] as String?,
         blurhash: j['blurhash'] as String?,

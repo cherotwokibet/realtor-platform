@@ -67,6 +67,7 @@ ListingSummary summaryFromDoc(String id, Map<String, Object?> d, {required Strin
     lng: (geo['lng'] as num?)?.toDouble() ?? 0,
     verified: d['verifiedAt'] != null && expires != null && expires.isAfter(now),
     featured: featured != null && featured.isAfter(now),
+    hot: d['hot'] == true,
     amenities: [for (final a in (d['amenities'] as List<Object?>?) ?? const []) '$a'],
     thumb: thumb == null ? null : mediaUrl(bucket, thumb),
     blurhash: photos.isEmpty ? null : photos.first['blurhash'] as String?,
