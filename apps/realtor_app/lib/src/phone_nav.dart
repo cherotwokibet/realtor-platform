@@ -226,7 +226,20 @@ class AppDrawer extends ConsumerWidget {
                 padding: EdgeInsets.symmetric(horizontal: b.spacing.lg),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   Divider(height: b.spacing.xl * 2, color: scheme.outlineVariant),
-                  Text('Download the ${tenant.name} app:', key: const Key('drawer-download'), style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  // On one line: the name without "Ltd" (or Limited, Inc, LLC) when the whole name does not fit.
+                  LayoutBuilder(builder: (context, box) {
+                    final style = text.titleMedium?.copyWith(fontWeight: FontWeight.w700);
+                    String line(String name) => 'Download the $name app:';
+                    bool fits(String s) {
+                      final painter = TextPainter(text: TextSpan(text: s, style: style), maxLines: 1, textDirection: Directionality.of(context))
+                        ..layout(maxWidth: box.maxWidth);
+                      return !painter.didExceedMaxLines;
+                    }
+
+                    final short = tenant.name.replaceFirst(RegExp(r',?\s+(Ltd\.?|Limited|Inc\.?|LLC)$', caseSensitive: false), '');
+                    final words = fits(line(tenant.name)) ? line(tenant.name) : line(short);
+                    return Text(words, key: const Key('drawer-download'), maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: style);
+                  }),
                   SizedBox(height: b.spacing.md),
                   Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: badges),
                   // Log out, only for someone signed in.
@@ -344,7 +357,7 @@ class ScrollAwayBar extends ConsumerWidget {
         tooltip: 'Back',
         color: scheme.primary,
         icon: const Icon(Icons.chevron_left, size: 32),
-        onPressed: () => context.canPop() ? context.pop() : context.go('/'),
+        onPressed: () => goBack(context),
       ),
       centerTitle: true,
       title: GestureDetector(

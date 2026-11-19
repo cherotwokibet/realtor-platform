@@ -477,7 +477,13 @@ class _HotRow extends ConsumerWidget {
     if (hits.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: EdgeInsets.only(top: context.brand.spacing.xl),
-      child: HomeRow(key: const Key('hot-row'), title: 'Hot properties', icon: Icons.local_fire_department, listings: hits),
+      child: HomeRow(
+        key: const Key('hot-row'),
+        title: 'Hot properties',
+        icon: Icons.local_fire_department,
+        listings: hits.take(12).toList(),
+        onSeeAll: () => context.push('/hot'),
+      ),
     );
   }
 }

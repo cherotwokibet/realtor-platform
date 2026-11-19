@@ -12,6 +12,7 @@ import 'account/account_screen.dart';
 import 'account/push.dart';
 import 'account/sign_in.dart';
 import 'home_screen.dart';
+import 'hot_screen.dart';
 import 'listing/listing_screen.dart';
 import 'nav.dart';
 import 'phone_nav.dart';
@@ -29,7 +30,7 @@ import 'sections.dart';
 final routerProvider = Provider<GoRouter>((ref) {
   final features = ref.watch(tenantProvider).features;
   final sections = enabledSections(features);
-  return GoRouter(
+  final router = GoRouter(
     redirect: (context, state) => redirectForDisabled(features, state.uri.path),
     routes: [
       ShellRoute(
@@ -46,6 +47,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                 _ => PlaceholderScreen(title: s.label),
               },
             ),
+          // Every Hot Property, from the home page's See all.
+          GoRoute(path: '/hot', builder: (context, state) => const HotScreen()),
           // Search results: /rent, /buy/apartments, /rent/apartments/kilimani?beds=2 ...
           for (final p in Purpose.values)
             if (features.isOn(p.feature))
@@ -89,6 +92,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+  // Every page visited, for back (NavHistory).
+  final history = NavHistory.of(router);
+  void track() => history.visit(router.routerDelegate.currentConfiguration.uri.toString());
+  router.routerDelegate.addListener(track);
+  ref.onDispose(() => router.routerDelegate.removeListener(track));
+  return router;
 });
 
 /// Edit Profile needs an account; signed out, it is the Account page.
@@ -203,8 +212,8 @@ class _SectionShell extends ConsumerWidget {
       preferredSize: const Size.fromHeight(TopNav.height),
       child: TopNav(sections: sections, location: location),
     );
-    // Home scrolls as a whole, top menu included, as Bayut's: its scrollbar runs the window's height.
-    if (first == null) return backToSearch(Scaffold(body: child));
+    // Home and Saved scroll as a whole, top menu included, as Bayut's: the scrollbar runs the window's height.
+    if (first == null || first == 'saved') return backToSearch(Scaffold(body: child));
     return backToSearch(Scaffold(
       appBar: nav,
       body: Align(

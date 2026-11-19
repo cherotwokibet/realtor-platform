@@ -190,7 +190,10 @@ void main() {
     for (final gone in ['COMPANY', 'GET IN TOUCH', 'Privacy', 'Terms', 'About us']) {
       expect(find.descendant(of: drawer, matching: find.text(gone)), findsNothing, reason: gone);
     }
-    expect(find.text('Download the Realtime Estates Ltd app:'), findsOneWidget);
+    // On one line: the whole name when it fits, else without "Ltd".
+    final download = tester.widget<Text>(find.byKey(const Key('drawer-download')));
+    expect(['Download the Realtime Estates Ltd app:', 'Download the Realtime Estates app:'], contains(download.data));
+    expect(download.maxLines, 1);
     // Both stores; one the app is not on yet says so.
     await tester.ensureVisible(find.byKey(const Key('badge-app-store')));
     await tester.tap(find.byKey(const Key('badge-app-store')));
@@ -212,24 +215,53 @@ void main() {
     expect(find.byKey(const Key('drawer-logout')), findsNothing);
   });
 
-  testWidgets('Saved on a computer, as on Property Finder: underlined tabs with counts, wide cards, Delete All', (tester) async {
+  testWidgets('Saved on a computer: Favourites and Search alerts with rolling counts, homes four across, the window scrolls, Delete All', (tester) async {
     tester.view.physicalSize = const Size(1400, 1200);
     final c = await open(tester, '/saved');
     tester.view.physicalSize = const Size(1400, 1200);
-    for (final l in demoListings.take(2)) {
+    for (final l in demoListings.take(5)) {
       await c.read(favouritesProvider.notifier).toggle(l);
     }
     await tester.pumpAndSettle();
-    expect(find.text('Saved properties (2)'), findsOneWidget);
-    expect(find.text('Search alerts (0)'), findsOneWidget);
-    expect(find.byType(ListingCard), findsNWidgets(2));
-    expect(tester.getSize(find.byType(ListingCard).first).width, greaterThan(800), reason: 'one wide card a row');
+    expect(find.text('Saved'), findsWidgets, reason: 'the top menu item');
+    expect(find.byType(AppBar), findsNothing, reason: 'no second Saved heading');
+    expect(find.text('Favourites'), findsOneWidget);
+    expect(find.text('Search alerts'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('saved-tab-favourites')), matching: find.text('5')), findsOneWidget);
+    expect(find.byKey(const Key('window-scrollbar')), findsOneWidget, reason: "the window's scrollbar, no inner one");
+    expect(find.byKey(const Key('top-nav')), findsOneWidget);
+    final cards = find.byType(ListingCard);
+    expect(cards, findsNWidgets(5));
+    expect(tester.getTopLeft(cards.at(3)).dy, tester.getTopLeft(cards.at(0)).dy, reason: 'four across, as the home page');
+    expect(tester.getTopLeft(cards.at(4)).dy, greaterThan(tester.getTopLeft(cards.at(0)).dy));
+    await tester.scrollUntilVisible(find.byKey(const Key('saved-delete-all')), 300, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.byKey(const Key('saved-delete-all')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-delete-all')));
     await tester.pumpAndSettle();
     expect(c.read(favouritesProvider).value, isEmpty);
-    expect(find.text('Saved properties (0)'), findsOneWidget);
+  });
+
+  testWidgets('back on Saved returns to the page the visitor came from, not Home', (tester) async {
+    final c = await open(tester, '/rent');
+    c.read(routerProvider).go('/saved');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(c.read(routerProvider).state.uri.path, '/rent');
+  });
+
+  testWidgets('Hot properties has See all, which lists every hot home', (tester) async {
+    final c = await open(tester, '/');
+    final hot = find.byKey(const Key('hot-row'));
+    await tester.scrollUntilVisible(hot, 300, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.descendant(of: hot, matching: find.text('See all')));
+    await tester.pumpAndSettle();
+    expect(c.read(routerProvider).state.uri.path, '/hot');
+    expect(find.byKey(const Key('hot-grid')), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(c.read(routerProvider).state.uri.path, '/');
   });
 
   testWidgets('Saved on a phone: a gap under the tabs that stays while the homes scroll', (tester) async {
