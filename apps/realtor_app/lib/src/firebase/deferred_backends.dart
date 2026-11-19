@@ -85,7 +85,25 @@ class DeferredCustomerAccount implements CustomerAccount {
   @override
   Future<void> signInWithGoogle() async => (await _inner).signInWithGoogle();
   @override
+  Future<void> signInWithPassword(String email, String password) async => (await _inner).signInWithPassword(email, password);
+  @override
+  Future<void> sendPasswordReset(String email) async => (await _inner).sendPasswordReset(email);
+  @override
   Future<void> signOut() async => (await _inner).signOut();
+}
+
+class DeferredProfile implements ProfileRepository {
+  DeferredProfile(this._inner);
+  final Future<ProfileRepository> _inner;
+
+  @override
+  Future<CustomerProfile> load() async => (await _inner).load();
+  @override
+  Future<void> save({required String name, required String whatsapp}) async => (await _inner).save(name: name, whatsapp: whatsapp);
+  @override
+  Future<void> setPassword(String password) async => (await _inner).setPassword(password);
+  @override
+  Future<void> deleteAccount() async => (await _inner).deleteAccount();
 }
 
 class DeferredAlertsRepository implements AlertsRepository {

@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing, submitReview, logRecommendation (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, setHotListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, submitListingReview, savePage, saveProject, setStaffRole, dataRequest.
+ * Callables: createLead, logContactTap, bookViewing, submitReview, logRecommendation (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, setHotListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, submitListingReview, savePage, saveProject, setStaffRole, dataRequest, saveMyProfile, deleteMyAccount.
  * Scheduled, every 5 minutes: savedSearchAlerts (D18, inbox + push). Nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -43,6 +43,7 @@ import { refreshAreaStats } from './api/areas';
 import { INDEX_CACHE, listingIndex as buildListingIndex } from './api/listing-index';
 import { fcmSender, sweepSavedSearches } from './api/alerts';
 import { dataRequest as runDataRequest } from './api/privacy';
+import { type CustomerAuth, deleteAccount, saveProfile } from './api/profile';
 import { purgeExpired } from './api/retention';
 import { callableTwin, enforced, logAppCheck, type PublicCallable, sharePagesInvoker } from './api/appcheck';
 import { updateAgentResponseTimes } from './api/response';
@@ -114,6 +115,16 @@ export const saveProject = onCall((req) => projects.saveProject(getFirestore(), 
 export const savePage = onCall((req) => pages.savePage(getFirestore(), callerFrom(req.auth), req.data));
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 export const dataRequest = onCall((req) => runDataRequest(getFirestore(), callerFrom(req.auth), req.data));
+
+// The customer's own profile and account (My account > Edit Profile).
+const customerAuth: CustomerAuth = {
+  setName: async (uid, name) => {
+    await getAuth().updateUser(uid, { displayName: name });
+  },
+  deleteUser: (uid) => getAuth().deleteUser(uid),
+};
+export const saveMyProfile = onCall((req) => saveProfile(getFirestore(), customerAuth, callerFrom(req.auth), req.data));
+export const deleteMyAccount = onCall((req) => deleteAccount(getFirestore(), customerAuth, callerFrom(req.auth)));
 
 // Saved-search alerts (D18, P4-s03): every 5 minutes, new live listings to
 // matching inboxes, so an alert lands within 5 minutes of a listing going live.

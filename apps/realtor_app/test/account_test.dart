@@ -47,7 +47,13 @@ void main() {
 
   test('alerts keep only what they can match on', () {
     const f = ListingFilters(purpose: Purpose.rent, q: 'quiet', types: ['apartment'], areas: ['kilimani'], minBeds: 2, maxPriceKES: 60000);
-    expect(alertFilters(f), {'purpose': 'rent', 'types': ['apartment'], 'areas': ['kilimani'], 'minBeds': 2, 'maxPriceKES': 60000});
+    expect(alertFilters(f), {
+      'purpose': 'rent',
+      'types': ['apartment'],
+      'areas': ['kilimani'],
+      'minBeds': 2,
+      'maxPriceKES': 60000
+    });
     expect(describeSearch(filtersFromAlert(alertFilters(f))), 'Rent · Apartment · Kilimani · 2+ bed · up to KES 60,000');
   });
 
@@ -88,7 +94,7 @@ void main() {
     expect(opened.single.toString(), 'https://realtimeestates.co.ke/privacy');
   });
 
-  testWidgets('opening the link signs in; a saved search and its alerts show in Account', (tester) async {
+  testWidgets('opening the link signs in; alerts show in Account and the saved search under Saved > Searches', (tester) async {
     pending.email = 'amina@example.com';
     final c = await open(tester, '/account', openedAt: Uri.parse('https://app.example/account?mode=signIn&oobCode=abc&apiKey=k'));
     expect(find.text('amina@example.com'), findsOneWidget);
@@ -101,16 +107,23 @@ void main() {
     expect(find.textContaining('Saved: Rent · Apartment · Kilimani'), findsOneWidget);
 
     final l = demoListings.firstWhere((l) => l.purpose == Purpose.rent);
-    account.addAlert((id: 'a1', slug: l.slug, title: l.title, priceKES: l.priceKES, purpose: l.purpose, area: l.area, createdAt: DateTime(2026, 10, 29), read: false));
+    account.addAlert(
+        (id: 'a1', slug: l.slug, title: l.title, priceKES: l.priceKES, purpose: l.purpose, area: l.area, createdAt: DateTime(2026, 10, 29), read: false));
     c.read(routerProvider).go('/account');
     await tester.pumpAndSettle();
-    expect(find.text('Rent · Apartment · Kilimani'), findsOneWidget);
     await tester.tap(find.text(l.title));
     await tester.pumpAndSettle();
     expect(c.read(routerProvider).state.uri.path, '/listing/${l.slug}');
 
+    // Account links to the saved searches; they are listed under Saved > Searches.
     c.read(routerProvider).go('/account');
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Saved searches and alerts'));
+    await tester.tap(find.text('Saved searches and alerts'));
+    await tester.pumpAndSettle();
+    expect(c.read(routerProvider).state.uri.toString(), '/saved?tab=searches');
+    expect(find.text('Apartment to rent'), findsOneWidget);
+    expect(find.text('Kilimani'), findsOneWidget);
     await tester.tap(find.byTooltip('Stop these alerts'));
     await tester.pumpAndSettle();
     expect(find.textContaining('then tap "Get alerts"'), findsOneWidget);
@@ -137,8 +150,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Saved: Rent · Apartment · Kilimani'), findsOneWidget);
     expect(find.text('Get alerts for Rent · Apartment · Kilimani'), findsNothing);
-    expect(find.text('Rent · Apartment · Kilimani'), findsOneWidget, reason: 'listed under Saved searches');
     expect(c.read(pendingAlertProvider), isNull);
+    c.read(routerProvider).go('/saved?tab=searches');
+    await tester.pumpAndSettle();
+    expect(find.text('Apartment to rent'), findsOneWidget, reason: 'listed under Saved > Searches');
   });
 
   testWidgets('Account says what an alert will match when the search had typed words', (tester) async {

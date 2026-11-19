@@ -7,6 +7,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import '../account/account_data.dart';
 import '../app.dart' show TopNav;
+import '../account/activity.dart';
 import '../phone_nav.dart';
 import '../providers.dart';
 import '../sections.dart';
@@ -30,7 +31,7 @@ class ListingScreen extends ConsumerWidget {
     return detail.when(
       loading: () => Scaffold(appBar: AppBar(leading: const AppBack()), body: const Center(child: CircularProgressIndicator())),
       error: (e, _) => _Message(text: 'This home could not be loaded. Check your connection and try again.'),
-      data: (d) => d == null ? const _Message(text: 'This home is no longer available.') : _ListingView(detail: d),
+      data: (d) => d == null ? const _Message(text: 'This home is no longer available.') : RecordView(home: d.summary, child: _ListingView(detail: d)),
     );
   }
 }
@@ -77,6 +78,7 @@ class _ListingView extends ConsumerWidget {
     Future<void> contact(String channel, Uri uri) async {
       // Counting the tap (D13) must never stop the call or chat.
       ref.read(leadRepositoryProvider).logTap(listingId: l.id, channel: channel).ignore();
+      ref.read(activityProvider(ActivityKind.contacted).notifier).record(l, channel: channel).ignore();
       if (!await ref.read(urlOpenerProvider)(uri) && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No app on this phone can open that.')));
       }

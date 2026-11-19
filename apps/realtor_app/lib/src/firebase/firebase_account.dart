@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart' show FirebaseFunctionsException;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:realtor_core/realtor_core.dart';
@@ -73,7 +74,62 @@ class FirebaseCustomerAccount implements CustomerAccount {
       );
 
   @override
+  Future<void> signInWithPassword(String email, String password) => _reported(() => _auth.signInWithEmailAndPassword(email: email.trim(), password: password));
+
+  @override
+  Future<void> sendPasswordReset(String email) => _reported(() => _auth.sendPasswordResetEmail(email: email.trim()));
+
+  @override
   Future<void> signOut() => _auth.signOut();
+}
+
+/// The profile in users/{uid} (read here, written by saveMyProfile), the
+/// password on the Firebase account, and deleteMyAccount.
+class FirebaseProfile implements ProfileRepository {
+  FirebaseProfile(this._auth, this._db, this._call);
+  final FirebaseAuth _auth;
+  final FirebaseFirestore _db;
+  final Future<Object?> Function(String name, Map<String, Object?> data) _call;
+
+  User get _user => _auth.currentUser ?? (throw const SignInFailure('not-signed-in'));
+
+  Future<T> _reported<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on FirebaseAuthException catch (e) {
+      throw SignInFailure(e.code);
+    } on FirebaseFunctionsException catch (e) {
+      throw SignInFailure(e.code);
+    }
+  }
+
+  @override
+  Future<CustomerProfile> load() async {
+    final u = _user;
+    final d = (await _db.collection('users').doc(u.uid).get()).data() ?? const {};
+    final providers = {for (final p in u.providerData) p.providerId};
+    return (
+      name: (d['name'] as String?) ?? u.displayName,
+      whatsapp: d['whatsapp'] as String?,
+      google: providers.contains('google.com'),
+      hasPassword: providers.contains('password'),
+    );
+  }
+
+  @override
+  Future<void> save({required String name, required String whatsapp}) => _reported(() async {
+        await _call('saveMyProfile', {'name': name, 'whatsapp': whatsapp});
+        await _user.reload();
+      });
+
+  @override
+  Future<void> setPassword(String password) => _reported(() => _user.updatePassword(password));
+
+  @override
+  Future<void> deleteAccount() => _reported(() async {
+        await _call('deleteMyAccount', const {});
+        await _auth.signOut();
+      });
 }
 
 /// savedSearches (rules check the shape) and users/{uid}/alerts.

@@ -5,6 +5,8 @@ import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
 import 'account/account_data.dart';
+import 'account/account_screen.dart' show initialsOf;
+import 'account/push.dart';
 import 'nav.dart';
 import 'providers.dart';
 import 'search/purpose.dart';
@@ -80,7 +82,9 @@ class PhoneTopBar extends ConsumerWidget {
       actions: [
         Padding(
           padding: EdgeInsets.only(right: b.spacing.sm),
-          // A solid pill in the brand colour, as Property Finder has it.
+          // Log in: a solid pill in the brand colour, as Property Finder has it.
+          // Saved: just the word and its heart in the brand colour, so it does
+          // not shout over the page (the heart is the sign people know for it).
           child: Builder(builder: (context) {
             final style = FilledButton.styleFrom(
               shape: const StadiumBorder(),
@@ -89,9 +93,13 @@ class PhoneTopBar extends ConsumerWidget {
               textStyle: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
             );
             return signedIn
-                ? FilledButton.icon(
+                ? TextButton.icon(
                     key: const Key('top-saved'),
-                    style: style,
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 44),
+                      padding: EdgeInsets.symmetric(horizontal: b.spacing.sm),
+                      textStyle: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    ),
                     onPressed: () => context.go('/saved'),
                     icon: const Icon(Icons.favorite_border, size: 20),
                     label: const Text('Saved'),
@@ -122,27 +130,30 @@ class AppDrawer extends ConsumerWidget {
 
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    final email = ref.watch(customerProvider).value?.email;
-    final whatsapp = tenant.hasContactNumbers ? tenant.whatsappLink('Hello ${tenant.name}') : null;
-    Widget item(String label, VoidCallback onTap, {Key? key}) => InkWell(
+    final customer = ref.watch(customerProvider).value;
+    final email = customer?.email;
+    final name = ref.watch(profileProvider).value?.name?.trim();
+    Widget item(String label, IconData icon, VoidCallback onTap, {Key? key}) => InkWell(
           key: key,
           onTap: onTap,
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: b.spacing.lg, vertical: b.spacing.md),
-            child: Text(label, style: text.bodyLarge),
+            child: Row(children: [
+              Icon(icon, size: 22, color: b.textMuted),
+              SizedBox(width: b.spacing.lg),
+              Expanded(child: Text(label, style: text.bodyLarge)),
+            ]),
           ),
         );
-    Widget heading(String label) => Padding(
-          padding: EdgeInsets.fromLTRB(b.spacing.lg, b.spacing.lg, b.spacing.lg, b.spacing.xs),
-          child: Text(label.toUpperCase(), style: text.labelSmall?.copyWith(color: b.textMuted, letterSpacing: 0.8)),
-        );
-    void openUrl(Uri uri) {
-      Navigator.pop(context);
-      open(uri);
-    }
+    IconData purposeIcon(Purpose p) =>
+        switch (p) { Purpose.rent => Icons.key_outlined, Purpose.sale => Icons.sell_outlined, Purpose.shortStay => Icons.bed_outlined };
+    final badges = [
+      if (tenant.googlePlayUrl case final String url) StoreBadge.googlePlay(onTap: () => open(Uri.parse(url))),
+      if (tenant.appStoreUrl case final String url) StoreBadge.appStore(onTap: () => open(Uri.parse(url))),
+    ];
 
     // As on the big portals' apps: a close button, the account first, then
-    // plain rows to tap; the page behind is dimmed.
+    // plain rows with their icons; the page behind is dimmed.
     return Drawer(
       key: const Key('app-drawer'),
       width: (MediaQuery.sizeOf(context).width * 0.86).clamp(0, 360),
@@ -156,11 +167,27 @@ class AppDrawer extends ConsumerWidget {
           Padding(
             padding: EdgeInsets.symmetric(horizontal: b.spacing.lg),
             child: signedIn
-                ? Row(children: [
-                    CircleAvatar(backgroundColor: b.primarySoft, child: Icon(Icons.person, color: scheme.primary)),
-                    SizedBox(width: b.spacing.md),
-                    Expanded(child: Text(email ?? 'Signed in', style: text.titleSmall, overflow: TextOverflow.ellipsis)),
-                  ])
+                ? InkWell(
+                    key: const Key('drawer-account'),
+                    onTap: () => go('/account'),
+                    child: Row(children: [
+                      // Initials in a round, as on Bayut.
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: scheme.primary,
+                        child: Text(initialsOf(name == null || name.isEmpty ? email ?? '?' : name),
+                            style: text.titleMedium?.copyWith(color: scheme.onPrimary, fontWeight: FontWeight.w700)),
+                      ),
+                      SizedBox(width: b.spacing.md),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(name == null || name.isEmpty ? email ?? 'Signed in' : name, style: text.titleSmall, overflow: TextOverflow.ellipsis),
+                          if (name != null && name.isNotEmpty && email != null)
+                            Text(email, style: text.bodySmall?.copyWith(color: b.textMuted), overflow: TextOverflow.ellipsis),
+                        ]),
+                      ),
+                    ]),
+                  )
                 : OutlinedButton(
                     key: const Key('drawer-login'),
                     style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
@@ -171,25 +198,96 @@ class AppDrawer extends ConsumerWidget {
           SizedBox(height: b.spacing.sm),
           Expanded(
             child: ListView(padding: EdgeInsets.only(bottom: b.spacing.lg), children: [
-              item('Home', () => go('/')),
+              item('Home', Icons.home_outlined, () => go('/')),
               for (final p in Purpose.values)
-                if (tenant.features.isOn(p.feature)) item('Homes ${p.heading}', () => go('/${p.pathSegment}')),
+                if (tenant.features.isOn(p.feature)) item('Homes ${p.heading}', purposeIcon(p), () => go('/${p.pathSegment}')),
               for (final s in enabledSections(tenant.features))
-                if (s.path != '/' && s.path != '/account') item(s.label, () => go(s.path == '/saved' && !signedIn ? '/account' : s.path)),
-              item(signedIn ? 'Account' : 'Saved searches and alerts', () => go('/account')),
-              const Divider(height: 24),
-              heading('Company'),
-              for (final (slug, name) in const [('about', 'About us'), ('contact', 'Contact us'), ('faq', 'FAQs')])
-                item(name, () => openUrl(Uri.https(tenant.shareDomain, '/$slug'))),
-              heading('Get in touch'),
-              if (tenant.hasContactNumbers) item('Call ${tenant.phone}', () => openUrl(Uri(scheme: 'tel', path: tenant.phone))),
-              if (whatsapp != null) item('WhatsApp us', () => openUrl(whatsapp)),
-              item(tenant.email, () => openUrl(Uri(scheme: 'mailto', path: tenant.email))),
-              const Divider(height: 24),
-              for (final (slug, name) in const [('privacy', 'Privacy'), ('terms', 'Terms')]) item(name, () => openUrl(Uri.https(tenant.shareDomain, '/$slug'))),
+                if (s.path != '/' && s.path != '/account')
+                  item(s.label, s.path == '/saved' ? Icons.favorite_border : s.icon, () => go(s.path == '/saved' && !signedIn ? '/account' : s.path)),
+              signedIn
+                  ? item('Account', Icons.person_outline, () => go('/account'))
+                  : item('Saved searches and alerts', Icons.notifications_none, () => go('/account')),
+              if (badges.isNotEmpty) ...[
+                const Divider(height: 32),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: b.spacing.lg),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Download the ${tenant.name} app', style: text.titleSmall),
+                    SizedBox(height: b.spacing.md),
+                    Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: badges),
+                  ]),
+                ),
+              ],
             ]),
           ),
+          // Log out at the foot, only for someone signed in.
+          if (customer != null) ...[
+            const Divider(height: 1),
+            item('Log out', Icons.logout, () async {
+              Navigator.pop(context);
+              try {
+                await ref.read(pushAlertsProvider).disable(customer.uid);
+              } on Object {
+                // Signing out still works; the sweep forgets dead tokens.
+              }
+              await ref.read(customerAccountProvider).signOut();
+            }, key: const Key('drawer-logout')),
+          ],
         ]),
+      ),
+    );
+  }
+}
+
+/// A store badge, drawn (no image to load): dark, rounded, the store's
+/// mark and its two lines light on it, as the stores' own badges are laid out.
+class StoreBadge extends StatelessWidget {
+  const StoreBadge._({super.key, required this.top, required this.name, required this.mark, required this.onTap});
+
+  factory StoreBadge.googlePlay({Key? key, required VoidCallback onTap}) => StoreBadge._(
+      key: key ?? const Key('badge-google-play'),
+      top: 'GET IT ON',
+      name: 'Google Play',
+      mark: const Icon(Icons.play_arrow_rounded, size: 30),
+      onTap: onTap);
+
+  factory StoreBadge.appStore({Key? key, required VoidCallback onTap}) => StoreBadge._(
+      key: key ?? const Key('badge-app-store'),
+      top: 'Download on the',
+      name: 'App Store',
+      mark: const Icon(Icons.apple, size: 26),
+      onTap: onTap);
+
+  final String top, name;
+  final Widget mark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // Dark as the stores' badges, from the theme: the text colour behind, the page colour on it.
+    final scheme = Theme.of(context).colorScheme;
+    final ink = scheme.surface;
+    return Semantics(
+      button: true,
+      label: '$top $name',
+      child: Material(
+        color: scheme.onSurface,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 14, 6),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              SizedBox.square(dimension: 26, child: Center(child: IconTheme(data: IconThemeData(color: ink), child: mark))),
+              const SizedBox(width: 8),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text(top, style: TextStyle(color: ink, fontSize: 9, letterSpacing: 0.4, height: 1.1)),
+                Text(name, style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w600, height: 1.15)),
+              ]),
+            ]),
+          ),
+        ),
       ),
     );
   }

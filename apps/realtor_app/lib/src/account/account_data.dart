@@ -39,7 +39,33 @@ abstract interface class CustomerAccount {
 
   /// Google sign-in, where the project has it switched on.
   Future<void> signInWithGoogle();
+
+  /// For customers who set a password in Edit Profile.
+  Future<void> signInWithPassword(String email, String password);
+
+  /// Emails a link to choose a new password.
+  Future<void> sendPasswordReset(String email);
   Future<void> signOut();
+}
+
+/// What Edit Profile shows: the name, the WhatsApp number, and how the
+/// customer signs in (Google, or email with or without a password).
+typedef CustomerProfile = ({String? name, String? whatsapp, bool google, bool hasPassword});
+
+/// The signed-in customer's own profile and account (My account).
+abstract interface class ProfileRepository {
+  Future<CustomerProfile> load();
+
+  /// Through the saveMyProfile Function, which checks the number. [whatsapp]
+  /// is E.164 (+2547…) or empty to clear it.
+  Future<void> save({required String name, required String whatsapp});
+
+  /// Sets or changes the password; SignInFailure('requires-recent-login')
+  /// when the sign-in is too old for it.
+  Future<void> setPassword(String password);
+
+  /// Through the deleteMyAccount Function; signs out after.
+  Future<void> deleteAccount();
 }
 
 abstract interface class AlertsRepository {
@@ -71,7 +97,7 @@ ListingFilters filtersFromAlert(Map<Object?, Object?> m) => ListingFilters(
     );
 
 /// Demo: one pretend account, everything in memory.
-class DemoAccount implements CustomerAccount, AlertsRepository {
+class DemoAccount implements CustomerAccount, AlertsRepository, ProfileRepository {
   final _customer = StreamController<Customer?>.broadcast();
   Customer? _current;
   final _searches = <SavedSearchRow>[];
@@ -104,7 +130,43 @@ class DemoAccount implements CustomerAccount, AlertsRepository {
   Future<void> signInWithGoogle() async => _set((uid: 'demo-customer', email: 'demo@example.com'));
 
   @override
+  Future<void> signInWithPassword(String email, String password) async {
+    if (password != _password) throw const SignInFailure('wrong-password');
+    _set((uid: 'demo-customer', email: email));
+  }
+
+  @override
+  Future<void> sendPasswordReset(String email) async => sentResets.add(email);
+
+  @override
   Future<void> signOut() async => _set(null);
+
+  String? _name, _whatsapp, _password;
+  final sentResets = <String>[];
+  var deleted = false;
+
+  @override
+  Future<CustomerProfile> load() async => (name: _name, whatsapp: _whatsapp, google: _current?.email == 'demo@example.com', hasPassword: _password != null);
+
+  @override
+  Future<void> save({required String name, required String whatsapp}) async {
+    if (name.trim().length < 2) throw const SignInFailure('invalid-argument');
+    if (whatsapp.isNotEmpty && normaliseKenyanPhone(whatsapp) != whatsapp) throw const SignInFailure('invalid-argument');
+    _name = name.trim();
+    _whatsapp = whatsapp.isEmpty ? null : whatsapp;
+  }
+
+  @override
+  Future<void> setPassword(String password) async => _password = password;
+
+  @override
+  Future<void> deleteAccount() async {
+    deleted = true;
+    _name = _whatsapp = _password = null;
+    _searches.clear();
+    _alerts.clear();
+    _set(null);
+  }
 
   Stream<T> _watch<T>(T Function() read) async* {
     yield read();
@@ -155,8 +217,20 @@ class DemoAccount implements CustomerAccount, AlertsRepository {
 final demoAccountProvider = Provider<DemoAccount>((ref) => DemoAccount());
 final customerAccountProvider = Provider<CustomerAccount>((ref) => ref.watch(demoAccountProvider));
 final alertsRepositoryProvider = Provider<AlertsRepository>((ref) => ref.watch(demoAccountProvider));
+final profileRepositoryProvider = Provider<ProfileRepository>((ref) => ref.watch(demoAccountProvider));
 
 final customerProvider = StreamProvider<Customer?>((ref) => ref.watch(customerAccountProvider).customer);
+
+/// The signed-in customer's profile (for their name in the menu); null when
+/// signed out or while it cannot be read.
+final profileProvider = FutureProvider<CustomerProfile?>((ref) async {
+  if (ref.watch(customerProvider).value == null) return null;
+  try {
+    return await ref.read(profileRepositoryProvider).load();
+  } on Object {
+    return null;
+  }
+});
 
 final savedSearchesProvider = StreamProvider.family<List<SavedSearchRow>, String>((ref, uid) => ref.watch(alertsRepositoryProvider).searches(uid));
 final alertsProvider = StreamProvider.family<List<AlertRow>, String>((ref, uid) => ref.watch(alertsRepositoryProvider).alerts(uid));

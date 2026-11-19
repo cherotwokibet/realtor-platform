@@ -273,6 +273,8 @@ class TenantConfig {
     required this.iosId,
     this.androidCertSha256 = const [],
     this.appleTeamId,
+    this.googlePlayUrl,
+    this.appStoreUrl,
     required this.firebaseProjects,
     required this.firebaseRegion,
     required this.phone,
@@ -297,6 +299,9 @@ class TenantConfig {
   /// Universal Links; empty / null until the store accounts exist.
   final List<String> androidCertSha256;
   final String? appleTeamId;
+
+  /// The app's store pages, for the Download the app badges; null until it is there.
+  final String? googlePlayUrl, appStoreUrl;
   final Map<FirebaseEnv, String> firebaseProjects;
   final String firebaseRegion;
 
@@ -331,6 +336,8 @@ class TenantConfig {
         iosId: iosId,
         androidCertSha256: androidCertSha256,
         appleTeamId: appleTeamId,
+        googlePlayUrl: googlePlayUrl,
+        appStoreUrl: appStoreUrl,
         firebaseProjects: firebaseProjects,
         firebaseRegion: firebaseRegion,
         phone: phone,
@@ -373,6 +380,8 @@ class TenantConfig {
       iosId: _req<String>(apps, 'iosId', 'apps'),
       androidCertSha256: ((apps['androidCertSha256'] as List<Object?>?) ?? const []).cast<String>(),
       appleTeamId: apps['appleTeamId'] as String?,
+      googlePlayUrl: apps['googlePlayUrl'] as String?,
+      appStoreUrl: apps['appStoreUrl'] as String?,
       firebaseProjects: {
         for (final e in FirebaseEnv.values) e: _req<String>(projects, e.name, 'firebase.projects'),
       },

@@ -17,6 +17,8 @@ import 'phone_nav.dart';
 import 'places/off_plan_screens.dart';
 import 'places/place_screens.dart';
 import 'providers.dart';
+import 'account/activity_screen.dart';
+import 'account/edit_profile_screen.dart';
 import 'saved/saved_screen.dart';
 import 'search/purpose.dart';
 import 'search/recent_searches.dart';
@@ -37,7 +39,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: s.path,
               builder: (context, state) => switch (s.path) {
                 '/' => const HomeScreen(),
-                '/saved' => const SavedScreen(),
+                '/saved' => SavedScreen(tab: state.uri.queryParameters['tab']),
                 '/account' => AccountScreen(emailLink: state.uri.queryParameters['emailLink']),
                 '/off-plan' => const OffPlanScreen(),
                 _ => PlaceholderScreen(title: s.label),
@@ -57,6 +59,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
         ],
       ),
+      // My account's own pages, full screen over the tabs, as on Bayut.
+      GoRoute(path: '/account/edit', redirect: _signedInOnly, builder: (context, state) => const EditProfileScreen()),
+      GoRoute(path: '/account/activity', builder: (context, state) => const ActivityScreen()),
       // An emailed sign-in link that opened the app (P4-s03): Account finishes it.
       GoRoute(
         path: '/__/auth/links',
@@ -84,6 +89,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+/// Edit Profile needs an account; signed out, it is the Account page.
+String? _signedInOnly(BuildContext context, GoRouterState state) => ProviderScope.containerOf(context).read(customerProvider).value == null ? '/account' : null;
 
 String? _resultsOrHome(BuildContext context, GoRouterState state) => ListingFilters.fromUri(state.uri) == null ? '/' : null;
 
