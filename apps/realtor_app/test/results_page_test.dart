@@ -10,6 +10,7 @@ import 'package:realtor_app/src/providers.dart';
 import 'package:realtor_app/src/search/demo_search.dart';
 import 'package:realtor_app/src/search/filters_sheet.dart';
 import 'package:realtor_app/src/search/results_screen.dart';
+import 'package:realtor_app/src/window_scroll.dart';
 import 'package:realtor_core/realtor_core.dart';
 
 import 'feature_flags_test.dart' show tenantWith;
@@ -114,7 +115,8 @@ void main() {
         // One scroll for the page: the homes and the column beside them move together.
         expect(find.descendant(of: find.byKey(const Key('results-page')), matching: find.byType(ListView)), findsNothing);
         expect(tester.getTopLeft(find.byType(AdSlot).first).dy, lessThan(was.dy + 200));
-        expect(tester.getSize(find.byKey(const Key('results-page'))).width, size.width, reason: 'the scrollbar is at the window edge');
+        expect(tester.getSize(find.byKey(const Key('results-page'))).width, size.width - WindowScroll.width, reason: 'the scrollbar has its own lane');
+        expect(tester.getRect(find.byKey(const Key('window-scrollbar'))).right, size.width, reason: 'at the window edge');
       }
       // Wide: More Filters is the last control in the bar. Phones: the
       // filters button comes first, then the pills.

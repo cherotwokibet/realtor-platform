@@ -19,6 +19,7 @@ import 'area_suggest.dart';
 import 'filters_sheet.dart';
 import 'purpose.dart';
 import 'results_map.dart';
+import '../window_scroll.dart';
 
 /// Results for a filter URL. Every change of filter is a new URL, so the
 /// browser back button, shared links and app deep links all work.
@@ -92,11 +93,12 @@ class ResultsScreen extends ConsumerWidget {
             // top menu scrolls away, the search bar stays, and the homes
             // and the column beside them move together.
             // The scrollbar is always shown, at the window's edge.
-            ? Scrollbar(
-                // Always shown at the window's edge on wide screens.
-                thumbVisibility: wide,
+            // Wide: a browser-like scrollbar in its own lane, so the
+            // search bar's line stops at it.
+            ? WindowScroll(
+                enabled: wide,
                 child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  behavior: wide ? ScrollConfiguration.of(context).copyWith(scrollbars: false) : ScrollConfiguration.of(context),
                   child: CustomScrollView(
                     key: const Key('results-page'),
                     primary: true,

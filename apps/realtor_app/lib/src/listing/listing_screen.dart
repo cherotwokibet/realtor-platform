@@ -9,6 +9,7 @@ import '../account/account_data.dart';
 import '../app.dart' show TopNav;
 import '../account/activity.dart';
 import '../phone_nav.dart';
+import '../window_scroll.dart';
 import '../providers.dart';
 import '../sections.dart';
 import '../site_footer.dart';
@@ -118,8 +119,7 @@ class _ListingView extends ConsumerWidget {
             ),
           );
       return Scaffold(
-        body: Scrollbar(
-          thumbVisibility: true,
+        body: WindowScroll(
           child: ScrollConfiguration(
             behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
             child: ListView(

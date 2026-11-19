@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_app/src/account/account_data.dart';
 import 'package:realtor_app/src/app.dart';
 import 'package:realtor_app/src/providers.dart';
+import 'package:realtor_app/src/window_scroll.dart';
 import 'package:realtor_app/src/saved/favourites.dart';
 import 'package:realtor_core/realtor_core.dart';
 
@@ -40,7 +41,7 @@ void main() {
     }
     expect(find.descendant(of: nav, matching: find.text('Saved')), findsNothing, reason: 'only for signed-in customers');
     // The page scrolls across the window (its scrollbar at the edge); the content keeps to 1200.
-    expect(tester.getSize(find.byType(CustomScrollView).first).width, 1600);
+    expect(tester.getSize(find.byType(CustomScrollView).first).width, 1600 - WindowScroll.width, reason: 'the scrollbar has its own lane');
     expect(tester.getSize(find.byKey(const Key('home-hero'))).width, lessThanOrEqualTo(1200));
 
     // The wide home page: the realtor's two bands.
@@ -80,6 +81,39 @@ void main() {
     await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -400));
     await tester.pumpAndSettle();
     expect(nav.hitTestable(), findsNothing, reason: 'the menu scrolled away with the page');
+  });
+
+  testWidgets('desktop pages scroll with a browser-like bar: arrows at both ends, a short thumb, its own lane', (tester) async {
+    await pumpAt(tester, const Size(1400, 900), tenantId: 'realtime-estates');
+    final lane = find.byKey(const Key('window-scrollbar'));
+    expect(lane, findsOneWidget);
+    expect(tester.getRect(lane).right, 1400, reason: 'at the window edge');
+    expect(tester.getRect(lane).height, 900, reason: 'the full height of the window');
+    expect(tester.getSize(find.byKey(const Key('scroll-thumb'))).height, lessThanOrEqualTo((900 - 32) / 3 + 0.5), reason: 'kept short');
+    // The page and its top menu stop at the lane rather than running under it.
+    expect(tester.getRect(find.byKey(const Key('top-nav'))).right, lessThanOrEqualTo(tester.getRect(lane).left));
+
+    final page = tester.widget<Scrollable>(find.byType(Scrollable).first).controller!;
+    expect(page.offset, 0);
+    await tester.tap(find.byKey(const Key('scroll-down')));
+    await tester.pumpAndSettle();
+    expect(page.offset, greaterThan(0));
+    final was = page.offset;
+    await tester.tap(find.byKey(const Key('scroll-up')));
+    await tester.pumpAndSettle();
+    expect(page.offset, lessThan(was));
+    await tester.drag(find.byKey(const Key('scroll-thumb')), const Offset(0, 200));
+    await tester.pumpAndSettle();
+    expect(page.offset, greaterThan(200), reason: 'dragging the thumb moves the page further than the thumb');
+  });
+
+  testWidgets('wide results: the search bar and its line stop at the scrollbar lane', (tester) async {
+    await pumpAt(tester, const Size(1400, 900), tenantId: 'realtime-estates');
+    ProviderScope.containerOf(tester.element(find.byType(RealtorApp))).read(routerProvider).go('/rent');
+    await tester.pumpAndSettle();
+    final lane = find.byKey(const Key('window-scrollbar'));
+    expect(lane, findsOneWidget);
+    expect(tester.getRect(find.byKey(const Key('filter-bar'))).right, lessThanOrEqualTo(tester.getRect(lane).left));
   });
 
   testWidgets('the filter row searches with what was picked', (tester) async {
