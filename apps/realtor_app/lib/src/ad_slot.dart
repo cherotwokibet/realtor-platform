@@ -53,17 +53,16 @@ class AdSlot extends ConsumerWidget {
       // the bottom right corner.
       final wide = MediaQuery.sizeOf(context).width >= 760;
       final onPhoto = scheme.surface;
-      // The words in the middle of the band.
-      final words = Column(crossAxisAlignment: CrossAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+      // The words on the left, lined up with the hero's above.
+      final words = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         Text(title,
             key: const Key('ad-title'),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
             style: text.titleLarge?.copyWith(color: onPhoto, fontWeight: FontWeight.w700)),
         SizedBox(height: b.spacing.xs),
         Text(promo?.text ?? 'Reach people looking for a home with ${tenant.name}.',
-            maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: text.bodyLarge?.copyWith(color: onPhoto)),
+            maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyLarge?.copyWith(color: onPhoto)),
       ]);
       final button = FilledButton.icon(
         key: const Key('ad-enquire'),
@@ -103,16 +102,17 @@ class AdSlot extends ConsumerWidget {
                   ),
                 ),
               ),
-              // The words in the middle; Enquire now in the bottom right corner.
+              // The words on the left, as the hero's; Enquire now in the bottom right corner.
               ConstrainedBox(
                 constraints: BoxConstraints(minHeight: wide ? 168 : 0, minWidth: double.infinity),
                 child: Padding(
+                  // The hero's padding, so the two bands' words start at the same place.
                   padding: EdgeInsets.fromLTRB(b.spacing.xl, b.spacing.xl, b.spacing.lg, b.spacing.lg),
                   child: wide
-                      ? Stack(alignment: Alignment.center, children: [
-                          // Clear of the button on either side, so the words stay centred.
-                          Padding(padding: const EdgeInsets.symmetric(horizontal: 200, vertical: 8), child: words),
-                          Positioned(right: 0, bottom: 0, child: button),
+                      ? Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                          Expanded(child: Padding(padding: EdgeInsets.only(bottom: b.spacing.xl), child: words)),
+                          SizedBox(width: b.spacing.xl),
+                          button,
                         ])
                       : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                           words,

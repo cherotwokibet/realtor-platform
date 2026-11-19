@@ -8,6 +8,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 import '../account/account_data.dart';
 import '../app.dart' show TopNav;
 import '../account/activity.dart';
+import '../account/sign_in.dart';
 import '../phone_nav.dart';
 import '../window_scroll.dart';
 import '../providers.dart';
@@ -813,7 +814,7 @@ class _Reviews extends ConsumerWidget {
           ..hideCurrentSnackBar()
           ..showSnackBar(SnackBar(
             content: const Text('Sign in to review this home.'),
-            action: SnackBarAction(label: 'Sign in', onPressed: () => context.go('/account')),
+            action: SnackBarAction(label: 'Sign in', onPressed: () => showSignIn(context)),
           ));
         return;
       }
