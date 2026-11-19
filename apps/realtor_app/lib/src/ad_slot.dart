@@ -102,19 +102,22 @@ class AdSlot extends ConsumerWidget {
                   ),
                 ),
               ),
-              // The words on the left, as the hero's; Enquire now in the bottom right corner.
+              // The words on the left, high in the band as the hero's are;
+              // Enquire now in the bottom right corner.
               ConstrainedBox(
                 constraints: BoxConstraints(minHeight: wide ? 168 : 0, minWidth: double.infinity),
                 child: Padding(
                   // The hero's padding, so the two bands' words start at the same place.
                   padding: EdgeInsets.fromLTRB(b.spacing.xl, b.spacing.xl, b.spacing.lg, b.spacing.lg),
                   child: wide
-                      ? Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                          Expanded(child: Padding(padding: EdgeInsets.only(bottom: b.spacing.xl), child: words)),
-                          SizedBox(width: b.spacing.xl),
-                          button,
+                      ? Stack(children: [
+                          Padding(
+                            padding: EdgeInsets.only(top: b.spacing.sm, right: 220, bottom: 56),
+                            child: Align(alignment: Alignment.topLeft, child: words),
+                          ),
+                          Positioned(right: 0, bottom: 0, child: button),
                         ])
-                      : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           words,
                           SizedBox(height: b.spacing.lg),
                           Align(alignment: Alignment.bottomRight, child: button),
