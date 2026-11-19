@@ -8,7 +8,9 @@ import 'feature_flags_test.dart' show currentPath, menuLabel, navLabel, pumpApp,
 /// Back (the arrow, or the phone's back) goes where people expect (P4).
 void main() {
   Future<void> back(WidgetTester tester) async {
-    await tester.tap(find.byType(BackButton));
+    // The listing page's bar has its own back chevron; other screens the usual arrow.
+    final bar = find.byKey(const Key('bar-back'));
+    await tester.tap(bar.evaluate().isNotEmpty ? bar : find.byType(BackButton));
     await tester.pumpAndSettle();
   }
 
@@ -44,7 +46,7 @@ void main() {
     await pumpApp(tester, tenantWith({}));
     ProviderScope.containerOf(tester.element(find.byType(RealtorApp))).read(routerProvider).go('/listing/2-bedroom-apartment-kilimani');
     await tester.pumpAndSettle();
-    expect(find.byType(BackButton), findsOneWidget);
+    expect(find.byKey(const Key('bar-back')), findsOneWidget);
     await back(tester);
     expect(currentPath(tester), '/');
   });

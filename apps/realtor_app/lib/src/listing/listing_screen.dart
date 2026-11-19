@@ -7,6 +7,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import '../account/account_data.dart';
 import '../app.dart' show TopNav;
+import '../phone_nav.dart';
 import '../providers.dart';
 import '../sections.dart';
 import '../site_footer.dart';
@@ -146,19 +147,6 @@ class _ListingView extends ConsumerWidget {
       );
     }
     return Scaffold(
-      // As on the big portals' apps: back, the logo in the middle, Share and Save.
-      appBar: AppBar(
-        leading: const AppBack(),
-        centerTitle: true,
-        title: GestureDetector(
-          onTap: () => context.go('/'),
-          child: Image.asset(b.logoAsset, height: 40, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
-        ),
-        actions: [
-          IconButton(tooltip: 'Share', icon: const Icon(Icons.ios_share), onPressed: () => shareListing(context, link)),
-          FavouriteButton(listing: l),
-        ],
-      ),
       // Call and WhatsApp stay in reach while the page scrolls.
       bottomNavigationBar: SafeArea(
         child: Material(
@@ -167,24 +155,32 @@ class _ListingView extends ConsumerWidget {
           child: Padding(padding: EdgeInsets.all(b.spacing.md), child: actions.copyWith(compact: true)),
         ),
       ),
-      body: ListView(
-        primary: true,
-        children: [
-          PhotoStrip(
-            items: items,
-            title: l.title,
-            verified: l.verified,
-            onOpen: (i) => showPhotoViewer(context, items: items, title: l.title, initial: i, autoplay: items[i].video != null),
-            onWhatsApp: whatsapp == null
-                ? null
-                : () =>
-                    contact('whatsapp', Uri.https('wa.me', '/${whatsapp.replaceAll('+', '')}', {'text': 'Hi, I saw "${l.title}" ($link). I have a question.'})),
-          ),
-          Padding(padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.sm, b.spacing.gutter, 0), child: _Breadcrumbs(detail: detail, compact: true)),
-          Padding(padding: EdgeInsets.all(b.spacing.gutter), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [body, recommended])),
-          SizedBox(height: b.spacing.xl),
-          const SiteFooter(),
+      // As on Bayut's app: back, the logo in the middle, Share and Save, in a
+      // bar that scrolls away with the page and is back at the top.
+      body: ScrollAwayBar.wrap(
+        actions: [
+          IconButton(key: const Key('listing-share'), tooltip: 'Share', icon: const Icon(Icons.share_outlined), onPressed: () => shareListing(context, link)),
+          FavouriteButton(listing: l),
         ],
+        body: ListView(
+          primary: true,
+          children: [
+            PhotoStrip(
+              items: items,
+              title: l.title,
+              verified: l.verified,
+              onOpen: (i) => showPhotoViewer(context, items: items, title: l.title, initial: i, autoplay: items[i].video != null),
+              onWhatsApp: whatsapp == null
+                  ? null
+                  : () => contact(
+                      'whatsapp', Uri.https('wa.me', '/${whatsapp.replaceAll('+', '')}', {'text': 'Hi, I saw "${l.title}" ($link). I have a question.'})),
+            ),
+            Padding(padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.sm, b.spacing.gutter, 0), child: _Breadcrumbs(detail: detail, compact: true)),
+            Padding(padding: EdgeInsets.all(b.spacing.gutter), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [body, recommended])),
+            SizedBox(height: b.spacing.xl),
+            const SiteFooter(),
+          ],
+        ),
       ),
     );
   }

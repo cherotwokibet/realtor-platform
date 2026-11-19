@@ -5,6 +5,7 @@ import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
 import 'account/account_data.dart';
+import 'nav.dart';
 import 'providers.dart';
 import 'search/purpose.dart';
 import 'sections.dart';
@@ -193,3 +194,53 @@ class AppDrawer extends ConsumerWidget {
     );
   }
 }
+
+/// Phones: a top bar that scrolls away with the page and comes back only at
+/// the top, as on Bayut's listing page: back on the left, the logo in the
+/// middle, [actions] on the right, all in the brand colour on white.
+class ScrollAwayBar extends ConsumerWidget {
+  const ScrollAwayBar({super.key, this.actions = const []});
+  final List<Widget> actions;
+
+  static const height = 56.0;
+
+  /// [body] under the bar; the bar scrolls with it.
+  static Widget wrap({required Widget body, List<Widget> actions = const []}) => NestedScrollView(
+        headerSliverBuilder: (context, _) => [ScrollAwayBar(actions: actions)],
+        body: body,
+      );
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tenant = ref.watch(tenantProvider);
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    return SliverAppBar(
+      key: const Key('scroll-away-bar'),
+      toolbarHeight: height,
+      automaticallyImplyLeading: false,
+      backgroundColor: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      scrolledUnderElevation: 0,
+      elevation: 0,
+      iconTheme: IconThemeData(color: scheme.primary),
+      actionsIconTheme: IconThemeData(color: scheme.primary),
+      leading: IconButton(
+        key: const Key('bar-back'),
+        tooltip: 'Back',
+        color: scheme.primary,
+        icon: const Icon(Icons.chevron_left, size: 32),
+        onPressed: () => context.canPop() ? context.pop() : context.go('/'),
+      ),
+      centerTitle: true,
+      title: GestureDetector(
+        onTap: () => context.go('/'),
+        child: Image.asset(b.logoAsset, height: 40, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
+      ),
+      actions: [...actions, SizedBox(width: b.spacing.xs)],
+    );
+  }
+}
+
+/// Whether a page should use [ScrollAwayBar] (phones) rather than an app bar.
+bool usesScrollAwayBar(BuildContext context) => MediaQuery.sizeOf(context).width < wideLayoutFrom;

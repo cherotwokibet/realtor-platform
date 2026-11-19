@@ -317,10 +317,11 @@ void main() {
     double top(int i) => tester.getTopLeft(find.text('Home $i')).dy;
     expect(ads[0], inExclusiveRange(top(5), top(6)));
     expect(ads[1], inExclusiveRange(top(10), top(11)));
-    expect(find.text('Advert'), findsNWidgets(2));
+    expect(find.text('AD'), findsNWidgets(2));
+    expect(find.text('Enquire now'), findsNWidgets(2));
 
     await pump(tester, const Size(412, 12000), homes, features: {Feature.ads: false});
-    expect(find.text('Advert'), findsNothing);
+    expect(find.text('AD'), findsNothing);
   });
 
   testWidgets('wide screens: adverts sit beside the homes, not among them', (tester) async {

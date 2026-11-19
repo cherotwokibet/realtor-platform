@@ -5,6 +5,7 @@ import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../phone_nav.dart';
 import '../providers.dart';
 import '../saved/favourites.dart';
 import '../search/purpose.dart';
@@ -318,25 +319,24 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             ),
           ];
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Account')),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: ListView(padding: EdgeInsets.all(b.spacing.gutter), children: [
-            ...(customer == null ? signedOut : signedIn),
-            SizedBox(height: b.spacing.xl),
-            const Divider(),
-            // Site pages live on the share site (P5-s07); they open in the browser.
-            Wrap(alignment: WrapAlignment.center, spacing: b.spacing.sm, children: [
-              for (final (slug, name) in const [('about', 'About'), ('contact', 'Contact'), ('privacy', 'Privacy'), ('terms', 'Terms')])
-                TextButton(onPressed: () => ref.read(urlOpenerProvider)(Uri.https(tenant.shareDomain, '/$slug')), child: Text(name)),
-            ]),
+    final page = Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: ListView(padding: EdgeInsets.all(b.spacing.gutter), children: [
+          ...(customer == null ? signedOut : signedIn),
+          SizedBox(height: b.spacing.xl),
+          const Divider(),
+          // Site pages live on the share site (P5-s07); they open in the browser.
+          Wrap(alignment: WrapAlignment.center, spacing: b.spacing.sm, children: [
+            for (final (slug, name) in const [('about', 'About'), ('contact', 'Contact'), ('privacy', 'Privacy'), ('terms', 'Terms')])
+              TextButton(onPressed: () => ref.read(urlOpenerProvider)(Uri.https(tenant.shareDomain, '/$slug')), child: Text(name)),
           ]),
-        ),
+        ]),
       ),
     );
+    // Phones: the bar scrolls away with the page, as on the listing page.
+    return usesScrollAwayBar(context) ? Scaffold(body: ScrollAwayBar.wrap(body: page)) : Scaffold(appBar: AppBar(title: const Text('Account')), body: page);
   }
 }
 
