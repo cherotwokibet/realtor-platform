@@ -24,6 +24,7 @@ import { checkLimits, LIMITS, WINDOW_MS } from './ratelimit';
 import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
 import { dataRequest } from './privacy';
+import { deleteAccount, saveProfile, type CustomerAuth } from './profile';
 import { bootstrapOwner, setStaffRole, type StaffAuth } from './staff';
 
 let db: Firestore;
@@ -924,6 +925,40 @@ describe('saved-search alerts (D18)', () => {
     await moderateListing(db, manager, { listingId: (await submitListing(db, wanjiku, newListing, at)).listingId, action: 'approve' }, new Date(at.getTime() + 2000));
     const r2 = await sweepSavedSearches(db, new Date(at.getTime() + 3000), failing);
     assert.ok(r2.alerts >= 1, 'the inbox still gets them when push fails');
+  });
+});
+
+describe('a customer\'s own profile and account', () => {
+  const customer: Caller = { uid: 'cust-9', role: null, agentId: null };
+  const calls: string[] = [];
+  const auth: CustomerAuth = {
+    setName: async (uid, name) => void calls.push(`name ${uid} ${name}`),
+    deleteUser: async (uid) => void calls.push(`delete ${uid}`),
+  };
+
+  test('saves the name and a checked WhatsApp number; signed out or a bad number is refused', async () => {
+    await rejectsWith(saveProfile(db, auth, visitor, { name: 'Amina', whatsapp: '' }, now), 'unauthenticated');
+    await rejectsWith(saveProfile(db, auth, customer, { name: 'Amina', whatsapp: '0712345678' }, now), 'invalid-argument');
+    assert.deepEqual(await saveProfile(db, auth, customer, { name: ' Amina W ', whatsapp: '+254712345678' }, now), { name: 'Amina W', whatsapp: '+254712345678' });
+    const doc = (await db.collection('users').doc('cust-9').get()).data()!;
+    assert.equal(doc.whatsapp, '+254712345678');
+    assert.ok(calls.includes('name cust-9 Amina W'));
+    assert.equal((await saveProfile(db, auth, customer, { name: 'Amina W', whatsapp: '' }, now)).whatsapp, null, 'empty clears it');
+  });
+
+  test('deleting the account removes the profile, saved searches, alerts and devices, then the sign-in', async () => {
+    const user = db.collection('users').doc('cust-9');
+    await user.set({ name: 'Amina' });
+    await user.collection('alerts').doc('a1').set({ slug: 'x' });
+    await user.collection('devices').doc('t1').set({ token: 't1' });
+    await db.collection('savedSearches').doc('s-cust-9').set({ userId: 'cust-9', filters: { purpose: 'rent' } });
+    await rejectsWith(deleteAccount(db, auth, manager), 'failed-precondition');
+    assert.deepEqual(await deleteAccount(db, auth, customer), { deleted: true });
+    assert.equal((await user.get()).exists, false);
+    assert.equal((await user.collection('alerts').get()).size, 0);
+    assert.equal((await user.collection('devices').get()).size, 0);
+    assert.equal((await db.collection('savedSearches').doc('s-cust-9').get()).exists, false);
+    assert.ok(calls.includes('delete cust-9'));
   });
 });
 

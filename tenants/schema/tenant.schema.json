@@ -229,6 +229,16 @@
         "iosId": {
           "$ref": "#/$defs/bundleId"
         },
+        "googlePlayUrl": {
+          "type": "string",
+          "pattern": "^https://play\\.google\\.com/store/apps/details\\?id=[A-Za-z0-9._]+$",
+          "description": "The app's Google Play page, for the Download the app badge. Leave out until the app is on Google Play."
+        },
+        "appStoreUrl": {
+          "type": "string",
+          "pattern": "^https://apps\\.apple\\.com/[a-z/-]+id[0-9]+$",
+          "description": "The app's App Store page, for the Download the app badge. Leave out until the app is on the App Store."
+        },
         "androidCertSha256": {
           "type": "array",
           "description": "SHA-256 fingerprints of the release (Play App Signing) certificates, for Android App Links. Leave out until the Play Console app exists.",

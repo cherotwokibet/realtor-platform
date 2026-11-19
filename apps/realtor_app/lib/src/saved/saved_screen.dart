@@ -7,23 +7,41 @@ import 'package:realtor_ui/realtor_ui.dart';
 import '../account/account_data.dart';
 import '../search/results_screen.dart';
 import '../providers.dart';
-import '../phone_nav.dart';
+import '../account/account_screen.dart' show SavedSearchesList;
+import '../nav.dart';
 import '../search/purpose.dart';
 import 'favourites.dart';
 
 /// `/saved`: the homes saved on this device, newest first. The navigation
 /// offers it only to signed-in customers; anyone else reaching it by link is
 /// asked to sign in (their saves are kept and appear once they have).
-class SavedScreen extends ConsumerWidget {
-  const SavedScreen({super.key});
+class SavedScreen extends ConsumerStatefulWidget {
+  const SavedScreen({super.key, this.tab});
+
+  /// `searches` opens on Saved searches; otherwise Favourites, as on Bayut.
+  final String? tab;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SavedScreen> createState() => _SavedScreenState();
+}
+
+class _SavedScreenState extends ConsumerState<SavedScreen> {
+  late bool _searches = widget.tab == 'searches';
+
+  @override
+  void didUpdateWidget(SavedScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.tab != old.tab) _searches = widget.tab == 'searches';
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final b = context.brand;
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final saved = ref.watch(favouritesProvider);
-    final signedIn = ref.watch(customerProvider).value != null;
+    final customer = ref.watch(customerProvider).value;
+    final signedIn = customer != null;
     final purposes = [
       for (final p in Purpose.values)
         if (ref.watch(tenantProvider).features.isOn(p.feature)) p
@@ -51,8 +69,7 @@ class SavedScreen extends ConsumerWidget {
             ),
           ),
         );
-    final phone = usesScrollAwayBar(context);
-    final Widget body = !signedIn
+    final Widget favourites = !signedIn
         ? empty(
             icon: Icons.lock_outline,
             title: 'Sign in to see the homes you have saved.',
@@ -86,7 +103,67 @@ class SavedScreen extends ConsumerWidget {
                     ),
                   ),
           );
-    // Phones: the bar scrolls away with the page, as on the listing page.
-    return phone ? Scaffold(body: ScrollAwayBar.wrap(body: body)) : Scaffold(appBar: AppBar(title: const Text('Saved homes')), body: body);
+    // Favourites | Searches, two boxes across the top, as on Bayut.
+    Widget tab(String label, bool on, VoidCallback onTap, Key key) => Expanded(
+          child: Material(
+            color: on ? b.primarySoft : scheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(b.radiusSm),
+              side: BorderSide(color: on ? b.primarySoft : scheme.outlineVariant),
+            ),
+            child: InkWell(
+              key: key,
+              borderRadius: BorderRadius.circular(b.radiusSm),
+              onTap: onTap,
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: b.spacing.md),
+                child: Text(label,
+                    textAlign: TextAlign.center,
+                    style: text.titleSmall?.copyWith(color: on ? scheme.primary : b.textMuted, fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
+              ),
+            ),
+          ),
+        );
+    final searches = !signedIn
+        ? empty(
+            icon: Icons.notifications_none,
+            title: 'Sign in to see your saved searches.',
+            line: 'Save a search from the results and hear as soon as a matching home is listed.',
+            action: 'Log in / Sign up',
+            onTap: () => context.go('/account'),
+          )
+        : Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: ListView(padding: EdgeInsets.all(b.spacing.gutter), children: [SavedSearchesList(uid: customer.uid)]),
+            ),
+          );
+    return Scaffold(
+      // Back, and the page's name in the middle; no logo, as on Bayut.
+      appBar: AppBar(
+        leading: const AppBack(),
+        centerTitle: true,
+        title: const Text('Saved'),
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(1), child: Divider(height: 1, color: scheme.outlineVariant)),
+      ),
+      body: Column(children: [
+        Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.lg, b.spacing.gutter, 0),
+              child: Row(children: [
+                tab('Favourites', !_searches, () => setState(() => _searches = false), const Key('saved-tab-favourites')),
+                SizedBox(width: b.spacing.md),
+                tab('Searches', _searches, () => setState(() => _searches = true), const Key('saved-tab-searches')),
+              ]),
+            ),
+          ),
+        ),
+        Expanded(child: _searches ? searches : favourites),
+      ]),
+    );
   }
 }

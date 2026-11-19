@@ -62,6 +62,13 @@ service cloud.firestore {
 
     // Saved-search alerts (D18): the owner reads them, marks them read
     // (readAt only) and clears them; the hourly sweep writes them.
+    // A customer's own profile (name, WhatsApp): they read it; only the
+    // saveMyProfile Function writes it, after checking the number.
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
     match /users/{uid}/alerts/{id} {
       allow read, delete: if signedIn() && request.auth.uid == uid;
       allow update: if signedIn() && request.auth.uid == uid

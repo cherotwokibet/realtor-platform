@@ -6,6 +6,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import '../account/account_data.dart';
 import '../account/account_screen.dart';
+import '../account/activity.dart';
 import '../ad_slot.dart';
 import '../app.dart' show TopNav;
 import '../nav.dart';
@@ -1275,6 +1276,7 @@ class ContactButtons extends ConsumerWidget {
     final whatsapp = tenant.hasContactNumbers ? tenant.whatsappLink(ask) : null;
     void tap(String channel, Uri to) {
       ref.read(leadRepositoryProvider).logTap(listingId: l.id, channel: channel).ignore();
+      ref.read(activityProvider(ActivityKind.contacted).notifier).record(l, channel: channel).ignore();
       open(to);
     }
 

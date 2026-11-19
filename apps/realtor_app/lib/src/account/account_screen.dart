@@ -68,8 +68,59 @@ class AccountScreen extends ConsumerStatefulWidget {
 
 class _AccountScreenState extends ConsumerState<AccountScreen> {
   final _email = TextEditingController();
+  final _password = TextEditingController();
   String? _status, _error;
   bool _busy = false, _finishing = false;
+
+  /// Signing in with a password (set in Edit Profile) instead of a link.
+  bool _withPassword = false;
+
+  /// The name from the profile, for "Hi, Amina"; loaded once per account.
+  String? _name, _loadedFor;
+
+  Future<void> _loadName() async {
+    try {
+      final p = await ref.read(profileRepositoryProvider).load();
+      final name = p.name?.trim();
+      if (mounted) setState(() => _name = name == null || name.isEmpty ? null : name);
+    } on Object {
+      // "Hi there" until it loads.
+    }
+  }
+
+  Future<void> _signInWithPassword() async {
+    final email = _email.text.trim();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email) || _password.text.isEmpty) {
+      setState(() => _error = 'Enter your email address and password.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(customerAccountProvider).signInWithPassword(email, _password.text);
+      _password.clear();
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = 'That email and password do not match. Try again, or use the emailed link.${_code(e)}');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    final email = _email.text.trim();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      setState(() => _error = 'Enter your email address first.');
+      return;
+    }
+    try {
+      await ref.read(customerAccountProvider).sendPasswordReset(email);
+      if (mounted) setState(() => _status = 'Check $email for a link to choose a new password.');
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = 'We could not send that just now. Please try again.${_code(e)}');
+    }
+  }
 
   @override
   void initState() {
@@ -80,6 +131,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   @override
   void dispose() {
     _email.dispose();
+    _password.dispose();
     super.dispose();
   }
 
@@ -168,6 +220,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final customer = ref.watch(customerProvider).value;
+    if (customer?.uid != _loadedFor) {
+      _loadedFor = customer?.uid;
+      _name = null;
+      if (customer != null) WidgetsBinding.instance.addPostFrameCallback((_) => _loadName());
+    }
     final pendingAlert = ref.watch(pendingAlertProvider);
     final tenant = ref.watch(tenantProvider);
     final saved = ref.watch(favouritesProvider).value?.length ?? 0;
@@ -243,7 +300,33 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         child: Text(_finishing ? 'Finish signing in' : 'Email me a sign-in link'),
       ),
       SizedBox(height: b.spacing.xs),
-      Text('No password: we email you a link that signs you in.', style: text.bodySmall?.copyWith(color: b.textMuted), textAlign: TextAlign.center),
+      if (!_withPassword) ...[
+        Text('No password: we email you a link that signs you in.', style: text.bodySmall?.copyWith(color: b.textMuted), textAlign: TextAlign.center),
+        TextButton(
+          key: const Key('use-password'),
+          onPressed: () => setState(() => _withPassword = true),
+          child: const Text('Have a password? Sign in with it'),
+        ),
+      ] else ...[
+        SizedBox(height: b.spacing.sm),
+        TextField(
+          key: const Key('password'),
+          controller: _password,
+          obscureText: true,
+          autofillHints: const [AutofillHints.password],
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _busy ? null : _signInWithPassword(),
+          decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
+        ),
+        SizedBox(height: b.spacing.sm),
+        FilledButton.tonal(
+          key: const Key('password-sign-in'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          onPressed: _busy ? null : _signInWithPassword,
+          child: const Text('Sign in with password'),
+        ),
+        Align(alignment: Alignment.centerRight, child: TextButton(onPressed: _resetPassword, child: const Text('Forgot password?'))),
+      ],
       ...notes,
       SizedBox(height: b.spacing.xl),
       Text('With an account', style: text.titleMedium),
@@ -256,32 +339,55 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     final signedIn = customer == null
         ? const <Widget>[]
         : <Widget>[
-            Row(children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: b.primarySoft,
-                child: Text((customer.email ?? '?').characters.first.toUpperCase(), style: text.titleLarge?.copyWith(color: scheme.primary)),
-              ),
-              SizedBox(width: b.spacing.md),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(customer.email ?? 'Signed in', style: text.titleMedium, overflow: TextOverflow.ellipsis),
-                  Text('Signed in', style: text.bodySmall?.copyWith(color: b.textMuted)),
-                ]),
-              ),
-            ]),
-            SizedBox(height: b.spacing.lg),
-            Row(children: [
-              Expanded(child: _Stat(icon: Icons.favorite_border, label: 'Saved homes', value: '$saved', onTap: () => context.go('/saved'))),
-              SizedBox(width: b.spacing.sm),
-              Expanded(
-                child: _Stat(
-                  icon: Icons.search,
-                  label: 'Saved searches',
-                  value: '${ref.watch(savedSearchesProvider(customer.uid)).value?.length ?? 0}',
+            // Hi, and Edit Profile, over the header picture, as on Bayut.
+            _Card(
+              key: const Key('account-hello'),
+              child: Row(children: [
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: b.primarySoft,
+                  child:
+                      Text(initialsOf(_name ?? customer.email ?? '?'), style: text.titleMedium?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700)),
                 ),
-              ),
-            ]),
+                SizedBox(width: b.spacing.md),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(_name == null ? 'Hi there' : 'Hi, $_name', style: text.titleLarge, overflow: TextOverflow.ellipsis),
+                    if (customer.email != null) Text(customer.email!, style: text.bodySmall?.copyWith(color: b.textMuted), overflow: TextOverflow.ellipsis),
+                    SizedBox(height: b.spacing.xs),
+                    InkWell(
+                      key: const Key('edit-profile'),
+                      onTap: () async {
+                        await context.push('/account/edit');
+                        _loadName();
+                      },
+                      child: Text('Edit Profile', style: text.titleSmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700)),
+                    ),
+                  ]),
+                ),
+              ]),
+            ),
+            SizedBox(height: b.spacing.md),
+            _Card(
+              key: const Key('my-activity'),
+              onTap: () => context.push('/account/activity'),
+              child: Row(children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(color: b.primarySoft, borderRadius: BorderRadius.circular(b.radiusMd)),
+                  child: Icon(Icons.manage_search, color: scheme.primary, size: 30),
+                ),
+                SizedBox(width: b.spacing.md),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('My Activity', style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                    Text('Your recent searches, the homes you viewed and the agents you contacted', style: text.bodySmall?.copyWith(color: b.textMuted)),
+                  ]),
+                ),
+                const Icon(Icons.chevron_right),
+              ]),
+            ),
             if (pendingAlert != null) ...[
               SizedBox(height: b.spacing.md),
               FilledButton.icon(
@@ -298,46 +404,192 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
               ),
             ],
             ...notes,
-            SizedBox(height: b.spacing.lg),
+            SizedBox(height: b.spacing.md),
             _Section(title: 'New homes for you', child: _Alerts(uid: customer.uid)),
             SizedBox(height: b.spacing.md),
-            _Section(title: 'Saved searches', child: _Searches(uid: customer.uid)),
-            SizedBox(height: b.spacing.md),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              icon: const Icon(Icons.logout),
-              onPressed: () async {
-                // This phone stops getting this account's pushes.
-                try {
-                  await ref.read(pushAlertsProvider).disable(customer.uid);
-                } on Object {
-                  // Signing out still works; the sweep forgets dead tokens.
-                }
-                await ref.read(customerAccountProvider).signOut();
-              },
-              label: const Text('Sign out'),
-            ),
+            _Links(title: 'Saved', rows: [
+              (Icons.favorite_border, 'Saved homes', '$saved', () => context.go('/saved')),
+              (
+                Icons.notifications_none,
+                'Saved searches and alerts',
+                '${ref.watch(savedSearchesProvider(customer.uid)).value?.length ?? 0}',
+                () => context.go('/saved?tab=searches')
+              ),
+            ]),
           ];
 
-    final page = Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: ListView(padding: EdgeInsets.all(b.spacing.gutter), children: [
-          ...(customer == null ? signedOut : signedIn),
-          SizedBox(height: b.spacing.xl),
-          const Divider(),
-          // Site pages live on the share site (P5-s07); they open in the browser.
-          Wrap(alignment: WrapAlignment.center, spacing: b.spacing.sm, children: [
-            for (final (slug, name) in const [('about', 'About'), ('contact', 'Contact'), ('privacy', 'Privacy'), ('terms', 'Terms')])
-              TextButton(onPressed: () => ref.read(urlOpenerProvider)(Uri.https(tenant.shareDomain, '/$slug')), child: Text(name)),
-          ]),
+    // The site pages, as Bayut's "More on Bayut"; they open on the share site.
+    final more = _Links(title: 'More from ${tenant.name}', rows: [
+      for (final (slug, name, icon) in const [
+        ('about', 'About us', Icons.info_outline),
+        ('contact', 'Contact us', Icons.support_agent),
+        ('faq', 'FAQs', Icons.help_outline),
+        ('privacy', 'Privacy', Icons.privacy_tip_outlined),
+        ('terms', 'Terms', Icons.description_outlined),
+      ])
+        (icon, name, null, () => ref.read(urlOpenerProvider)(Uri.https(tenant.shareDomain, '/$slug'))),
+    ]);
+
+    final page = ListView(padding: EdgeInsets.zero, children: [
+      // A soft picture across the top, the cards over its lower edge.
+      const _Header(),
+      Transform.translate(
+        offset: const Offset(0, -56),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: b.spacing.gutter),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                if (customer == null) _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: signedOut)) else ...signedIn,
+                SizedBox(height: b.spacing.md),
+                more,
+                if (customer != null) ...[
+                  SizedBox(height: b.spacing.lg),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48), backgroundColor: scheme.surface),
+                    icon: const Icon(Icons.logout),
+                    onPressed: () async {
+                      // This phone stops getting this account's pushes.
+                      try {
+                        await ref.read(pushAlertsProvider).disable(customer.uid);
+                      } on Object {
+                        // Signing out still works; the sweep forgets dead tokens.
+                      }
+                      await ref.read(customerAccountProvider).signOut();
+                    },
+                    label: const Text('Sign out'),
+                  ),
+                ],
+              ]),
+            ),
+          ),
+        ),
+      ),
+    ]);
+    // No top bar on phones, as on Bayut: the picture runs to the top.
+    return Scaffold(
+      backgroundColor: b.surfaceAlt,
+      appBar: usesScrollAwayBar(context) ? null : AppBar(title: const Text('Account')),
+      body: usesScrollAwayBar(context) ? SafeArea(bottom: false, child: page) : page,
+    );
+  }
+}
+
+/// "Amina Wanjiru" -> "AW"; "amina@example.com" -> "A".
+String initialsOf(String name) {
+  final words = name.split('@').first.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+  if (words.isEmpty) return '?';
+  if (name.contains('@') || words.length == 1) return words.first.characters.first.toUpperCase();
+  return (words.first.characters.first + words.last.characters.first).toUpperCase();
+}
+
+/// A white card with rounded corners on the grey page.
+class _Card extends StatelessWidget {
+  const _Card({super.key, required this.child, this.onTap});
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surface,
+      elevation: 1,
+      shadowColor: scheme.scrim.withValues(alpha: 0.3),
+      borderRadius: BorderRadius.circular(b.radiusMd),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(onTap: onTap, child: Padding(padding: EdgeInsets.all(b.spacing.lg), child: child)),
+    );
+  }
+}
+
+/// A titled list of rows with an icon, a label, a count and a chevron.
+class _Links extends StatelessWidget {
+  const _Links({required this.title, required this.rows});
+  final String title;
+  final List<(IconData, String, String?, VoidCallback)> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: EdgeInsets.fromLTRB(b.spacing.xs, b.spacing.sm, 0, b.spacing.sm),
+        child: Text(title, style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+      ),
+      Material(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(b.radiusMd),
+        clipBehavior: Clip.antiAlias,
+        child: Column(children: [
+          for (final (i, (icon, label, count, onTap)) in rows.indexed) ...[
+            if (i > 0) Divider(height: 1, indent: 56, color: scheme.outlineVariant),
+            ListTile(
+              leading: Icon(icon, color: b.textMuted),
+              title: Text(label),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (count != null) Text(count, style: text.bodyMedium?.copyWith(color: b.textMuted)),
+                const Icon(Icons.chevron_right),
+              ]),
+              onTap: onTap,
+            ),
+          ],
         ]),
       ),
-    );
-    // Phones: the bar scrolls away with the page, as on the listing page.
-    return usesScrollAwayBar(context) ? Scaffold(body: ScrollAwayBar.wrap(body: page)) : Scaffold(appBar: AppBar(title: const Text('Account')), body: page);
+    ]);
   }
+}
+
+/// The soft picture across the top of Account: a house and two trees on
+/// the brand's lightest tint, drawn, so no image needs loading.
+class _Header extends StatelessWidget {
+  const _Header();
+
+  @override
+  Widget build(BuildContext context) {
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 180,
+      child: CustomPaint(painter: _HeaderPainter(sky: b.primarySoft, ink: scheme.primary), child: const SizedBox.expand()),
+    );
+  }
+}
+
+class _HeaderPainter extends CustomPainter {
+  _HeaderPainter({required this.sky, required this.ink});
+  final Color sky, ink;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = sky);
+    final soft = Paint()..color = ink.withValues(alpha: 0.12);
+    final softer = Paint()..color = ink.withValues(alpha: 0.07);
+    final cx = size.width * 0.62, ground = size.height - 56;
+    // The house: a body, a roof and a door.
+    canvas.drawRect(Rect.fromLTWH(cx - 36, ground - 70, 90, 70), softer);
+    canvas.drawPath(
+        Path()
+          ..moveTo(cx - 46, ground - 66)
+          ..lineTo(cx + 9, ground - 112)
+          ..lineTo(cx + 64, ground - 66)
+          ..close(),
+        soft);
+    canvas.drawRect(Rect.fromLTWH(cx - 4, ground - 40, 22, 40), soft);
+    // Two trees on the left.
+    for (final (x, h) in [(cx - 92.0, 64.0), (cx - 66.0, 84.0)]) {
+      canvas.drawRect(Rect.fromLTWH(x - 2, ground - h * 0.45, 4, h * 0.45), soft);
+      canvas.drawOval(Rect.fromCenter(center: Offset(x, ground - h * 0.62), width: h * 0.42, height: h * 0.62), soft);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HeaderPainter old) => old.sky != sky || old.ink != ink;
 }
 
 /// A message under the sign-in form: what happened, or what went wrong.
@@ -361,39 +613,6 @@ class _Note extends StatelessWidget {
         SizedBox(width: b.spacing.sm),
         Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyMedium)),
       ]),
-    );
-  }
-}
-
-/// A count to tap: saved homes, saved searches.
-class _Stat extends StatelessWidget {
-  const _Stat({required this.icon, required this.label, required this.value, this.onTap});
-  final IconData icon;
-  final String label, value;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final b = context.brand;
-    final text = Theme.of(context).textTheme;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.all(b.spacing.md),
-          child: Row(children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary),
-            SizedBox(width: b.spacing.sm),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(value, style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-                Text(label, style: text.bodySmall?.copyWith(color: b.textMuted)),
-              ]),
-            ),
-          ]),
-        ),
-      ),
     );
   }
 }
@@ -461,8 +680,11 @@ class _Alerts extends ConsumerWidget {
   }
 }
 
-class _Searches extends ConsumerWidget {
-  const _Searches({required this.uid});
+/// The customer's saved searches as cards, as Bayut lists them: what and
+/// where in the brand colour and bold, the other filters under them, a bin
+/// to stop the alerts, and a tap to run the search again.
+class SavedSearchesList extends ConsumerWidget {
+  const SavedSearchesList({super.key, required this.uid});
   final String uid;
 
   @override
@@ -473,29 +695,64 @@ class _Searches extends ConsumerWidget {
     final searches = ref.watch(savedSearchesProvider(uid)).value ?? const [];
     if (searches.isEmpty) {
       return Padding(
-        padding: EdgeInsets.only(bottom: b.spacing.sm),
-        child: Row(children: [
-          Icon(Icons.search, color: b.textMuted),
-          SizedBox(width: b.spacing.sm),
-          Expanded(child: Text('Search for homes, then tap "Get alerts".', style: text.bodyMedium?.copyWith(color: b.textMuted))),
+        padding: EdgeInsets.symmetric(vertical: b.spacing.xl),
+        child: Column(children: [
+          Icon(Icons.notifications_none, size: 40, color: b.textMuted),
+          SizedBox(height: b.spacing.sm),
+          Text('No saved searches yet', style: text.titleMedium),
+          SizedBox(height: b.spacing.xs),
+          Text('Search for homes, then tap "Get alerts".', style: text.bodyMedium?.copyWith(color: b.textMuted), textAlign: TextAlign.center),
         ]),
       );
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      for (final s in searches)
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: CircleAvatar(backgroundColor: b.primarySoft, child: Icon(Icons.notifications_active_outlined, color: scheme.primary, size: 20)),
-          title: Text(describeSearch(s.filters)),
-          subtitle: Text(s.filters.types.isEmpty && s.filters.areas.isEmpty ? 'Any home, anywhere · alerts on' : 'Alerts on',
-              style: text.bodySmall?.copyWith(color: b.textMuted)),
-          onTap: () => context.push(s.filters.toUri().toString()),
-          trailing: IconButton(
-            tooltip: 'Stop these alerts',
-            icon: const Icon(Icons.notifications_off_outlined),
-            onPressed: () => ref.read(alertsRepositoryProvider).deleteSearch(s.id),
+      for (final s in searches) ...[
+        Material(
+          key: Key('saved-search-${s.id}'),
+          color: scheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusMd), side: BorderSide(color: scheme.outlineVariant)),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => context.push(s.filters.toUri().toString()),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(b.spacing.lg, b.spacing.md, b.spacing.sm, b.spacing.sm),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(
+                      s.filters.types.isEmpty
+                          ? 'Homes ${s.filters.purpose.heading}'
+                          : '${s.filters.types.map(typeName).join(', ')} ${s.filters.purpose.heading}',
+                      style: text.labelLarge?.copyWith(color: scheme.primary),
+                    ),
+                    SizedBox(height: b.spacing.xs),
+                    Text(s.filters.areas.isEmpty ? 'Anywhere' : s.filters.areas.map(areaName).join(', '),
+                        style: text.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+                    SizedBox(height: b.spacing.xs),
+                    for (final line in [
+                      if (s.filters.minBeds != null) '${s.filters.minBeds}+ bedrooms',
+                      if (s.filters.maxPriceKES != null)
+                        'Up to ${formatKes(s.filters.maxPriceKES!)}${s.filters.purpose.period == null ? '' : ' a ${s.filters.purpose.period}'}',
+                      'Alerts on',
+                    ])
+                      Text(line, style: text.bodyMedium?.copyWith(color: b.textMuted)),
+                  ]),
+                ),
+                Column(children: [
+                  const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.chevron_right)),
+                  SizedBox(height: b.spacing.lg),
+                  IconButton(
+                    tooltip: 'Stop these alerts',
+                    icon: Icon(Icons.delete_outline, color: b.textMuted),
+                    onPressed: () => ref.read(alertsRepositoryProvider).deleteSearch(s.id),
+                  ),
+                ]),
+              ]),
+            ),
           ),
         ),
+        SizedBox(height: b.spacing.md),
+      ],
     ]);
   }
 }

@@ -73,6 +73,11 @@ Future<void> main() async {
                   ),
           )))),
       alertsRepositoryProvider.overrideWithValue(DeferredAlertsRepository(once(() => FirestoreAlerts(FirebaseFirestore.instance)))),
+      profileRepositoryProvider.overrideWithValue(DeferredProfile(once(() {
+        final functions = FirebaseFunctions.instanceFor(region: tenant.firebaseRegion);
+        return FirebaseProfile(
+            FirebaseAuth.instance, FirebaseFirestore.instance, (name, data) async => (await functions.httpsCallable(name).call<Object?>(data)).data);
+      }))),
       // Push alerts on phones (P4-s03); web push needs a VAPID key first.
       if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS))
         pushAlertsProvider.overrideWithValue(DeferredPushAlerts(once(() => DevicePushAlerts(

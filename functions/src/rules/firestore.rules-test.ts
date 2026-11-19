@@ -132,6 +132,17 @@ describe('off-plan projects', () => {
   });
 });
 
+describe('a customer\'s profile', () => {
+  test('only the customer reads their own; nobody writes it from the app (saveMyProfile does)', async () => {
+    await env.withSecurityRulesDisabled(async (c) => setDoc(doc(c.firestore(), 'users', 'alice'), { name: 'Alice', whatsapp: '+254712345678' }));
+    await assertSucceeds(getDoc(doc(user('alice'), 'users', 'alice')));
+    await assertFails(getDoc(doc(user('bob'), 'users', 'alice')));
+    await assertFails(getDoc(doc(visitor(), 'users', 'alice')));
+    await assertFails(setDoc(doc(user('alice'), 'users', 'alice'), { name: 'Alice', whatsapp: 'not a number' }));
+    await assertFails(updateDoc(doc(user('alice'), 'users', 'alice'), { name: 'Al' }));
+  });
+});
+
 describe('saved-search alerts', () => {
   test('only the owner reads, marks read and clears their alerts; nobody creates them', async () => {
     await assertSucceeds(getDoc(doc(user('alice'), 'users', 'alice', 'alerts', 'a1')));
