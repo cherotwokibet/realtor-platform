@@ -113,6 +113,8 @@ void main() {
     final newest = find.byKey(const Key('newest-row'));
     await tester.scrollUntilVisible(newest, 300, scrollable: find.byType(Scrollable).first);
     expect(find.descendant(of: newest, matching: find.text('Newest to rent')), findsOneWidget);
+    expect(find.descendant(of: newest, matching: find.byIcon(Icons.auto_awesome)), findsOneWidget);
+    expect(find.descendant(of: hot, matching: find.byIcon(Icons.local_fire_department)), findsOneWidget);
     expect(find.descendant(of: newest, matching: find.byType(ListingCard)), findsWidgets);
     await tester.tap(find.descendant(of: newest, matching: find.text('See all')));
     await tester.pumpAndSettle();

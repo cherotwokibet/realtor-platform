@@ -47,40 +47,19 @@ class AdSlot extends ConsumerWidget {
     // As Property Finder lays its adverts out among the homes: a card the
     // width of a home's, the photo marked AD and fading into the card, the
     // advertiser's logo, a bold title, a line or two, and Enquire now.
-    final adMark = DecoratedBox(
-      decoration: BoxDecoration(color: scheme.scrim.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(b.radiusSm)),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: b.spacing.sm, vertical: 2),
-        child: Text('AD', style: text.labelMedium?.copyWith(color: scheme.surface, fontWeight: FontWeight.w700)),
-      ),
-    );
     if (banner) {
       // The home page's photo band, carrying the advert: the photo under a
-      // dark veil, AD and the advertiser's logo, the bold line and its
-      // words, and Enquire now; at the right on wide screens, under the
-      // words on phones.
+      // veil, the bold line and its words on the left, and Enquire now in
+      // the bottom right corner.
       final wide = MediaQuery.sizeOf(context).width >= 760;
       final onPhoto = scheme.surface;
       final words = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          adMark,
-          SizedBox(width: b.spacing.sm),
-          // The logo on a white tab, so it reads on any photo.
-          DecoratedBox(
-            decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(b.radiusSm)),
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: b.spacing.sm, vertical: 2),
-              child: Image.asset(b.logoAsset, height: 28, filterQuality: FilterQuality.medium, semanticLabel: tenant.name),
-            ),
-          ),
-        ]),
-        SizedBox(height: b.spacing.md),
         Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.titleLarge?.copyWith(color: onPhoto, fontWeight: FontWeight.w700)),
         SizedBox(height: b.spacing.xs),
         Text(promo?.text ?? 'Reach people looking for a home with ${tenant.name}.',
             maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyLarge?.copyWith(color: onPhoto)),
       ]);
-      final button = FilledButton(
+      final button = FilledButton.icon(
         key: const Key('ad-enquire'),
         style: FilledButton.styleFrom(
           backgroundColor: scheme.surface,
@@ -91,7 +70,9 @@ class AdSlot extends ConsumerWidget {
           textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w700),
         ),
         onPressed: () => open(enquire),
-        child: const Text('Enquire now'),
+        iconAlignment: IconAlignment.end,
+        icon: const Icon(Icons.arrow_forward, size: 18),
+        label: const Text('Enquire now'),
       );
       return Semantics(
         container: true,
@@ -108,12 +89,31 @@ class AdSlot extends ConsumerWidget {
                     ? Image.asset(homePhotoAsset('banner', 1), fit: BoxFit.cover, excludeFromSemantics: true, errorBuilder: (_, __, ___) => plain)
                     : ColoredBox(color: scheme.primary),
               ),
-              Positioned.fill(child: ColoredBox(color: scheme.scrim.withValues(alpha: 0.5))),
-              Padding(
-                padding: EdgeInsets.all(b.spacing.xl),
-                child: wide
-                    ? Row(children: [Expanded(child: words), SizedBox(width: b.spacing.xl), button])
-                    : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [words, SizedBox(height: b.spacing.lg), button]),
+              // Darker behind the words, lighter towards the right, so the photo shows.
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [scheme.scrim.withValues(alpha: 0.7), scheme.scrim.withValues(alpha: 0.25)]),
+                  ),
+                ),
+              ),
+              // The words on the left; Enquire now in the bottom right corner.
+              ConstrainedBox(
+                constraints: BoxConstraints(minHeight: wide ? 168 : 0, minWidth: double.infinity),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(b.spacing.xl, b.spacing.xl, b.spacing.xl, b.spacing.lg),
+                  child: wide
+                      ? Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                          Expanded(child: Padding(padding: EdgeInsets.only(bottom: b.spacing.sm), child: words)),
+                          SizedBox(width: b.spacing.xl),
+                          button,
+                        ])
+                      : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          words,
+                          SizedBox(height: b.spacing.lg),
+                          Align(alignment: Alignment.bottomRight, child: button),
+                        ]),
+                ),
               ),
             ]),
           ),
