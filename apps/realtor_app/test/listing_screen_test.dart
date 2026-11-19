@@ -141,6 +141,30 @@ void main() {
     expect(find.textContaining('Thank you. Realtime Estates'), findsOneWidget);
   });
 
+  testWidgets('phones: the top bar (back, logo, Share, Save) scrolls away and is back only at the top', (tester) async {
+    await open(tester, kilimani, size: const Size(412, 800));
+    final bar = find.byKey(const Key('scroll-away-bar'));
+    expect(find.descendant(of: bar, matching: find.byTooltip('Share')), findsOneWidget);
+    expect(find.descendant(of: bar, matching: find.byTooltip('Save this home')), findsOneWidget);
+    // The back chevron stands for the bar: on screen, or scrolled off.
+    final back = find.byKey(const Key('bar-back'));
+    expect(back.hitTestable(), findsOneWidget);
+    // Drags on the page's text, clear of the photos and buttons.
+    Future<void> scroll(double dy) async {
+      await tester.dragFrom(const Offset(380, 500), Offset(0, dy));
+      await tester.pumpAndSettle();
+    }
+
+    await scroll(-700);
+    expect(back.hitTestable(), findsNothing, reason: 'scrolled away');
+    await scroll(200);
+    expect(back.hitTestable(), findsNothing, reason: 'not back until the top');
+    for (var i = 0; i < 4; i++) {
+      await scroll(400);
+    }
+    expect(back.hitTestable(), findsOneWidget);
+  });
+
   testWidgets('the viewing and enquiry sheets close with an X', (tester) async {
     await open(tester, kilimani);
     for (final action in ['Book a viewing', 'Enquire']) {
