@@ -239,8 +239,8 @@ class AppDrawer extends ConsumerWidget {
   }
 }
 
-/// A store badge, drawn (no image to load): black, rounded, the store's
-/// mark and its two lines in white, as the stores' own badges are laid out.
+/// A store badge, drawn (no image to load): dark, rounded, the store's
+/// mark and its two lines light on it, as the stores' own badges are laid out.
 class StoreBadge extends StatelessWidget {
   const StoreBadge._({super.key, required this.top, required this.name, required this.mark, required this.onTap});
 
@@ -248,14 +248,14 @@ class StoreBadge extends StatelessWidget {
       key: key ?? const Key('badge-google-play'),
       top: 'GET IT ON',
       name: 'Google Play',
-      mark: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 30),
+      mark: const Icon(Icons.play_arrow_rounded, size: 30),
       onTap: onTap);
 
   factory StoreBadge.appStore({Key? key, required VoidCallback onTap}) => StoreBadge._(
       key: key ?? const Key('badge-app-store'),
       top: 'Download on the',
       name: 'App Store',
-      mark: const Icon(Icons.apple, color: Colors.white, size: 26),
+      mark: const Icon(Icons.apple, size: 26),
       onTap: onTap);
 
   final String top, name;
@@ -263,29 +263,34 @@ class StoreBadge extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-        button: true,
-        label: '$top $name',
-        child: Material(
-          color: Colors.black,
+  Widget build(BuildContext context) {
+    // Dark as the stores' badges, from the theme: the text colour behind, the page colour on it.
+    final scheme = Theme.of(context).colorScheme;
+    final ink = scheme.surface;
+    return Semantics(
+      button: true,
+      label: '$top $name',
+      child: Material(
+        color: scheme.onSurface,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
           borderRadius: BorderRadius.circular(8),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 6, 14, 6),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                SizedBox.square(dimension: 26, child: Center(child: mark)),
-                const SizedBox(width: 8),
-                Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                  Text(top, style: const TextStyle(color: Colors.white, fontSize: 9, letterSpacing: 0.4, height: 1.1)),
-                  Text(name, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600, height: 1.15)),
-                ]),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 14, 6),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              SizedBox.square(dimension: 26, child: Center(child: IconTheme(data: IconThemeData(color: ink), child: mark))),
+              const SizedBox(width: 8),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text(top, style: TextStyle(color: ink, fontSize: 9, letterSpacing: 0.4, height: 1.1)),
+                Text(name, style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w600, height: 1.15)),
               ]),
-            ),
+            ]),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 /// Phones: a top bar that scrolls away with the page and comes back only at
