@@ -33,7 +33,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   Purpose _purpose = Purpose.rent;
 
-  static const _types = ['bedsitter', 'single-room', 'apartment', 'maisonette', 'townhouse', 'hostel'];
+  static const _types = ['bedsitter', 'single-room', 'studio', 'apartment', 'maisonette', 'hostel'];
 
   /// The home search's property types, in the realtor's order.
   static const _searchTypes = ['single-room', 'bedsitter', 'studio', 'apartment'];
@@ -174,17 +174,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
 
+    // One band above the property types: the advert when the tenant sells
+    // advert space (marked AD, with Enquire now), else the realtor's own
+    // promotion. Never both, so the same message is not shown twice.
     final promo = <Widget>[
-      if (banner != null) ...[
-        _PhotoBand(
-          key: const Key('home-banner'),
-          band: banner,
-          name: 'banner',
-          minHeight: 120,
-          onTap: listProperty == null ? null : () => ref.read(urlOpenerProvider)(listProperty),
-        ),
-        SizedBox(height: b.spacing.xl),
-      ],
+      FeatureGate(
+        feature: Feature.ads,
+        orElse: banner == null
+            ? const SizedBox.shrink()
+            : _PhotoBand(
+                key: const Key('home-banner'),
+                band: banner,
+                name: 'banner',
+                minHeight: 120,
+                onTap: listProperty == null ? null : () => ref.read(urlOpenerProvider)(listProperty),
+              ),
+        child: const AdSlot(banner: true),
+      ),
+      if (AdSlot.enabledFor(tenant) || banner != null) SizedBox(height: b.spacing.xl),
     ];
     final types = <Widget>[
       Text('Browse by type', style: text.titleLarge),
@@ -226,23 +233,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               offset: Offset(0, -b.spacing.xl),
               child: Padding(padding: EdgeInsets.symmetric(horizontal: wide ? b.spacing.xl : b.spacing.sm), child: searchCard),
             ),
-            // Wide screens show the promotion first, as a second photo band;
-            // phones show the property types first, so they stay on the first screen.
-            if (wide) ...promo,
+            // The advert (or promotion) band, then the property types.
+            ...promo,
             ...types,
             const RecentSearches(),
-            if (!wide) ...[SizedBox(height: b.spacing.xl), ...promo],
             // Two rows of homes, as the big portals' home pages have them:
             // the realtor's Hot Properties, then the newest.
             const _HotRow(),
-            // The advert between them; a low band on wide screens.
-            FeatureGate(
-              feature: Feature.ads,
-              child: Padding(
-                padding: EdgeInsets.only(top: b.spacing.xl),
-                child: AdSlot(banner: wide),
-              ),
-            ),
             _Newest(purpose: _purpose, onSeeAll: () => _search()),
           ]),
         ),
