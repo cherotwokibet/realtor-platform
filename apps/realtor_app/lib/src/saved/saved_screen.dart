@@ -8,6 +8,7 @@ import '../account/account_data.dart';
 import '../search/results_screen.dart';
 import '../providers.dart';
 import '../account/account_screen.dart' show SavedSearchesList;
+import '../account/sign_in.dart';
 import '../nav.dart';
 import '../search/purpose.dart';
 import 'favourites.dart';
@@ -75,7 +76,7 @@ class _SavedScreenState extends ConsumerState<SavedScreen> {
             title: 'Sign in to see the homes you have saved.',
             line: 'Hearts you tap are kept on this device and show here once you sign in, on every device.',
             action: 'Log in / Sign up',
-            onTap: () => context.go('/account'),
+            onTap: () => showSignIn(context),
           )
         : saved.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -130,7 +131,7 @@ class _SavedScreenState extends ConsumerState<SavedScreen> {
             title: 'Sign in to see your saved searches.',
             line: 'Save a search from the results and hear as soon as a matching home is listed.',
             action: 'Log in / Sign up',
-            onTap: () => context.go('/account'),
+            onTap: () => showSignIn(context),
           )
         : Align(
             alignment: Alignment.topCenter,

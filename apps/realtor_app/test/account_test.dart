@@ -144,7 +144,7 @@ void main() {
     final c = await open(tester, '/rent/apartments/kilimani');
     await tester.tap(find.text('Get alerts for new matches'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Continue with Google'));
+    await tester.tap(find.byKey(const Key('google')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Get alerts for Rent · Apartment · Kilimani'));
     await tester.pumpAndSettle();

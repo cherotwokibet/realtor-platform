@@ -7,6 +7,7 @@ import 'package:realtor_ui/realtor_ui.dart';
 import 'account/account_data.dart';
 import 'account/account_screen.dart' show initialsOf;
 import 'account/push.dart';
+import 'account/sign_in.dart';
 import 'nav.dart';
 import 'providers.dart';
 import 'search/purpose.dart';
@@ -104,7 +105,7 @@ class PhoneTopBar extends ConsumerWidget {
                     icon: const Icon(Icons.favorite_border, size: 20),
                     label: const Text('Saved'),
                   )
-                : FilledButton(key: const Key('home-login'), style: style, onPressed: () => context.go('/account'), child: const Text('Log in'));
+                : FilledButton(key: const Key('home-login'), style: style, onPressed: () => showSignIn(context), child: const Text('Log in'));
           }),
         ),
       ],
@@ -191,7 +192,10 @@ class AppDrawer extends ConsumerWidget {
                 : OutlinedButton(
                     key: const Key('drawer-login'),
                     style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                    onPressed: () => go('/account'),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      showSignIn(context);
+                    },
                     child: const Text('Sign up or Log in'),
                   ),
           ),
@@ -245,18 +249,10 @@ class StoreBadge extends StatelessWidget {
   const StoreBadge._({super.key, required this.top, required this.name, required this.mark, required this.onTap});
 
   factory StoreBadge.googlePlay({Key? key, required VoidCallback onTap}) => StoreBadge._(
-      key: key ?? const Key('badge-google-play'),
-      top: 'GET IT ON',
-      name: 'Google Play',
-      mark: const Icon(Icons.play_arrow_rounded, size: 30),
-      onTap: onTap);
+      key: key ?? const Key('badge-google-play'), top: 'GET IT ON', name: 'Google Play', mark: const Icon(Icons.play_arrow_rounded, size: 30), onTap: onTap);
 
-  factory StoreBadge.appStore({Key? key, required VoidCallback onTap}) => StoreBadge._(
-      key: key ?? const Key('badge-app-store'),
-      top: 'Download on the',
-      name: 'App Store',
-      mark: const Icon(Icons.apple, size: 26),
-      onTap: onTap);
+  factory StoreBadge.appStore({Key? key, required VoidCallback onTap}) =>
+      StoreBadge._(key: key ?? const Key('badge-app-store'), top: 'Download on the', name: 'App Store', mark: const Icon(Icons.apple, size: 26), onTap: onTap);
 
   final String top, name;
   final Widget mark;

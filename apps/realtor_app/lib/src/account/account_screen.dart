@@ -11,6 +11,7 @@ import '../saved/favourites.dart';
 import '../search/purpose.dart';
 import 'account_data.dart';
 import 'push.dart';
+import 'sign_in.dart';
 
 /// The address the app was opened at (an emailed sign-in link lands here).
 final openedAtProvider = Provider<Uri>((ref) => Uri.base);
@@ -68,12 +69,8 @@ class AccountScreen extends ConsumerStatefulWidget {
 
 class _AccountScreenState extends ConsumerState<AccountScreen> {
   final _email = TextEditingController();
-  final _password = TextEditingController();
   String? _status, _error;
   bool _busy = false, _finishing = false;
-
-  /// Signing in with a password (set in Edit Profile) instead of a link.
-  bool _withPassword = false;
 
   /// The name from the profile, for "Hi, Amina"; loaded once per account.
   String? _name, _loadedFor;
@@ -88,40 +85,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     }
   }
 
-  Future<void> _signInWithPassword() async {
-    final email = _email.text.trim();
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email) || _password.text.isEmpty) {
-      setState(() => _error = 'Enter your email address and password.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await ref.read(customerAccountProvider).signInWithPassword(email, _password.text);
-      _password.clear();
-    } on Object catch (e) {
-      if (mounted) setState(() => _error = 'That email and password do not match. Try again, or use the emailed link.${_code(e)}');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _resetPassword() async {
-    final email = _email.text.trim();
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-      setState(() => _error = 'Enter your email address first.');
-      return;
-    }
-    try {
-      await ref.read(customerAccountProvider).sendPasswordReset(email);
-      if (mounted) setState(() => _status = 'Check $email for a link to choose a new password.');
-    } on Object catch (e) {
-      if (mounted) setState(() => _error = 'We could not send that just now. Please try again.${_code(e)}');
-    }
-  }
-
   @override
   void initState() {
     super.initState();
@@ -131,7 +94,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   @override
   void dispose() {
     _email.dispose();
-    _password.dispose();
     super.dispose();
   }
 
@@ -179,41 +141,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   /// The provider's reason, small, for reports from phones.
   static String _code(Object e) => e is SignInFailure ? ' (${e.code})' : '';
 
-  Future<void> _sendLink() async {
-    final email = _email.text.trim();
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-      setState(() => _error = 'Enter your email address.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      // The link opens the web app's Account page (on a phone, the browser).
-      final here = ref.read(openedAtProvider);
-      final back = here.isScheme('http') || here.isScheme('https')
-          ? here.replace(path: '/account', query: '')
-          : Uri.https(ref.read(tenantProvider).appDomain, '/account');
-      await ref.read(pendingEmailProvider).write(email);
-      await ref.read(customerAccountProvider).sendSignInLink(email, back);
-      if (mounted) setState(() => _status = 'Check $email for a sign-in link. Open it on this phone or computer.');
-    } on Object catch (e) {
-      if (mounted) setState(() => _error = 'We could not send the link just now. Please try again.${_code(e)}');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _google() async {
-    setState(() => _error = null);
-    try {
-      await ref.read(customerAccountProvider).signInWithGoogle();
-    } on Object catch (e) {
-      if (mounted) setState(() => _error = 'Google sign-in is not available here yet. Use the email link.${_code(e)}');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final b = context.brand;
@@ -252,11 +179,6 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         );
 
     final signedOut = <Widget>[
-      Text('Log in or sign up', style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-      SizedBox(height: b.spacing.xs),
-      Text('Browsing and saving homes need no account. Sign in to keep them on every device and to hear about new homes first.',
-          style: text.bodyMedium?.copyWith(color: b.textMuted)),
-      SizedBox(height: b.spacing.lg),
       if (pendingAlert != null) ...[
         Card(
           color: b.primarySoft,
@@ -267,67 +189,32 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
             subtitle: pendingAlert.q == null ? null : Text('Alerts match the filters, not the words "${pendingAlert.q}".'),
           ),
         ),
-        SizedBox(height: b.spacing.lg),
+        SizedBox(height: b.spacing.md),
       ],
-      OutlinedButton.icon(
-        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-        onPressed: _busy ? null : _google,
-        icon: const Icon(Icons.g_mobiledata, size: 28),
-        label: const Text('Continue with Google'),
-      ),
-      Padding(
-        padding: EdgeInsets.symmetric(vertical: b.spacing.md),
-        child: Row(children: [
-          const Expanded(child: Divider()),
-          Padding(
-              padding: EdgeInsets.symmetric(horizontal: b.spacing.md), child: Text('or with your email', style: text.bodySmall?.copyWith(color: b.textMuted))),
-          const Expanded(child: Divider()),
-        ]),
-      ),
-      TextField(
-        key: const Key('email'),
-        controller: _email,
-        keyboardType: TextInputType.emailAddress,
-        autofillHints: const [AutofillHints.email],
-        textInputAction: TextInputAction.send,
-        onSubmitted: (_) => _busy ? null : (_finishing ? _complete(_email.text.trim()) : _sendLink()),
-        decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.mail_outline)),
-      ),
-      SizedBox(height: b.spacing.md),
-      FilledButton(
-        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-        onPressed: _busy ? null : (_finishing ? () => _complete(_email.text.trim()) : _sendLink),
-        child: Text(_finishing ? 'Finish signing in' : 'Email me a sign-in link'),
-      ),
-      SizedBox(height: b.spacing.xs),
-      if (!_withPassword) ...[
-        Text('No password: we email you a link that signs you in.', style: text.bodySmall?.copyWith(color: b.textMuted), textAlign: TextAlign.center),
-        TextButton(
-          key: const Key('use-password'),
-          onPressed: () => setState(() => _withPassword = true),
-          child: const Text('Have a password? Sign in with it'),
-        ),
-      ] else ...[
-        SizedBox(height: b.spacing.sm),
+      if (_finishing) ...[
+        // The emailed link opened in another browser: it asks for the email once more.
+        Text('Finish signing in', style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+        SizedBox(height: b.spacing.md),
         TextField(
-          key: const Key('password'),
-          controller: _password,
-          obscureText: true,
-          autofillHints: const [AutofillHints.password],
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _busy ? null : _signInWithPassword(),
-          decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
+          key: const Key('email'),
+          controller: _email,
+          keyboardType: TextInputType.emailAddress,
+          autofillHints: const [AutofillHints.email],
+          onSubmitted: (_) => _busy ? null : _complete(_email.text.trim()),
+          decoration: const InputDecoration(labelText: 'The email the link was sent to', prefixIcon: Icon(Icons.mail_outline)),
         ),
-        SizedBox(height: b.spacing.sm),
-        FilledButton.tonal(
-          key: const Key('password-sign-in'),
+        SizedBox(height: b.spacing.md),
+        FilledButton(
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          onPressed: _busy ? null : _signInWithPassword,
-          child: const Text('Sign in with password'),
+          onPressed: _busy ? null : () => _complete(_email.text.trim()),
+          child: const Text('Finish signing in'),
         ),
-        Align(alignment: Alignment.centerRight, child: TextButton(onPressed: _resetPassword, child: const Text('Forgot password?'))),
+        ...notes,
+      ] else ...[
+        // The same panel as the Log in window, with the email box open.
+        const Padding(padding: EdgeInsets.symmetric(horizontal: 0), child: SignInPanel(emailFirst: true)),
+        ...notes,
       ],
-      ...notes,
       SizedBox(height: b.spacing.xl),
       Text('With an account', style: text.titleMedium),
       SizedBox(height: b.spacing.md),

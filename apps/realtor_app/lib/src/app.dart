@@ -10,6 +10,7 @@ import 'package:realtor_core/realtor_core.dart';
 import 'account/account_data.dart';
 import 'account/account_screen.dart';
 import 'account/push.dart';
+import 'account/sign_in.dart';
 import 'home_screen.dart';
 import 'listing/listing_screen.dart';
 import 'nav.dart';
@@ -285,7 +286,9 @@ class TopNav extends ConsumerWidget {
                 if (s.path != '/' && s.path != '/account') link(s.label, s.path, here: under(s.path)),
               const Spacer(),
               OutlinedButton.icon(
-                onPressed: () => go('/account'),
+                key: const Key('nav-login'),
+                // Signed out: Log in / Sign up opens over the page, as on Bayut.
+                onPressed: () => signedIn ? go('/account') : showSignIn(context),
                 icon: const Icon(Icons.person_outline),
                 label: Text(signedIn ? 'Account' : 'Log in / Sign up'),
               ),

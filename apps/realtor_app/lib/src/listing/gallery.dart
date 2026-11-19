@@ -404,16 +404,16 @@ class _GalleryDialogState extends State<_GalleryDialog> {
     ];
     final shown = _shown;
 
-    final view = MediaQuery.sizeOf(context);
     return Dialog(
       key: const Key('gallery'),
-      // Bayut's size: about 1010 wide and four fifths of the window high.
-      insetPadding: EdgeInsets.symmetric(horizontal: b.spacing.lg, vertical: (view.height * 0.1).clamp(b.spacing.lg, 200.0)),
+      // Bayut's size: about 1010 wide and nearly the window's full height
+      // (24 px above and below).
+      insetPadding: EdgeInsets.symmetric(horizontal: b.spacing.lg, vertical: b.spacing.xl),
       clipBehavior: Clip.antiAlias,
       // Small corners, as on the big portals.
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1010, maxHeight: 760),
+        constraints: const BoxConstraints(maxWidth: 1010, maxHeight: 900),
         child: Stack(children: [
           Padding(
             // The right edge is the scrollbar's lane; the close button is

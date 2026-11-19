@@ -208,4 +208,47 @@ void main() {
     expect(find.descendant(of: find.byKey(const Key('top-saved')), matching: find.text('Saved')), findsOneWidget);
     expect(tester.widget(find.byKey(const Key('top-saved'))), isA<TextButton>());
   });
+
+  testWidgets('Log in / Sign up opens over the page, as on Bayut: Google, or email; switches to creating an account; closes once signed in', (tester) async {
+    final c = await open(tester, '/', signedIn: false);
+    tester.view.physicalSize = const Size(1400, 900);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-login')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('sign-in-dialog')), findsOneWidget);
+    expect(find.text('Log in to your Realtime Estates Ltd account'), findsOneWidget);
+    expect(find.text('Log in with Google'), findsOneWidget);
+    expect(find.byKey(const Key('use-link')), findsOneWidget);
+    expect(find.byKey(const Key('use-password')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('auth-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('Create your Realtime Estates Ltd account'), findsOneWidget);
+    expect(find.text('Join with Google'), findsOneWidget);
+    expect(find.textContaining('you agree to the Terms'), findsOneWidget);
+    expect(find.byKey(const Key('use-password')), findsNothing, reason: 'a password is set later, in Edit Profile');
+
+    await tester.tap(find.byKey(const Key('use-link')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('email')), 'amina@example.com');
+    await tester.tap(find.byKey(const Key('send-link')));
+    await tester.pumpAndSettle();
+    expect(account.sentLinks, ['amina@example.com']);
+    expect(find.textContaining('Check amina@example.com'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('google')));
+    await tester.pumpAndSettle();
+    expect(c.read(customerProvider).value, isNotNull);
+    expect(find.byKey(const Key('sign-in-dialog')), findsNothing, reason: 'closes once signed in');
+  });
+
+  testWidgets('phones: Log in opens the same panel from the bottom', (tester) async {
+    await open(tester, '/', signedIn: false);
+    await tester.tap(find.byKey(const Key('home-login')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('sign-in-sheet')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('sign-in-close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('sign-in-sheet')), findsNothing);
+  });
 }
