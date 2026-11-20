@@ -27,6 +27,7 @@ const _agents = {
 const _demoReplies = {'agent-wanjiku': 25, 'agent-otieno': 140};
 
 const _areas = ['kilimani', 'westlands', 'kileleshwa', 'lavington', 'south-b', 'ruaka'];
+
 /// Area centres for the editor's first map pin.
 const _areaCentres = {
   'kilimani': (-1.2921, 36.7856),
@@ -37,20 +38,7 @@ const _areaCentres = {
   'ruaka': (-1.2050, 36.7770),
 };
 const _kinds = ['2 bedroom apartment', '1 bedroom apartment', 'Studio', '3 bedroom maisonette', 'Bedsitter'];
-const _first = [
-  'Amina',
-  'Kevin',
-  'Faith',
-  'Juma',
-  'Grace',
-  'Peter',
-  'Mercy',
-  'Hassan',
-  'Joy',
-  'Dennis',
-  'Wairimu',
-  'Ochieng'
-];
+const _first = ['Amina', 'Kevin', 'Faith', 'Juma', 'Grace', 'Peter', 'Mercy', 'Hassan', 'Joy', 'Dennis', 'Wairimu', 'Ochieng'];
 const _channels = ['form', 'viewing', 'form', 'call', 'whatsapp'];
 
 /// Demo data with the same shape and scoping as the Firestore version: an
@@ -170,8 +158,62 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
           agentId: e.value.agentId,
           agentName: _agents[e.value.agentId],
           agentReplyMins: _demoReplies[e.value.agentId],
+          phone: _demoPhones[e.value.uid],
         ),
   };
+
+  static const _demoPhones = {
+    'demo-owner': '+254700000101',
+    'demo-manager': '+254700000102',
+    'demo-wanjiku': '+254711222333',
+    'demo-otieno': '+254722444555',
+  };
+
+  @override
+  Future<StaffMember?> me(StaffUser who) async => _team[who.uid];
+
+  @override
+  Future<DashboardData> dashboard(StaffUser who, DateTime now) async {
+    bool mine(String agentId) => who.agentScope == null || agentId == who.agentScope;
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1)), week = today.add(const Duration(days: 7));
+    final leads = _leads.where((l) => mine(l.agentId)).toList();
+    final open = [
+      for (final v in _viewings)
+        if (mine(v.agentId) && (v.status == 'requested' || v.status == 'confirmed') && !v.slot.isBefore(today)) v
+    ]..sort((a, b) => a.slot.compareTo(b.slot));
+    final listings = _listings.where((l) => mine(l.agentId));
+    final fresh = leads.where((l) => l.stage == 'new').toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return DashboardData(
+      newLeads: fresh.length,
+      // The demo's leads are dated from its fixed day: shift them onto today.
+      leadsByDay: leadsPerDay([for (final l in leads) l.createdAt.add(today.difference(DateTime(_now.year, _now.month, _now.day)))], now),
+      viewingsToday: open.where((v) => v.slot.isBefore(tomorrow)).length,
+      viewingsWeek: open.where((v) => v.slot.isBefore(week)).length,
+      liveListings: listings.where((l) => l.status == 'live').length,
+      pendingListings: listings.where((l) => l.status == 'pending').length,
+      upcoming: open.take(5).toList(),
+      latestLeads: fresh.take(5).toList(),
+      activity: who.canOpen(AdminSection.audit) ? (_audit.toList()..sort((a, b) => b.at.compareTo(a.at))).take(6).toList() : const [],
+    );
+  }
+
+  @override
+  Future<void> saveMyProfile(StaffUser who, {required String name, String? phone}) async {
+    final m = _team[who.uid];
+    if (m == null) throw AdminActionException('failed-precondition', 'no staff record for this account yet');
+    if (name.trim().length < 2) throw AdminActionException('invalid-argument', 'a name of at least 2 letters');
+    if (phone != null && !RegExp(r'^\+254[17]\d{8}$').hasMatch(phone)) throw AdminActionException('invalid-argument', 'a Kenyan mobile, e.g. +254712345678');
+    _team[who.uid] = StaffMember(
+        uid: m.uid,
+        role: m.role,
+        email: m.email,
+        name: name.trim(),
+        agentId: m.agentId,
+        agentName: m.agentName,
+        agentReplyMins: m.agentReplyMins,
+        phone: phone);
+  }
 
   @override
   Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25}) async {
@@ -180,12 +222,9 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   }
 
   @override
-  Future<RowPage<ViewingRow>> viewings(StaffUser who,
-      {String? status, required DateTime from, String? after, int limit = 25}) async {
+  Future<RowPage<ViewingRow>> viewings(StaffUser who, {String? status, required DateTime from, String? after, int limit = 25}) async {
     final rows = scopedTo(who, _viewings, (v) => v.agentId)
-        .where((v) => status == null
-            ? (v.status == 'requested' || v.status == 'confirmed') && !v.slot.isBefore(from)
-            : v.status == status)
+        .where((v) => status == null ? (v.status == 'requested' || v.status == 'confirmed') && !v.slot.isBefore(from) : v.status == status)
         .toList()
       ..sort((a, b) => status == null ? a.slot.compareTo(b.slot) : b.slot.compareTo(a.slot));
     return pageAfter(rows, (v) => v.id, after: after, limit: limit);
@@ -266,8 +305,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   }
 
   @override
-  Future<void> moderateListing(StaffUser who,
-      {required String listingId, required String action, String? reason}) async {
+  Future<void> moderateListing(StaffUser who, {required String listingId, required String action, String? reason}) async {
     if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
     final to = moderationTargets[action];
     if (to == null) throw AdminActionException('invalid-argument', 'unknown action $action');
@@ -312,8 +350,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     final at = _clock();
     final until = days == 0 ? null : at.add(Duration(days: days));
     _listings[i] = listing.withStatus(listing.status, at, featuredUntil: () => until);
-    _log(who, 'listing.feature', listing.title, listing.featuredAt(at) ? 'featured' : 'none', until == null ? 'none' : '$days days',
-        at: at);
+    _log(who, 'listing.feature', listing.title, listing.featuredAt(at) ? 'featured' : 'none', until == null ? 'none' : '$days days', at: at);
     return until;
   }
 
@@ -455,11 +492,10 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   }
 
   @override
-  Future<List<ViewingRow>> viewingsBetween(StaffUser who, DateTime from, DateTime to) async =>
-      scopedTo(who, _viewings, (v) => v.agentId)
-          .where((v) => calendarViewingStatuses.contains(v.status) && !v.slot.isBefore(from) && v.slot.isBefore(to))
-          .toList()
-        ..sort((a, b) => a.slot.compareTo(b.slot));
+  Future<List<ViewingRow>> viewingsBetween(StaffUser who, DateTime from, DateTime to) async => scopedTo(who, _viewings, (v) => v.agentId)
+      .where((v) => calendarViewingStatuses.contains(v.status) && !v.slot.isBefore(from) && v.slot.isBefore(to))
+      .toList()
+    ..sort((a, b) => a.slot.compareTo(b.slot));
 
   @override
   Future<List<AgentBlock>> timeOff(StaffUser who, DateTime now) async =>
@@ -525,15 +561,36 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     if (page.title.trim().length < 2) throw AdminActionException('invalid-argument', 'title: at least 2 characters');
     final before = _pages[page.slug];
     _pages[page.slug] = SitePageRow(slug: page.slug, title: page.title.trim(), body: page.body, published: page.published, updatedAt: _clock());
-    _log(who, 'page.save', page.title.trim(), before == null ? 'none' : (before.published ? 'published' : 'draft'),
-        page.published ? 'published' : 'draft');
+    _log(who, 'page.save', page.title.trim(), before == null ? 'none' : (before.published ? 'published' : 'draft'), page.published ? 'published' : 'draft');
   }
 
   /// Two demo reviews waiting for a manager, and one shown.
   late final _reviews = <ReviewRow>[
-    ReviewRow(id: 'review-1', agentId: 'agent-wanjiku', agentName: 'Wanjiku Mwangi', rating: 5, status: 'pending', createdAt: _now.subtract(const Duration(hours: 3)), comment: 'Showed us three flats in one afternoon.', name: 'Akinyi'),
-    ReviewRow(id: 'review-2', agentId: 'agent-otieno', agentName: 'Brian Otieno', rating: 2, status: 'pending', createdAt: _now.subtract(const Duration(hours: 9)), comment: 'Came 40 minutes late.'),
-    ReviewRow(id: 'review-3', agentId: 'agent-wanjiku', agentName: 'Wanjiku Mwangi', rating: 4, status: 'approved', createdAt: _now.subtract(const Duration(days: 4)), name: 'Juma'),
+    ReviewRow(
+        id: 'review-1',
+        agentId: 'agent-wanjiku',
+        agentName: 'Wanjiku Mwangi',
+        rating: 5,
+        status: 'pending',
+        createdAt: _now.subtract(const Duration(hours: 3)),
+        comment: 'Showed us three flats in one afternoon.',
+        name: 'Akinyi'),
+    ReviewRow(
+        id: 'review-2',
+        agentId: 'agent-otieno',
+        agentName: 'Brian Otieno',
+        rating: 2,
+        status: 'pending',
+        createdAt: _now.subtract(const Duration(hours: 9)),
+        comment: 'Came 40 minutes late.'),
+    ReviewRow(
+        id: 'review-3',
+        agentId: 'agent-wanjiku',
+        agentName: 'Wanjiku Mwangi',
+        rating: 4,
+        status: 'approved',
+        createdAt: _now.subtract(const Duration(days: 4)),
+        name: 'Juma'),
   ];
 
   @override
@@ -549,8 +606,12 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     if (i < 0) throw AdminActionException('not-found', 'no such review');
     final r = _reviews[i];
     final status = action == 'approve' ? 'approved' : 'hidden';
-    _reviews[i] = ReviewRow(id: r.id, agentId: r.agentId, agentName: r.agentName, rating: r.rating, status: status, createdAt: r.createdAt, comment: r.comment, name: r.name);
-    final ratings = [for (final x in _reviews) if (x.agentId == r.agentId && x.status == 'approved') x.rating];
+    _reviews[i] = ReviewRow(
+        id: r.id, agentId: r.agentId, agentName: r.agentName, rating: r.rating, status: status, createdAt: r.createdAt, comment: r.comment, name: r.name);
+    final ratings = [
+      for (final x in _reviews)
+        if (x.agentId == r.agentId && x.status == 'approved') x.rating
+    ];
     final rating = ratings.isEmpty ? null : (ratings.reduce((a, b) => a + b) / ratings.length * 10).round() / 10;
     _log(who, 'review.moderate', 'Review of ${r.agentName}, ${r.rating} stars', r.status, status);
     return (rating: rating, count: ratings.length);
@@ -591,10 +652,13 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     if (project.slug != null && !_projects.containsKey(slug)) throw AdminActionException('not-found', 'no project "$slug"');
     if (!_guides.containsKey(project.area)) throw AdminActionException('invalid-argument', 'area: no area "${project.area}"');
     final before = _projects[slug];
-    _projects[slug] = OffPlanProject.fromDoc(slug, {
-      ...project.toCallable(),
-      'fromKES': project.units.map((u) => u.fromKES).reduce((a, b) => a < b ? a : b),
-    }, updatedAt: _clock());
+    _projects[slug] = OffPlanProject.fromDoc(
+        slug,
+        {
+          ...project.toCallable(),
+          'fromKES': project.units.map((u) => u.fromKES).reduce((a, b) => a < b ? a : b),
+        },
+        updatedAt: _clock());
     _log(who, 'project.save', project.name.trim(), before == null ? 'none' : (before.published ? 'published' : 'draft'),
         project.published ? 'published' : 'draft');
     return slug;
@@ -634,7 +698,11 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         ListingDraft(
           listingId: row.id,
           title: row.title,
-          type: row.title.contains('Studio') ? 'studio' : row.title.contains('Bedsitter') ? 'bedsitter' : 'apartment',
+          type: row.title.contains('Studio')
+              ? 'studio'
+              : row.title.contains('Bedsitter')
+                  ? 'bedsitter'
+                  : 'apartment',
           beds: int.tryParse(row.title.split(' ').first) ?? 0,
           priceKES: row.priceKES,
           lat: c.$1,
@@ -696,8 +764,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     if (!who.canManageStaff) throw AdminActionException('permission-denied', 'owner only');
     final account = _demoAccounts[email.trim().toLowerCase()];
     if (account == null) {
-      throw AdminActionException(
-          'not-found', 'no account with that email: ask them to sign in to the admin once first');
+      throw AdminActionException('not-found', 'no account with that email: ask them to sign in to the admin once first');
     }
     if (account.uid == who.uid && role != StaffRole.owner) {
       throw AdminActionException('failed-precondition', 'an owner cannot remove their own owner role');
@@ -716,14 +783,14 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
           name: account.name,
           role: role,
           agentId: id,
-          agentName: _agents[id]);
+          agentName: _agents[id],
+          phone: _team[account.uid]?.phone ?? _demoPhones[account.uid]);
     }
     _log(who, 'staff.role', email.trim().toLowerCase(), before ?? 'none', role?.name ?? 'none');
   }
 
   @override
-  Future<DataRequestResult> dataRequest(StaffUser who,
-      {required DataRequestKind kind, String? phone, String? email}) async {
+  Future<DataRequestResult> dataRequest(StaffUser who, {required DataRequestKind kind, String? phone, String? email}) async {
     if (!who.canOpen(AdminSection.privacy)) throw AdminActionException('permission-denied', 'owner or manager only');
     if (phone == null && (email == null || email.trim().isEmpty)) {
       throw AdminActionException('invalid-argument', 'a phone or an email');
@@ -756,8 +823,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     );
   }
 
-  void _log(StaffUser who, String action, String target, String? from, String? to, {String? reason, DateTime? at}) =>
-      _audit.insert(
+  void _log(StaffUser who, String action, String target, String? from, String? to, {String? reason, DateTime? at}) => _audit.insert(
         0,
         AuditRow(
           id: 'audit-local-${_audit.length + 1}',
@@ -791,5 +857,4 @@ StaffListingRow _unflagged(StaffListingRow r) => StaffListingRow(
       featuredUntil: r.featuredUntil,
     );
 
-String _areaName(String slug) =>
-    slug.split('-').map((w) => w.length <= 1 ? w.toUpperCase() : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+String _areaName(String slug) => slug.split('-').map((w) => w.length <= 1 ? w.toUpperCase() : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');

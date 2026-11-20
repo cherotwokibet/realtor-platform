@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_admin/src/app.dart';
+import 'package:realtor_admin/src/dashboard.dart';
 import 'package:realtor_admin/src/demo_admin.dart';
 import 'package:realtor_admin/src/format.dart';
 import 'package:realtor_admin/src/links.dart';
@@ -17,8 +18,8 @@ import 'package:realtor_admin/src/reports.dart';
 import 'package:realtor_admin/src/session.dart';
 import 'package:realtor_core/realtor_core.dart';
 
-TenantConfig tenant([String id = 'realtime-estates']) => TenantConfig.fromJson(
-    jsonDecode(File('../../tenants/$id.json').readAsStringSync()) as Map<String, Object?>);
+TenantConfig tenant([String id = 'realtime-estates']) =>
+    TenantConfig.fromJson(jsonDecode(File('../../tenants/$id.json').readAsStringSync()) as Map<String, Object?>);
 
 final owner = demoStaff.firstWhere((s) => s.role == StaffRole.owner);
 final manager = demoStaff.firstWhere((s) => s.role == StaffRole.manager);
@@ -50,8 +51,7 @@ class SlowActions implements AdminActions {
   }
 
   @override
-  Future<void> moderateListing(StaffUser who,
-      {required String listingId, required String action, String? reason}) async {
+  Future<void> moderateListing(StaffUser who, {required String listingId, required String action, String? reason}) async {
     calls++;
     await gate.future;
     return inner.moderateListing(who, listingId: listingId, action: action, reason: reason);
@@ -151,8 +151,10 @@ class SlowActions implements AdminActions {
   }
 
   @override
-  Future<DataRequestResult> dataRequest(StaffUser who,
-      {required DataRequestKind kind, String? phone, String? email}) async {
+  Future<void> saveMyProfile(StaffUser who, {required String name, String? phone}) => inner.saveMyProfile(who, name: name, phone: phone);
+
+  @override
+  Future<DataRequestResult> dataRequest(StaffUser who, {required DataRequestKind kind, String? phone, String? email}) async {
     calls++;
     await gate.future;
     return inner.dataRequest(who, kind: kind, phone: phone, email: email);
@@ -168,8 +170,15 @@ class _FakePicker implements FilePicker {
   Future<List<PickedFile>> pick({required String accept}) async => files;
 }
 
+/// Opens the admin; signed in [as] someone, it then goes to [at] (Leads by
+/// default, where most tests start; null stays on the Dashboard).
 Future<void> open(WidgetTester tester,
-    {StaffUser? as, double width = 1280, bool slowActions = false, List<Override> overrides = const [], String tenantId = 'realtime-estates'}) async {
+    {StaffUser? as,
+    double width = 1280,
+    bool slowActions = false,
+    List<Override> overrides = const [],
+    String tenantId = 'realtime-estates',
+    String? at = '/leads'}) async {
   tester.view.physicalSize = Size(width, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -187,6 +196,10 @@ Future<void> open(WidgetTester tester,
   if (as != null) {
     await tester.tap(find.text(as.name));
     await tester.pumpAndSettle();
+    if (at != null) {
+      container.read(routerProvider).go(at);
+      await tester.pumpAndSettle();
+    }
   }
 }
 
@@ -198,8 +211,8 @@ void main() {
       expect(adminRedirect(const SignedOut(), '/leads'), signInPath);
       expect(adminRedirect(const SignedOut(), signInPath), isNull);
       expect(adminRedirect(const NotStaff('x@example.com'), '/leads'), signInPath);
-      expect(adminRedirect(SignedIn(manager), signInPath), '/leads');
-      expect(adminRedirect(SignedIn(manager), '/'), '/leads');
+      expect(adminRedirect(SignedIn(manager), signInPath), '/dashboard');
+      expect(adminRedirect(SignedIn(manager), '/'), '/dashboard');
     });
 
     test('while starting, a deep link stays put', () {
@@ -207,10 +220,10 @@ void main() {
     });
 
     test('nobody opens a section their role does not cover', () {
-      expect(adminRedirect(SignedIn(wanjiku), '/audit'), '/leads');
+      expect(adminRedirect(SignedIn(wanjiku), '/audit'), '/dashboard');
       expect(adminRedirect(SignedIn(wanjiku), '/listings'), isNull);
       expect(adminRedirect(SignedIn(manager), '/audit'), isNull);
-      expect(adminRedirect(SignedIn(owner), '/nowhere'), '/leads');
+      expect(adminRedirect(SignedIn(owner), '/nowhere'), '/dashboard');
     });
   });
 
@@ -221,11 +234,11 @@ void main() {
       final otieno = demoStaff.firstWhere((s) => s.agentId == 'agent-otieno');
       final all = (await repo.listings(manager, limit: 50)).rows;
       final wanjikus = all.firstWhere((r) => r.agentId == 'agent-wanjiku' && r.status == 'live');
-      await expectLater(repo.confirmListing(otieno, listingId: wanjikus.id),
-          throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'permission-denied')));
+      await expectLater(
+          repo.confirmListing(otieno, listingId: wanjikus.id), throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'permission-denied')));
       final pending = all.firstWhere((r) => r.status == 'pending');
-      await expectLater(repo.confirmListing(manager, listingId: pending.id),
-          throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'failed-precondition')));
+      await expectLater(
+          repo.confirmListing(manager, listingId: pending.id), throwsA(isA<AdminActionException>().having((e) => e.code, 'code', 'failed-precondition')));
       expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-otieno'), ['confirm']);
       expect(listingActionsFor(otieno, status: 'live', agentId: 'agent-wanjiku'), isEmpty);
       expect(listingActionsFor(manager, status: 'live', agentId: 'x'), [...moderationsFor('live'), 'confirm', 'hot', 'feature']);
@@ -268,23 +281,19 @@ void main() {
       final moved = (await repo.leads(wanjiku, limit: 100)).rows.firstWhere((r) => r.id == lead.id);
       expect(moved.stage, 'contacted');
       final entry = (await repo.audit(manager)).rows.first;
-      expect(
-          (entry.actorName, entry.action, entry.from, entry.to), ('Wanjiku Mwangi', 'lead.stage', 'new', 'contacted'));
+      expect((entry.actorName, entry.action, entry.from, entry.to), ('Wanjiku Mwangi', 'lead.stage', 'new', 'contacted'));
       expect(entry.at, DateTime(2026, 10, 28, 9));
     });
 
     test("refuses other agents' leads, impossible moves and agents moderating", () async {
       final repo = DemoAdminRepository();
-      final others =
-          (await repo.leads(manager, stage: 'new', limit: 100)).rows.firstWhere((r) => r.agentId != 'agent-wanjiku');
-      Future<void> fails(Future<void> f, String code) =>
-          expectLater(f, throwsA(isA<AdminActionException>().having((e) => e.code, 'code', code)));
+      final others = (await repo.leads(manager, stage: 'new', limit: 100)).rows.firstWhere((r) => r.agentId != 'agent-wanjiku');
+      Future<void> fails(Future<void> f, String code) => expectLater(f, throwsA(isA<AdminActionException>().having((e) => e.code, 'code', code)));
       await fails(repo.moveLead(wanjiku, leadId: others.id, stage: 'contacted'), 'permission-denied');
       await fails(repo.moveLead(manager, leadId: others.id, stage: 'won'), 'failed-precondition');
       final pending = (await repo.listings(manager, status: 'pending')).rows.first;
       await fails(repo.moderateListing(wanjiku, listingId: pending.id, action: 'approve'), 'permission-denied');
-      await fails(
-          repo.moderateListing(manager, listingId: pending.id, action: 'reject', reason: ' '), 'invalid-argument');
+      await fails(repo.moderateListing(manager, listingId: pending.id, action: 'reject', reason: ' '), 'invalid-argument');
       await fails(repo.moderateListing(manager, listingId: pending.id, action: 'sold'), 'failed-precondition');
       await repo.moderateListing(manager, listingId: pending.id, action: 'approve');
       expect((await repo.listings(manager, status: 'live', limit: 100)).rows.map((r) => r.id), contains(pending.id));
@@ -298,16 +307,13 @@ void main() {
       final added = (await repo.team(owner)).firstWhere((m) => m.email == 'new.agent@example.com');
       expect((added.role, added.agentId, added.agentName), (StaffRole.agent, 'agent-achieng', 'Achieng Odhiambo'));
       final entry = (await repo.audit(owner)).rows.first;
-      expect(
-          (entry.action, entry.target, entry.from, entry.to), ('staff.role', 'new.agent@example.com', 'none', 'agent'));
+      expect((entry.action, entry.target, entry.from, entry.to), ('staff.role', 'new.agent@example.com', 'none', 'agent'));
     });
 
     test('refuses non-owners, unknown emails, agents without a record and owner lock-out', () async {
       final repo = DemoAdminRepository();
-      Future<void> fails(Future<void> f, String code) =>
-          expectLater(f, throwsA(isA<AdminActionException>().having((e) => e.code, 'code', code)));
-      await fails(
-          repo.setStaffRole(manager, email: 'new.agent@example.com', role: StaffRole.manager), 'permission-denied');
+      Future<void> fails(Future<void> f, String code) => expectLater(f, throwsA(isA<AdminActionException>().having((e) => e.code, 'code', code)));
+      await fails(repo.setStaffRole(manager, email: 'new.agent@example.com', role: StaffRole.manager), 'permission-denied');
       await fails(repo.setStaffRole(owner, email: 'nobody@example.com', role: StaffRole.manager), 'not-found');
       await fails(repo.setStaffRole(owner, email: 'new.agent@example.com', role: StaffRole.agent), 'invalid-argument');
       await fails(repo.setStaffRole(owner, email: 'owner@example.com', role: StaffRole.manager), 'failed-precondition');
@@ -326,10 +332,9 @@ void main() {
     expect(location(), '/leads');
     expect(find.text('Your leads, newest first.'), findsOneWidget);
     expect(find.text('Audit log'), findsNothing);
-    expect(find.text('Agent'), findsNothing);
+    expect(find.descendant(of: find.byType(DataTable), matching: find.text('Agent')), findsNothing, reason: 'no Agent column');
     final own = (await DemoAdminRepository().leads(wanjiku, limit: pageSize)).rows;
-    final others =
-        (await DemoAdminRepository().leads(manager, limit: 100)).rows.where((r) => r.agentId != 'agent-wanjiku');
+    final others = (await DemoAdminRepository().leads(manager, limit: 100)).rows.where((r) => r.agentId != 'agent-wanjiku');
     expect(find.text(own.first.contactPhone!), findsOneWidget);
     for (final r in others) {
       expect(find.text(r.contactPhone!), findsNothing, reason: r.id);
@@ -337,7 +342,7 @@ void main() {
 
     container.read(routerProvider).go('/audit');
     await tester.pumpAndSettle();
-    expect(location(), '/leads');
+    expect(location(), '/dashboard');
   });
 
   testWidgets('a manager sees every agent, the audit log, and pages through', (tester) async {
@@ -417,8 +422,7 @@ void main() {
     expect(slow.calls, 1);
   });
 
-  testWidgets('agents get no moderation, only "Confirm still available" on their live or expired listings',
-      (tester) async {
+  testWidgets('agents get no moderation, only "Confirm still available" on their live or expired listings', (tester) async {
     await open(tester, as: wanjiku);
     await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
@@ -434,9 +438,7 @@ void main() {
     await tester.tap(find.widgetWithText(PopupMenuItem<String>, 'Confirm still available'));
     await tester.pumpAndSettle();
     expect(find.text('${picked.title}: confirmed, verified for 30 days'), findsOneWidget);
-    final after = (await container.read(adminRepositoryProvider).listings(wanjiku, limit: 50))
-        .rows
-        .firstWhere((r) => r.id == picked.id);
+    final after = (await container.read(adminRepositoryProvider).listings(wanjiku, limit: 50)).rows.firstWhere((r) => r.id == picked.id);
     expect(after.status, 'live');
     expect(after.expiresAt!.isAfter(DateTime.now().add(const Duration(days: 29))), isTrue);
   });
@@ -482,7 +484,7 @@ void main() {
 
   testWidgets('an owner adds someone to the team as an agent, then removes them', (tester) async {
     await open(tester, as: owner);
-    await tester.tap(find.text('Team'));
+    await tester.tap(find.byKey(const Key('nav-team')));
     await tester.pumpAndSettle();
     expect(find.text('manager@example.com'), findsOneWidget);
     expect(find.byTooltip('Change owner@example.com'), findsNothing, reason: 'no menu on your own row');
@@ -514,7 +516,7 @@ void main() {
     await open(tester, as: owner);
     final demo = container.read(demoAdminProvider);
     final before = demo.teamCalls;
-    await tester.tap(find.text('Team'));
+    await tester.tap(find.byKey(const Key('nav-team')));
     await tester.pumpAndSettle();
     expect(demo.teamCalls, before + 1);
     // A full rebuild (what a token refresh or theme change does) must not refetch.
@@ -526,23 +528,22 @@ void main() {
 
   testWidgets('managers see the team but cannot change it; agents do not see it', (tester) async {
     await open(tester, as: manager);
-    await tester.tap(find.text('Team'));
+    await tester.tap(find.byKey(const Key('nav-team')));
     await tester.pumpAndSettle();
-    expect(find.text('Only owners change roles.'), findsOneWidget);
+    expect(find.text('Only admins change roles.'), findsOneWidget);
     expect(find.text('Add someone'), findsNothing);
     expect(find.byType(PopupMenuButton<String>), findsNothing);
     await tester.tap(find.byTooltip('Sign out (${manager.name})'));
     await tester.pumpAndSettle();
     await tester.tap(find.text(wanjiku.name));
     await tester.pumpAndSettle();
-    expect(find.text('Team'), findsNothing);
+    expect(find.byKey(const Key('nav-team')), findsNothing);
     container.read(routerProvider).go('/team');
     await tester.pumpAndSettle();
-    expect(location(), '/leads');
+    expect(location(), '/dashboard');
   });
 
-  testWidgets('a manager exports what is held about a phone, then deletes it; the audit log keeps no number',
-      (tester) async {
+  testWidgets('a manager exports what is held about a phone, then deletes it; the audit log keeps no number', (tester) async {
     await open(tester, as: manager);
     await tester.tap(find.text('Privacy'));
     await tester.pumpAndSettle();
@@ -584,7 +585,7 @@ void main() {
     expect(find.text('Privacy'), findsNothing);
     container.read(routerProvider).go('/privacy');
     await tester.pumpAndSettle();
-    expect(location(), '/leads');
+    expect(location(), '/dashboard');
   });
 
   testWidgets('managers see a flag on a listing whose photo matches another; agents do not', (tester) async {
@@ -605,13 +606,12 @@ void main() {
   });
 
   test('reply times read as minutes, hours or days', () {
-    expect([minutesLabel(0), minutesLabel(59), minutesLabel(90), minutesLabel(1440), minutesLabel(4000)],
-        ['0 min', '59 min', '2 h', '1 day', '3 days']);
+    expect([minutesLabel(0), minutesLabel(59), minutesLabel(90), minutesLabel(1440), minutesLabel(4000)], ['0 min', '59 min', '2 h', '1 day', '3 days']);
   });
 
   testWidgets("the team shows each agent's typical reply; new leads show how long they have waited", (tester) async {
     await open(tester, as: manager);
-    await tester.tap(find.text('Team'));
+    await tester.tap(find.byKey(const Key('nav-team')));
     await tester.pumpAndSettle();
     expect(find.text('Typical reply'), findsOneWidget);
     expect(find.text('25 min'), findsOneWidget); // Wanjiku
@@ -697,7 +697,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('New listing'));
     await tester.pumpAndSettle();
-    expect(find.text('Agent'), findsNothing, reason: 'an agent lists as themself');
+    expect(find.descendant(of: find.byType(Dialog), matching: find.text('Agent')), findsNothing, reason: 'an agent lists as themself');
     await tester.tap(find.text('Save and send for review'));
     await tester.pumpAndSettle();
     expect(find.text('Use 5 to 120 characters.'), findsOneWidget);
@@ -748,7 +748,8 @@ void main() {
     expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Title')).controller!.text, 'My own title here');
 
     await tapVisible(tester, find.text('Save and send for review'));
-    final row = (await container.read(adminRepositoryProvider).listings(wanjiku, status: 'pending', limit: 50)).rows.firstWhere((r) => r.title == 'My own title here');
+    final row =
+        (await container.read(adminRepositoryProvider).listings(wanjiku, status: 'pending', limit: 50)).rows.firstWhere((r) => r.title == 'My own title here');
     final draft = await container.read(adminRepositoryProvider).listingDraft(wanjiku, row.id);
     expect(draft!.description, description, reason: 'the description is saved with the listing');
   });
@@ -796,8 +797,7 @@ void main() {
 
   test('upload paths follow storage.rules: agents under their agent id, managers under their uid', () {
     final at = DateTime.utc(2026, 10, 28);
-    expect(uploadPath(wanjiku, 'l1', 'My Lounge (1).jpg', at),
-        'uploads/agents/agent-wanjiku/listings/l1/${at.millisecondsSinceEpoch}-My-Lounge-1-.jpg');
+    expect(uploadPath(wanjiku, 'l1', 'My Lounge (1).jpg', at), 'uploads/agents/agent-wanjiku/listings/l1/${at.millisecondsSinceEpoch}-My-Lounge-1-.jpg');
     expect(uploadPath(manager, 'l1', 'a.jpg', at), 'uploads/staff/${manager.uid}/listings/l1/${at.millisecondsSinceEpoch}-a.jpg');
     expect(uploadProblem((name: 'big.jpg', bytes: Uint8List(maxPhotoBytes), type: 'image/jpeg')), contains('under 20 MB'));
   });
@@ -809,8 +809,7 @@ void main() {
     expect(find.text('Import CSV…'), findsNothing);
   });
 
-  testWidgets('viewings: a past confirmed one comes first to close; marking it a no-show moves it to history',
-      (tester) async {
+  testWidgets('viewings: a past confirmed one comes first to close; marking it a no-show moves it to history', (tester) async {
     await open(tester, as: manager);
     await tester.tap(find.text('Viewings'));
     await tester.pumpAndSettle();
@@ -975,7 +974,7 @@ void main() {
   testWidgets('a manager adds an agent profile, then gives them a photo', (tester) async {
     final picked = <PickedFile>[(name: 'mercy.jpg', bytes: Uint8List(4096), type: 'image/jpeg')];
     await open(tester, as: manager, overrides: [filePickerProvider.overrideWithValue(_FakePicker(picked))]);
-    await tester.tap(find.text('Team'));
+    await tester.tap(find.byKey(const Key('nav-team')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Agent profiles…'));
     await tester.pumpAndSettle();
@@ -1140,7 +1139,7 @@ void main() {
 
   testWidgets('a manager approves a waiting review and sees the new rating', (tester) async {
     await open(tester, as: manager);
-    await tester.tap(find.text('Team'));
+    await tester.tap(find.byKey(const Key('nav-team')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Reviews…'));
     await tester.pumpAndSettle();
@@ -1179,11 +1178,98 @@ void main() {
     expect(location(), signInPath);
   });
 
-  testWidgets('narrow windows get a bottom bar and no overflow', (tester) async {
-    await open(tester, as: manager, width: 412);
-    expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('Demo Manager · Manager'), findsNothing);
+  testWidgets('narrow windows get a menu with every section, and no overflow', (tester) async {
+    await open(tester, as: manager, width: 412, at: null);
+    expect(find.byKey(const Key('nav-leads')), findsNothing, reason: 'the sidebar is in the menu');
     expect(find.byTooltip('Sign out (Demo Manager)'), findsOneWidget);
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-leads')));
+    await tester.pumpAndSettle();
+    expect(location(), '/leads');
+    expect(find.byKey(const Key('nav-leads')), findsNothing, reason: 'the menu closes');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the Dashboard is home: numbers that open their pages, a leads chart, next viewings, new leads, activity', (tester) async {
+    await open(tester, as: manager, at: null, overrides: [dashboardClockProvider.overrideWithValue(() => DateTime(2026, 11, 20, 14))]);
+    expect(location(), '/dashboard');
+    expect(find.text('Good afternoon, Demo'), findsOneWidget);
+    final data = await container.read(adminRepositoryProvider).dashboard(manager, DateTime(2026, 11, 20, 14));
+    expect(find.descendant(of: find.byKey(const Key('stat-new-leads')), matching: find.text('${data.newLeads}')), findsOneWidget);
+    expect(data.leadsByDay, hasLength(dashboardDays));
+    expect(find.text('Leads per day'), findsOneWidget);
+    expect(find.text('Upcoming viewings'), findsOneWidget);
+    expect(find.text('New leads to contact'), findsOneWidget);
+    expect(find.text('Recent activity'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('stat-live-listings')));
+    await tester.pumpAndSettle();
+    expect(location(), '/listings');
+  });
+
+  testWidgets("an agent's Dashboard counts only their own, with no activity feed", (tester) async {
+    await open(tester, as: wanjiku, at: null);
+    final mine = await container.read(adminRepositoryProvider).dashboard(wanjiku, DateTime.now());
+    final all = await container.read(adminRepositoryProvider).dashboard(manager, DateTime.now());
+    expect(mine.newLeads, lessThan(all.newLeads));
+    expect(mine.latestLeads.every((l) => l.agentId == 'agent-wanjiku'), isTrue);
+    expect(mine.activity, isEmpty);
+    expect(find.text('Recent activity'), findsNothing);
+    expect(find.textContaining('Your leads, viewings and listings'), findsOneWidget);
+  });
+
+  testWidgets('Users: search by name, email or phone, and filter by role', (tester) async {
+    await open(tester, as: owner, at: '/team');
+    expect(find.text('Users'), findsWidgets);
+    expect(find.text('Wanjiku Mwangi'), findsWidgets);
+    await tester.enterText(find.byKey(const Key('team-search')), '0722 444');
+    await tester.pumpAndSettle();
+    expect(find.text('otieno@example.com'), findsOneWidget);
+    expect(find.text('wanjiku@example.com'), findsNothing);
+    await tester.enterText(find.byKey(const Key('team-search')), 'MANAGER@');
+    await tester.pumpAndSettle();
+    expect(find.text('manager@example.com'), findsOneWidget);
+    expect(find.text('owner@example.com'), findsNothing);
+    await tester.enterText(find.byKey(const Key('team-search')), 'nobody here');
+    await tester.pumpAndSettle();
+    expect(find.text('Nobody matches "nobody here".'), findsOneWidget);
+    await tester.tap(find.byTooltip('Clear search'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('team-role-agent')));
+    await tester.pumpAndSettle();
+    expect(find.text('owner@example.com'), findsNothing);
+    expect(find.text('wanjiku@example.com'), findsOneWidget);
+  });
+
+  testWidgets('Account: change the name and phone, then the password', (tester) async {
+    await open(tester, as: wanjiku, at: null);
+    await tester.tap(find.byKey(const Key('nav-account')));
+    await tester.pumpAndSettle();
+    expect(location(), '/account');
+    expect(find.text('wanjiku@example.com'), findsOneWidget);
+    expect(tester.widget<TextField>(find.byKey(const Key('account-phone'))).controller!.text, '+254711222333');
+    await tester.enterText(find.byKey(const Key('account-name')), 'Wanjiku M. Mwangi');
+    await tester.enterText(find.byKey(const Key('account-phone')), '0711 999 888');
+    await tester.tap(find.byKey(const Key('account-save')));
+    await tester.pumpAndSettle();
+    expect(find.text('Profile saved.'), findsOneWidget);
+    expect((await container.read(adminRepositoryProvider).me(wanjiku))!.phone, '+254711999888');
+    expect(find.text('Wanjiku M. Mwangi'), findsWidgets, reason: 'the sidebar shows the new name');
+
+    await tester.enterText(find.byKey(const Key('password-current')), 'wrong');
+    await tester.enterText(find.byKey(const Key('password-new')), 'newpassword1');
+    await tester.enterText(find.byKey(const Key('password-again')), 'newpassword2');
+    await tester.tap(find.byKey(const Key('password-change')));
+    await tester.pumpAndSettle();
+    expect(find.text('The two new passwords are not the same.'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('password-again')), 'newpassword1');
+    await tester.tap(find.byKey(const Key('password-change')));
+    await tester.pumpAndSettle();
+    expect(find.text('Your current password is not right.'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('password-current')), 'oldpassword1');
+    await tester.tap(find.byKey(const Key('password-change')));
+    await tester.pumpAndSettle();
+    expect(find.text('Your current password is not right.'), findsNothing);
+    expect(tester.widget<TextField>(find.byKey(const Key('password-new'))).controller!.text, isEmpty, reason: 'cleared once changed');
   });
 }

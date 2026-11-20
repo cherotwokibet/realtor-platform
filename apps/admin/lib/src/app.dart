@@ -4,31 +4,38 @@ import 'package:go_router/go_router.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
-import 'format.dart';
 import 'providers.dart';
+import 'account.dart';
+import 'dashboard.dart';
 import 'reports.dart';
 import 'screens.dart';
 import 'session.dart';
 
-/// One admin section: its route and navigation destination.
+/// One admin section: its route, its place in the sidebar and its screen.
 class _Section {
-  const _Section(this.section, this.label, this.icon, this.screen);
+  const _Section(this.section, this.label, this.icon, this.group, this.screen);
   final AdminSection section;
-  final String label;
+  final String label, group;
   final IconData icon;
   final Widget Function() screen;
   String get path => '/${section.name}';
 }
 
+/// In sidebar order, under their group headings.
 final _sections = [
-  _Section(AdminSection.leads, 'Leads', Icons.inbox_outlined, () => const LeadsScreen()),
-  _Section(AdminSection.viewings, 'Viewings', Icons.event_outlined, () => const ViewingsScreen()),
-  _Section(AdminSection.listings, 'Listings', Icons.home_work_outlined, () => const ListingsScreen()),
-  _Section(AdminSection.reports, 'Reports', Icons.insights_outlined, () => const ReportsScreen()),
-  _Section(AdminSection.team, 'Team', Icons.group_outlined, () => const TeamScreen()),
-  _Section(AdminSection.audit, 'Audit log', Icons.history, () => const AuditScreen()),
-  _Section(AdminSection.privacy, 'Privacy', Icons.privacy_tip_outlined, () => const PrivacyScreen()),
+  _Section(AdminSection.dashboard, 'Dashboard', Icons.space_dashboard_outlined, '', () => const DashboardScreen()),
+  _Section(AdminSection.leads, 'Leads', Icons.inbox_outlined, 'Sales', () => const LeadsScreen()),
+  _Section(AdminSection.viewings, 'Viewings', Icons.event_outlined, 'Sales', () => const ViewingsScreen()),
+  _Section(AdminSection.listings, 'Listings', Icons.home_work_outlined, 'Properties', () => const ListingsScreen()),
+  _Section(AdminSection.team, 'Users', Icons.group_outlined, 'People', () => const TeamScreen()),
+  _Section(AdminSection.reports, 'Reports', Icons.insights_outlined, 'Insights', () => const ReportsScreen()),
+  _Section(AdminSection.audit, 'Audit log', Icons.history, 'Insights', () => const AuditScreen()),
+  _Section(AdminSection.privacy, 'Privacy', Icons.privacy_tip_outlined, 'Settings', () => const PrivacyScreen()),
+  _Section(AdminSection.account, 'Account', Icons.manage_accounts_outlined, 'Settings', () => const AccountScreen()),
 ];
+
+/// Where staff land: the Dashboard.
+final homePath = '/${AdminSection.dashboard.name}';
 
 const signInPath = '/sign-in';
 
@@ -39,7 +46,7 @@ String? adminRedirect(Session session, String path) {
   if (session is Starting) return null;
   if (session is! SignedIn) return path == signInPath ? null : signInPath;
   final who = session.user;
-  final home = '/${AdminSection.leads.name}';
+  final home = homePath;
   if (path == signInPath || path == '/') return home;
   for (final s in AdminSection.values) {
     if (path == '/${s.name}' || path.startsWith('/${s.name}/')) return who.canOpen(s) ? null : home;
@@ -52,7 +59,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.listen(sessionProvider, (_, __) => refresh.value++);
   ref.onDispose(refresh.dispose);
   return GoRouter(
-    initialLocation: '/${AdminSection.leads.name}',
+    initialLocation: homePath,
     refreshListenable: refresh,
     redirect: (context, state) => adminRedirect(ref.read(sessionProvider), state.uri.path),
     routes: [
@@ -83,72 +90,188 @@ class AdminApp extends ConsumerWidget {
   }
 }
 
-/// App bar with the signed-in user, and the sections their role opens: a
-/// side rail on desktop, a bottom bar on narrow windows.
+/// The admin's frame: a sidebar of the sections the role opens, grouped,
+/// with the signed-in person at its foot (desktop); on narrow windows a top
+/// bar whose menu opens the same sidebar.
 class _AdminShell extends ConsumerWidget {
   const _AdminShell({required this.location, required this.child});
   final String location;
   final Widget child;
 
-  static const wideFrom = 840.0;
+  static const wideFrom = 1000.0, sidebarWidth = 256.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final who = ref.watch(staffProvider);
     // Starting, or signed out with the router about to move to sign in.
     if (who == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    final tenant = ref.watch(tenantProvider);
     final sections = [
       for (final s in _sections)
         if (who.canOpen(s.section)) s
     ];
-    final i = sections.indexWhere((s) => location.startsWith(s.path));
-    final selected = i < 0 ? 0 : i;
-    void go(int i) => context.go(sections[i].path);
-
+    final current = sections.where((s) => location.startsWith(s.path)).firstOrNull ?? sections.first;
     final wide = MediaQuery.sizeOf(context).width >= wideFrom;
-    final appBar = AppBar(
-      title: Text('${tenant.name} admin'),
-      actions: [
-        if (wide)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Center(child: Text('${who.name} · ${label(who.role.name)}')),
-          ),
-        IconButton(
-          tooltip: 'Sign out (${who.name})',
-          icon: const Icon(Icons.logout),
-          onPressed: () => ref.read(adminAuthProvider).signOut(),
-        ),
-      ],
-    );
+    final b = context.brand;
 
     if (!wide) {
       return Scaffold(
-        appBar: appBar,
-        body: child,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: selected,
-          onDestinationSelected: go,
-          destinations: [for (final s in sections) NavigationDestination(icon: Icon(s.icon), label: s.label)],
+        backgroundColor: b.surfaceAlt,
+        appBar: AppBar(
+          title: Text(current.label),
+          actions: [
+            IconButton(
+              tooltip: 'Sign out (${who.name})',
+              icon: const Icon(Icons.logout),
+              onPressed: () => ref.read(adminAuthProvider).signOut(),
+            ),
+          ],
         ),
+        drawer: Drawer(
+          width: sidebarWidth + 24,
+          child: _Sidebar(sections: sections, current: current, who: who, inDrawer: true),
+        ),
+        body: child,
       );
     }
     return Scaffold(
-      appBar: appBar,
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: selected,
-            onDestinationSelected: go,
-            labelType: NavigationRailLabelType.all,
-            destinations: [
-              for (final s in sections) NavigationRailDestination(icon: Icon(s.icon), label: Text(s.label))
-            ],
+      backgroundColor: b.surfaceAlt,
+      body: Row(children: [
+        SizedBox(width: sidebarWidth, child: _Sidebar(sections: sections, current: current, who: who)),
+        VerticalDivider(width: 1, color: Theme.of(context).colorScheme.outlineVariant),
+        Expanded(child: child),
+      ]),
+    );
+  }
+}
+
+class _Sidebar extends ConsumerWidget {
+  const _Sidebar({required this.sections, required this.current, required this.who, this.inDrawer = false});
+  final List<_Section> sections;
+  final _Section current;
+  final StaffUser who;
+  final bool inDrawer;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final b = context.brand;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final tenant = ref.watch(tenantProvider);
+    void go(_Section s) {
+      if (inDrawer) Navigator.pop(context);
+      context.go(s.path);
+    }
+
+    Widget item(_Section s) {
+      final on = s == current;
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
+        child: Material(
+          color: on ? b.primarySoft : Colors.transparent,
+          borderRadius: BorderRadius.circular(b.radiusMd),
+          child: InkWell(
+            key: Key('nav-${s.section.name}'),
+            borderRadius: BorderRadius.circular(b.radiusMd),
+            onTap: () => go(s),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(children: [
+                Icon(s.icon, size: 20, color: on ? scheme.primary : b.textMuted),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(s.label,
+                      style: text.bodyMedium?.copyWith(color: on ? scheme.primary : scheme.onSurface, fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
+                ),
+              ]),
+            ),
           ),
-          const VerticalDivider(width: 1),
-          Expanded(child: child),
-        ],
+        ),
+      );
+    }
+
+    final groups = <String, List<_Section>>{};
+    for (final s in sections.where((s) => s.section != AdminSection.account)) {
+      (groups[s.group] ??= []).add(s);
+    }
+    final initials = who.name.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(2).map((w) => w[0].toUpperCase()).join();
+    return Material(
+      color: scheme.surface,
+      child: SafeArea(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
+            child: Row(children: [
+              Flexible(
+                child: Image.asset(b.logoAsset,
+                    height: 36,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.centerLeft,
+                    semanticLabel: tenant.name,
+                    errorBuilder: (_, __, ___) => Text(tenant.name, style: text.titleMedium)),
+              ),
+              const SizedBox(width: 8),
+              DecoratedBox(
+                decoration: BoxDecoration(color: b.primarySoft, borderRadius: BorderRadius.circular(b.radiusSm)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  child: Text('Admin', style: text.labelSmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ]),
+          ),
+          Expanded(
+            child: ListView(padding: const EdgeInsets.only(bottom: 12), children: [
+              for (final e in groups.entries) ...[
+                if (e.key.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 16, 6),
+                    child: Text(e.key.toUpperCase(), style: text.labelSmall?.copyWith(color: b.textMuted, letterSpacing: 0.8, fontWeight: FontWeight.w700)),
+                  ),
+                for (final s in e.value) item(s),
+              ],
+            ]),
+          ),
+          Divider(height: 1, color: scheme.outlineVariant),
+          // The signed-in person: opens Account; signs out beside it.
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(children: [
+              Expanded(
+                child: InkWell(
+                  key: const Key('nav-account'),
+                  borderRadius: BorderRadius.circular(b.radiusMd),
+                  onTap: () => go(sections.firstWhere((s) => s.section == AdminSection.account)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Row(children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: current.section == AdminSection.account ? scheme.primary : b.primarySoft,
+                        foregroundColor: current.section == AdminSection.account ? scheme.onPrimary : scheme.primary,
+                        child: Text(initials,
+                            style: text.labelLarge
+                                ?.copyWith(fontWeight: FontWeight.w700, color: current.section == AdminSection.account ? scheme.onPrimary : scheme.primary)),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(who.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                          Text(roleLabel(who.role), style: text.bodySmall?.copyWith(color: b.textMuted)),
+                        ]),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+              if (!inDrawer)
+                IconButton(
+                  tooltip: 'Sign out (${who.name})',
+                  icon: const Icon(Icons.logout),
+                  onPressed: () => ref.read(adminAuthProvider).signOut(),
+                ),
+            ]),
+          ),
+        ]),
       ),
     );
   }
@@ -225,7 +348,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           ListTile(
             leading: const Icon(Icons.person_outline),
             title: Text(s.name),
-            subtitle: Text(label(s.role.name)),
+            subtitle: Text(roleLabel(s.role)),
             onTap: () => auth.signInAs(s),
           ),
       ];
@@ -274,8 +397,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             if (!_creating)
               TextButton(
                 onPressed: emailOk
-                    ? () => _run(() => auth.sendPasswordReset(email),
-                        notice: 'If $email has an account, a link to set a new password is on its way.')
+                    ? () => _run(() => auth.sendPasswordReset(email), notice: 'If $email has an account, a link to set a new password is on its way.')
                     : null,
                 child: const Text('Forgot password?'),
               ),

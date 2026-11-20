@@ -50,8 +50,17 @@ abstract interface class AdminAuth {
 
   Future<void> signInWithGoogle();
 
-  /// Reads the role again (after an owner changed it).
+  /// Reads the role again (after an owner changed it), and the name.
   Future<void> refresh();
+
+  /// The signed-in account's email, if any.
+  String? get email;
+
+  /// True when the account signs in with a password (not only Google).
+  bool get hasPassword;
+
+  /// Checks [current], then sets [next]. Throws [SignInException] with what to fix.
+  Future<void> changePassword(String current, String next);
 
   Future<void> signOut();
 }
@@ -101,4 +110,22 @@ class DemoAuth implements AdminAuth {
 
   @override
   Future<void> refresh() async {}
+
+  @override
+  String? get email => switch (_session) { SignedIn(:final user) => '${user.uid.replaceFirst('demo-', '')}@example.com', _ => null };
+
+  @override
+  bool get hasPassword => true;
+
+  /// Demo: "wrong" is the wrong current password; anything else works.
+  @override
+  Future<void> changePassword(String current, String next) async {
+    if (current == 'wrong') throw SignInException('Your current password is not right.');
+    if (next.length < 8) throw SignInException('Choose a longer password (at least 8 characters).');
+  }
+
+  /// Demo: the new name shows at once, as a token refresh would show it.
+  void rename(String name) {
+    if (_session case SignedIn(:final user)) _set(SignedIn(StaffUser(uid: user.uid, name: name, role: user.role, agentId: user.agentId)));
+  }
 }

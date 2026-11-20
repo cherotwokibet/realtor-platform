@@ -13,6 +13,7 @@ class FirestoreAdminRepository implements AdminRepository {
   final FirebaseFirestore _db;
   Map<String, String>? _agentNames;
   Map<String, int?> _agentReplies = const {};
+  Map<String, String?> _agentPhones = const {};
 
   @override
   Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25}) async {
@@ -86,15 +87,11 @@ class FirestoreAdminRepository implements AdminRepository {
   }
 
   @override
-  Future<RowPage<ViewingRow>> viewings(StaffUser who,
-      {String? status, required DateTime from, String? after, int limit = 25}) async {
+  Future<RowPage<ViewingRow>> viewings(StaffUser who, {String? status, required DateTime from, String? after, int limit = 25}) async {
     Query<Map<String, Object?>> q = _db.collection('viewings');
     if (who.agentScope != null) q = q.where('agentId', isEqualTo: who.agentScope);
     q = status == null
-        ? q
-            .where('status', whereIn: const ['requested', 'confirmed'])
-            .where('slot', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
-            .orderBy('slot')
+        ? q.where('status', whereIn: const ['requested', 'confirmed']).where('slot', isGreaterThanOrEqualTo: Timestamp.fromDate(from)).orderBy('slot')
         : q.where('status', isEqualTo: status).orderBy('slot', descending: true);
     return _page('viewings', q, after, limit, (docs) async {
       final names = await _agents();
@@ -103,8 +100,7 @@ class FirestoreAdminRepository implements AdminRepository {
     });
   }
 
-  ViewingRow _viewing(_Doc d, Map<String, String> names, Map<String, String> titles) =>
-      ViewingRow(
+  ViewingRow _viewing(_Doc d, Map<String, String> names, Map<String, String> titles) => ViewingRow(
         id: d.id,
         listingId: _str(d, 'listingId'),
         listingTitle: titles[_str(d, 'listingId')] ?? _str(d, 'listingId'),
@@ -146,6 +142,55 @@ class FirestoreAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<StaffMember?> me(StaffUser who) async {
+    final d = await _db.collection('staff').doc(who.uid).get();
+    final data = d.data();
+    if (data == null) return null;
+    return StaffMember(
+      uid: d.id,
+      role: who.role,
+      email: data['email'] as String?,
+      name: data['name'] as String?,
+      agentId: data['agentId'] as String?,
+      phone: data['phone'] as String?,
+    );
+  }
+
+  @override
+  Future<DashboardData> dashboard(StaffUser who, DateTime now) async {
+    Query<Map<String, Object?>> scoped(String c) {
+      final q = _db.collection(c);
+      return who.agentScope == null ? q : q.where('agentId', isEqualTo: who.agentScope);
+    }
+
+    Future<int> count(Query<Map<String, Object?>> q) async => (await q.count().get()).count ?? 0;
+    final today = DateTime(now.year, now.month, now.day);
+    final since = today.subtract(const Duration(days: dashboardDays - 1));
+    final (newLeads, recent, open, live, pending, latest, activity) = await (
+      count(scoped('leads').where('stage', isEqualTo: 'new')),
+      scoped('leads').where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since)).orderBy('createdAt', descending: true).limit(1000).get(),
+      viewings(who, from: today, limit: 100),
+      count(scoped('listings').where('status', isEqualTo: 'live')),
+      count(scoped('listings').where('status', isEqualTo: 'pending')),
+      leads(who, stage: 'new', limit: 5),
+      who.canOpen(AdminSection.audit) ? audit(who, limit: 6) : Future.value(const RowPage<AuditRow>([])),
+    ).wait;
+    final tomorrow = today.add(const Duration(days: 1)), week = today.add(const Duration(days: 7));
+    final upcoming = open.rows.where((v) => !v.slot.isBefore(now.subtract(const Duration(hours: 1)))).toList();
+    return DashboardData(
+      newLeads: newLeads,
+      leadsByDay: leadsPerDay([for (final d in recent.docs) _date(d.data()['createdAt'])], now),
+      viewingsToday: open.rows.where((v) => v.slot.isBefore(tomorrow)).length,
+      viewingsWeek: open.rows.where((v) => v.slot.isBefore(week)).length,
+      liveListings: live,
+      pendingListings: pending,
+      upcoming: upcoming.take(5).toList(),
+      latestLeads: latest.rows,
+      activity: activity.rows,
+    );
+  }
+
+  @override
   Future<List<StaffMember>> team(StaffUser who) async {
     if (!who.canOpen(AdminSection.team)) throw StaffAccessException('the team is for owners and managers');
     final names = await _agents();
@@ -161,14 +206,14 @@ class FirestoreAdminRepository implements AdminRepository {
             agentId: d.data()['agentId'] as String?,
             agentName: names[d.data()['agentId']],
             agentReplyMins: _agentReplies[d.data()['agentId']],
+            phone: d.data()['phone'] as String? ?? _agentPhones[d.data()['agentId']],
           ),
     ];
   }
 
   @override
-  Future<List<AgentOption>> agents(StaffUser who) async => [
-        for (final e in (await _agents()).entries) AgentOption(e.key, e.value)
-      ]..sort((a, b) => a.name.compareTo(b.name));
+  Future<List<AgentOption>> agents(StaffUser who) async =>
+      [for (final e in (await _agents()).entries) AgentOption(e.key, e.value)]..sort((a, b) => a.name.compareTo(b.name));
 
   @override
   Future<ListingDraft?> listingDraft(StaffUser who, String listingId) async {
@@ -236,8 +281,7 @@ class FirestoreAdminRepository implements AdminRepository {
     if (!who.isManager) throw StaffAccessException('projects are for owners and managers');
     final snap = await _db.collection('projects').get();
     return [
-      for (final d in snap.docs)
-        OffPlanProject.fromDoc(d.id, d.data(), updatedAt: d.data()['updatedAt'] == null ? null : _date(d.data()['updatedAt'])),
+      for (final d in snap.docs) OffPlanProject.fromDoc(d.id, d.data(), updatedAt: d.data()['updatedAt'] == null ? null : _date(d.data()['updatedAt'])),
     ]..sort((a, b) => a.name.compareTo(b.name));
   }
 
@@ -318,6 +362,7 @@ class FirestoreAdminRepository implements AdminRepository {
     if (_agentNames == null) {
       final docs = (await _db.collection('agents').get()).docs;
       _agentReplies = {for (final d in docs) d.id: (d.data()['responseMins'] as num?)?.toInt()};
+      _agentPhones = {for (final d in docs) d.id: d.data()['phone'] as String?};
       _agentNames = {for (final d in docs) d.id: (d.data()['name'] as String?) ?? d.id};
     }
     return _agentNames!;

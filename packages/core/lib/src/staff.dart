@@ -3,7 +3,10 @@ enum StaffRole { owner, manager, agent }
 
 /// The admin's parts. Which a role may open is decided here, once, and the
 /// Firestore rules enforce the same split on the data.
-enum AdminSection { leads, viewings, listings, reports, team, audit, privacy }
+enum AdminSection { dashboard, leads, viewings, listings, reports, team, audit, privacy, account }
+
+/// How a role reads in the admin: owners are the Admins.
+String roleLabel(StaffRole r) => switch (r) { StaffRole.owner => 'Admin', StaffRole.manager => 'Manager', StaffRole.agent => 'Agent' };
 
 /// A signed-in staff member.
 class StaffUser {
@@ -21,7 +24,7 @@ class StaffUser {
   String? get agentScope => isManager ? null : agentId;
 
   bool canOpen(AdminSection s) => switch (s) {
-        AdminSection.leads || AdminSection.viewings || AdminSection.listings => true,
+        AdminSection.dashboard || AdminSection.leads || AdminSection.viewings || AdminSection.listings || AdminSection.account => true,
         AdminSection.reports || AdminSection.team || AdminSection.audit || AdminSection.privacy => isManager,
       };
 

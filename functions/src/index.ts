@@ -2,7 +2,7 @@
  * Cloud Functions entry point. Rule D7: anything about money, approval,
  * verification or commissions happens here, never in a client.
  *
- * Callables: createLead, logContactTap, bookViewing, submitReview, logRecommendation (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, setHotListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, submitListingReview, savePage, saveProject, setStaffRole, dataRequest, saveMyProfile, deleteMyAccount.
+ * Callables: createLead, logContactTap, bookViewing, submitReview, logRecommendation (App Check, D16; share* twins for the share pages), openSlots, updateViewingStatus, rescheduleViewing, addAgentBlock, removeAgentBlock, updateLeadStage, submitListing, moderateListing, confirmListing, featureListing, setHotListing, importListings, saveAgent, monthlyReport, saveArea, moderateReview, submitListingReview, savePage, saveProject, setStaffRole, saveStaffProfile, dataRequest, saveMyProfile, deleteMyAccount.
  * Scheduled, every 5 minutes: savedSearchAlerts (D18, inbox + push). Nightly: areaStats (P3-s05), purgeExpiredLeads (D12 retention), expireListings (P6-s02 verification), agentResponseTimes (P5-s03).
  *
  * Planned (see tracker):
@@ -114,6 +114,7 @@ export const submitListingReview = onCall((req) => reviews.submitListingReview(g
 export const saveProject = onCall((req) => projects.saveProject(getFirestore(), callerFrom(req.auth), req.data));
 export const savePage = onCall((req) => pages.savePage(getFirestore(), callerFrom(req.auth), req.data));
 export const setStaffRole = onCall((req) => staff.setStaffRole(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
+export const saveStaffProfile = onCall((req) => staff.saveStaffProfile(getFirestore(), getAuth(), callerFrom(req.auth), req.data));
 export const dataRequest = onCall((req) => runDataRequest(getFirestore(), callerFrom(req.auth), req.data));
 
 // The customer's own profile and account (My account > Edit Profile).
