@@ -721,6 +721,22 @@ void main() {
     expect((draft!.lat, draft.lng), (-1.2921, 36.7856));
   });
 
+  testWidgets('"In Kiswahili" drafts the same facts in Swahili (P7-s02)', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New listing'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Rent a month (KES)'), '68,000');
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'Area'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Kilimani').last);
+    await tester.pumpAndSettle();
+    await tapVisible(tester, find.text('In Kiswahili'));
+    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Title')).controller!.text, 'Apartment ya vyumba 1 vya kulala ya kupangisha katika Kilimani');
+    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Description')).controller!.text, contains('Kodi ni '));
+  });
+
   testWidgets('"Suggest title & description" drafts both from the facts; asks before replacing (P7-s02)', (tester) async {
     await open(tester, as: wanjiku);
     await tester.tap(find.text('Listings'));

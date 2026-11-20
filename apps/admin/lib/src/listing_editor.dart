@@ -108,10 +108,10 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
 
   /// Copy assistant (P7-s02): a title and description from the facts in the
   /// form, for the agent to edit. Asks before replacing text already there.
-  Future<void> _suggest() async {
+  Future<void> _suggest([String lang = 'en']) async {
     final draft = _current;
     final area = _areas.where((a) => a.slug == draft.area).firstOrNull?.name ?? '';
-    final copy = suggestListingCopy(draft, areaName: area);
+    final copy = suggestListingCopy(draft, areaName: area, lang: lang);
     final hasText = _title.text.trim().isNotEmpty || _description.text.trim().isNotEmpty;
     if (hasText) {
       final ok = await showDialog<bool>(
@@ -186,14 +186,14 @@ class _ListingEditorDialogState extends ConsumerState<ListingEditorDialog> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
                   const SizedBox(height: 4),
                   text(_title, 'Title', 'title', hint: '2 bedroom apartment, Kilimani'),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
+                  Wrap(children: [
+                    TextButton.icon(
                       onPressed: _suggest,
                       icon: const Icon(Icons.auto_awesome_outlined),
                       label: const Text('Suggest title & description'),
                     ),
-                  ),
+                    TextButton(onPressed: () => _suggest('sw'), child: const Text('In Kiswahili')),
+                  ]),
                   pair(
                     pick('For', d.purpose, {for (final p in Purpose.values) p.value: label(p.value)},
                         (v) => setState(() => _draft = d.copyWith(purpose: v)), error: problems['purpose']),
