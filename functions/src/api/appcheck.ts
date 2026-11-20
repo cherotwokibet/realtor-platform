@@ -14,7 +14,7 @@ import type { Request, Response } from 'express';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 
-export const PUBLIC_CALLABLES = ['createLead', 'bookViewing', 'logContactTap', 'submitReview', 'logRecommendation'] as const;
+export const PUBLIC_CALLABLES = ['createLead', 'bookViewing', 'logContactTap', 'submitReview', 'logRecommendation', 'submitFeedback'] as const;
 export type PublicCallable = (typeof PUBLIC_CALLABLES)[number];
 
 /** Which public callables enforce App Check, from ENFORCE_APP_CHECK. */

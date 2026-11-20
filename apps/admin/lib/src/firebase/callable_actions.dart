@@ -137,6 +137,16 @@ class CallableAdminActions implements AdminActions {
   Future<void> saveMyProfile(StaffUser who, {required String name, String? phone}) => _run('saveStaffProfile', {'name': name.trim(), 'phone': phone});
 
   @override
+  Future<void> updateFeedback(StaffUser who, {required String feedbackId, String? status, String? note}) =>
+      _run('updateFeedback', {'feedbackId': feedbackId, if (status != null) 'status': status, if (note != null && note.trim().isNotEmpty) 'note': note.trim()});
+
+  @override
+  Future<String> saveAd(StaffUser who, AdRow ad) async => ((await _run('saveAd', ad.toCallable())) as Map<Object?, Object?>)['adId'] as String;
+
+  @override
+  Future<void> deleteAd(StaffUser who, String adId) => _run('deleteAd', {'adId': adId});
+
+  @override
   Future<DataRequestResult> dataRequest(StaffUser who, {required DataRequestKind kind, String? phone, String? email}) async {
     final r = await _run('dataRequest', {
       'kind': kind.name,
@@ -150,6 +160,7 @@ class CallableAdminActions implements AdminActions {
         leads: (data['leads'] as List).length,
         viewings: (data['viewings'] as List).length,
         reviews: (data['reviews'] as List?)?.length ?? 0,
+        feedback: (data['feedback'] as List?)?.length ?? 0,
         exportJson: const JsonEncoder.withIndent('  ').convert(data),
       );
     }
@@ -159,6 +170,7 @@ class CallableAdminActions implements AdminActions {
       leads: deleted['leads'] as int,
       viewings: deleted['viewings'] as int,
       reviews: (deleted['reviews'] as num?)?.toInt() ?? 0,
+      feedback: (deleted['feedback'] as num?)?.toInt() ?? 0,
     );
   }
 

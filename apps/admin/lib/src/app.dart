@@ -6,6 +6,10 @@ import 'package:realtor_ui/realtor_ui.dart';
 
 import 'providers.dart';
 import 'account.dart';
+import 'ads.dart';
+import 'payments.dart';
+import 'site_pages.dart';
+import 'support.dart';
 import 'area_guides.dart';
 import 'dashboard.dart';
 import 'edit_requests.dart';
@@ -29,13 +33,17 @@ final _sections = [
   _Section(AdminSection.dashboard, 'Dashboard', Icons.space_dashboard_outlined, '', () => const DashboardScreen()),
   _Section(AdminSection.leads, 'Leads', Icons.inbox_outlined, 'Sales', () => const LeadsScreen()),
   _Section(AdminSection.viewings, 'Viewings', Icons.event_outlined, 'Sales', () => const ViewingsScreen()),
+  _Section(AdminSection.payments, 'Bookings & payments', Icons.payments_outlined, 'Sales', () => const PaymentsScreen()),
   _Section(AdminSection.listings, 'Listings', Icons.home_work_outlined, 'Properties', () => const ListingsScreen()),
   _Section(AdminSection.edits, 'Edit requests', Icons.rule_outlined, 'Properties', () => const EditRequestsScreen()),
   _Section(AdminSection.homePage, 'Home page', Icons.web_outlined, 'Properties', () => const HomePlacementsScreen()),
   _Section(AdminSection.areas, 'Areas', Icons.map_outlined, 'Properties', () => const AreasScreen()),
+  _Section(AdminSection.ads, 'Ads', Icons.campaign_outlined, 'Marketing', () => const AdsScreen()),
   _Section(AdminSection.team, 'Users', Icons.group_outlined, 'People', () => const TeamScreen()),
+  _Section(AdminSection.support, 'Support', Icons.support_agent_outlined, 'People', () => const SupportScreen()),
   _Section(AdminSection.reports, 'Reports', Icons.insights_outlined, 'Insights', () => const ReportsScreen()),
   _Section(AdminSection.audit, 'Audit log', Icons.history, 'Insights', () => const AuditScreen()),
+  _Section(AdminSection.content, 'Content', Icons.article_outlined, 'Settings', () => const ContentScreen()),
   _Section(AdminSection.privacy, 'Privacy', Icons.privacy_tip_outlined, 'Settings', () => const PrivacyScreen()),
   _Section(AdminSection.account, 'Account', Icons.manage_accounts_outlined, 'Settings', () => const AccountScreen()),
 ];

@@ -63,3 +63,11 @@ test('variants are public; nobody writes media/ or brand/', async () => {
   await assertFails(uploadBytes(ref(manager(), 'brand/watermark.png'), jpeg, { contentType: 'image/png' }));
   await assertFails(uploadBytes(ref(manager(), 'anything/else.jpg'), jpeg, img));
 });
+
+test('advert photos: managers upload photos under ads/; agents and visitors cannot; anyone reads', async () => {
+  await assertSucceeds(uploadBytes(ref(manager(), 'ads/ad-1/photo.jpg'), jpeg, img));
+  await assertFails(uploadBytes(ref(manager(), 'ads/ad-1/clip.mp4'), jpeg, { contentType: 'video/mp4' }));
+  await assertFails(uploadBytes(ref(agent('agent-wanjiku'), 'ads/ad-1/photo.jpg'), jpeg, img));
+  await assertFails(uploadBytes(ref(visitor(), 'ads/ad-1/photo.jpg'), jpeg, img));
+  await assertSucceeds(getBytes(ref(visitor(), 'ads/ad-1/photo.jpg')));
+});

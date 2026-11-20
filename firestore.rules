@@ -28,6 +28,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Help & feedback messages (personal data): managers only; submitFeedback writes.
+    match /feedback/{id} {
+      allow read: if isManager();
+      allow write: if false;
+    }
+
+    // Adverts: the site reads those switched on; managers read all; saveAd writes.
+    match /ads/{id} {
+      allow read: if resource.data.active == true || isManager();
+      allow write: if false;
+    }
+
     match /agents/{id} {
       allow read: if resource.data.active == true || isStaff();
       allow write: if false;

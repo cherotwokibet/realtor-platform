@@ -27,6 +27,8 @@ import { mediaBucketName } from './media/bucket';
 import { AGENT_PHOTO_PATH, handleAgentPhoto, handleListingUpload, refuseVideo, UPLOAD_PATH, VIDEO_EXT } from './media/upload';
 import { startTranscode } from './media/transcode';
 import { callerFrom } from './api/auth';
+import * as ads from './api/ads';
+import * as support from './api/support';
 import * as leads from './api/leads';
 import * as listings from './api/listings';
 import * as staff from './api/staff';
@@ -70,6 +72,7 @@ const publicCalls: Record<PublicCallable, (data: unknown) => Promise<unknown>> =
   bookViewing: (data) => viewings.bookViewing(getFirestore(), data),
   submitReview: (data) => reviews.submitReview(getFirestore(), data),
   logRecommendation: (data) => recommendations.logRecommendation(getFirestore(), data),
+  submitFeedback: (data) => support.submitFeedback(getFirestore(), data),
 };
 const enforce = enforced(process.env);
 const publicCallable = (fn: PublicCallable) =>
@@ -92,6 +95,12 @@ export const submitReview = publicCallable('submitReview');
 export const shareSubmitReview = twin('submitReview');
 // Similar-homes click-through (P7-s04): counts only.
 export const logRecommendation = publicCallable('logRecommendation');
+// Help & feedback from the site (support inbox).
+export const submitFeedback = publicCallable('submitFeedback');
+export const shareSubmitFeedback = twin('submitFeedback');
+export const updateFeedback = onCall((req) => support.updateFeedback(getFirestore(), callerFrom(req.auth), req.data));
+export const saveAd = onCall((req) => ads.saveAd(getFirestore(), callerFrom(req.auth), req.data));
+export const deleteAd = onCall((req) => ads.deleteAd(getFirestore(), callerFrom(req.auth), req.data));
 export const shareLogRecommendation = twin('logRecommendation');
 // Public, read-only: which times a listing's agent can still take on a day (P4-s04).
 export const openSlots = onCall((req) => viewings.openSlots(getFirestore(), req.data));

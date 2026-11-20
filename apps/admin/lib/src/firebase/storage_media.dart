@@ -15,7 +15,10 @@ class StorageListingMedia implements ListingMedia {
   @override
   Future<ListingMediaState> state(StaffUser who, String listingId) async {
     final d = (await _db.collection('listings').doc(listingId).get()).data() ?? const {};
-    final media = [for (final m in (d['media'] as List<Object?>?) ?? const []) if (m is Map) m];
+    final media = [
+      for (final m in (d['media'] as List<Object?>?) ?? const [])
+        if (m is Map) m
+    ];
     return ListingMediaState(
       thumbs: [
         for (final m in media)
@@ -41,6 +44,13 @@ class StorageListingMedia implements ListingMedia {
   }
 
   @override
-  String? url(String path) =>
-      'https://firebasestorage.googleapis.com/v0/b/${_storage.bucket}/o/${Uri.encodeComponent(path)}?alt=media';
+  Future<String> uploadAdPhoto(StaffUser who, String adId, PickedFile file) async {
+    if (!photoTypes.contains(file.type) || file.bytes.length >= maxPhotoBytes) throw ArgumentError('${file.name}: a photo under 20 MB');
+    final path = adPhotoPath(adId, file.name, _clock());
+    await _storage.ref(path).putData(file.bytes, SettableMetadata(contentType: file.type));
+    return path;
+  }
+
+  @override
+  String? url(String path) => 'https://firebasestorage.googleapis.com/v0/b/${_storage.bucket}/o/${Uri.encodeComponent(path)}?alt=media';
 }

@@ -308,6 +308,156 @@ class SitePageRow {
   final DateTime? updatedAt;
 }
 
+/// An M-Pesa payment (payments/{id}), managers only: a viewing fee, a
+/// deposit or a featured-ad fee, with its STK Push outcome.
+class PaymentRow {
+  const PaymentRow({
+    required this.id,
+    required this.purpose,
+    required this.amountKES,
+    required this.phone,
+    required this.status,
+    required this.createdAt,
+    this.listingId,
+    this.listingTitle,
+    this.viewingId,
+    this.receipt,
+    this.reason,
+  });
+  final String id, purpose, phone, status;
+  final int amountKES;
+  final DateTime createdAt;
+  final String? listingId, listingTitle, viewingId, receipt, reason;
+}
+
+const paymentStatuses = ['pending', 'paid', 'failed', 'cancelled'];
+const paymentPurposes = ['viewing-fee', 'deposit', 'featured-ad'];
+
+/// A Help & feedback message (feedback/{id}), managers only.
+class FeedbackRow {
+  const FeedbackRow({
+    required this.id,
+    required this.kind,
+    required this.message,
+    required this.status,
+    required this.createdAt,
+    this.name,
+    this.phone,
+    this.email,
+    this.page,
+    this.notes = const [],
+  });
+  final String id, kind, message, status;
+  final DateTime createdAt;
+  final String? name, phone, email, page;
+
+  /// What staff noted (what was done, the reply sent), oldest first.
+  final List<({String text, String? by, DateTime at})> notes;
+}
+
+const feedbackKinds = ['question', 'problem', 'feedback', 'complaint'];
+const feedbackStatuses = ['new', 'open', 'resolved'];
+
+/// An advert on the site (ads/{id}): words, a photo, where a tap goes,
+/// where it shows (home, results, both) and when.
+class AdRow {
+  const AdRow({
+    this.id,
+    this.title = '',
+    this.text = '',
+    this.advertiser = '',
+    this.linkUrl,
+    this.image,
+    this.placement = 'both',
+    this.active = true,
+    this.startsOn,
+    this.endsOn,
+    this.updatedAt,
+  });
+
+  /// Null for a new ad.
+  final String? id;
+  final String title, text, advertiser, placement;
+
+  /// https only; null: Enquire now opens the realtor's WhatsApp.
+  final String? linkUrl;
+
+  /// A Storage path under ads/(id)/.
+  final String? image;
+  final bool active;
+
+  /// Days, YYYY-MM-DD; null: no limit.
+  final String? startsOn, endsOn;
+  final DateTime? updatedAt;
+
+  static const placements = ['home', 'results', 'both'];
+
+  factory AdRow.fromDoc(String id, Map<String, Object?> d) => AdRow(
+        id: id,
+        title: d['title'] as String? ?? '',
+        text: d['text'] as String? ?? '',
+        advertiser: d['advertiser'] as String? ?? '',
+        linkUrl: d['linkUrl'] as String?,
+        image: d['image'] as String?,
+        placement: placements.contains(d['placement']) ? d['placement']! as String : 'both',
+        active: d['active'] == true,
+        startsOn: d['startsOn'] as String?,
+        endsOn: d['endsOn'] as String?,
+      );
+
+  /// Running on [day] (local): switched on and within its dates.
+  bool runningOn(DateTime day) {
+    final d = '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+    return active && (startsOn == null || startsOn!.compareTo(d) <= 0) && (endsOn == null || endsOn!.compareTo(d) >= 0);
+  }
+
+  /// Running, scheduled, ended or paused, as the admin lists it.
+  String stateOn(DateTime day) {
+    if (!active) return 'paused';
+    if (runningOn(day)) return 'running';
+    final d = '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+    return startsOn != null && startsOn!.compareTo(d) > 0 ? 'scheduled' : 'ended';
+  }
+
+  bool showsOn(String where) => placement == 'both' || placement == where;
+
+  /// What is wrong, by field, as `saveAd` would refuse it.
+  Map<String, String> problems() => {
+        if (title.trim().length < 2 || title.trim().length > 80) 'title': 'Use 2 to 80 characters.',
+        if (text.trim().length > 200) 'text': 'Under 200 characters.',
+        if (advertiser.trim().length > 80) 'advertiser': 'Under 80 characters.',
+        if (linkUrl != null && !(Uri.tryParse(linkUrl!)?.isScheme('https') ?? false)) 'linkUrl': 'A full https:// address, or leave it empty.',
+        if (startsOn != null && endsOn != null && startsOn!.compareTo(endsOn!) > 0) 'endsOn': 'It ends before it starts.',
+      };
+
+  Map<String, Object?> toCallable() => {
+        if (id != null) 'adId': id,
+        'title': title.trim(),
+        'text': text.trim(),
+        'advertiser': advertiser.trim(),
+        if (linkUrl != null && linkUrl!.trim().isNotEmpty) 'linkUrl': linkUrl!.trim(),
+        if (image != null) 'image': image,
+        'placement': placement,
+        'active': active,
+        if (startsOn != null) 'startsOn': startsOn,
+        if (endsOn != null) 'endsOn': endsOn,
+      };
+
+  AdRow copyWith({String? id, String? image}) => AdRow(
+        id: id ?? this.id,
+        title: title,
+        text: text,
+        advertiser: advertiser,
+        linkUrl: linkUrl,
+        image: image ?? this.image,
+        placement: placement,
+        active: active,
+        startsOn: startsOn,
+        endsOn: endsOn,
+        updatedAt: updatedAt,
+      );
+}
+
 /// The pages the share site can show, in footer order.
 const sitePageSlugs = ['about', 'privacy', 'terms', 'faq', 'contact'];
 
@@ -333,6 +483,15 @@ class AgentOption {
 /// returns only what their role covers: agents get their own leads and
 /// listings, and no audit log. Changes go through the Functions (D7).
 abstract interface class AdminRepository {
+  /// M-Pesa payments, newest first, optionally one [status]. Managers only.
+  Future<RowPage<PaymentRow>> payments(StaffUser who, {String? status, String? after, int limit = 25});
+
+  /// Help & feedback messages, newest first, optionally one [status]. Managers only.
+  Future<List<FeedbackRow>> feedback(StaffUser who, {String? status});
+
+  /// Every advert, newest first. Managers only.
+  Future<List<AdRow>> ads(StaffUser who);
+
   /// [who]'s own staff record (Account), or null before they have one.
   Future<StaffMember?> me(StaffUser who);
 
