@@ -380,26 +380,43 @@ class _FiltersSheetState extends ConsumerState<FiltersSheet> {
             children: sections,
           ),
         ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(pad, b.spacing.sm, pad, pad),
-          child: Row(children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(foregroundColor: scheme.primary, side: BorderSide(color: scheme.primary)),
+        // The foot, as on the big portals' apps: a thin line, Reset as words
+        // with its icon on the left, and one wide button that shows the homes.
+        DecoratedBox(
+          decoration: BoxDecoration(border: Border(top: BorderSide(color: scheme.outlineVariant))),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(pad - b.spacing.sm, b.spacing.md, pad, pad),
+            child: Row(children: [
+              TextButton.icon(
+                key: const Key('filters-reset'),
+                style: TextButton.styleFrom(
+                  foregroundColor: scheme.primary,
+                  minimumSize: const Size(0, 52),
+                  padding: EdgeInsets.symmetric(horizontal: b.spacing.sm),
+                  textStyle: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
                 onPressed: _reset,
-                child: Text(_section == FilterSection.all ? 'Reset all filters' : 'Reset'),
+                icon: const Icon(Icons.restart_alt, size: 22),
+                label: Text(_section == FilterSection.all ? 'Reset all' : 'Reset', maxLines: 1, softWrap: false),
               ),
-            ),
-            SizedBox(width: b.spacing.md),
-            Expanded(
-              flex: _section == FilterSection.all ? 2 : 1,
-              child: FilledButton(
-                key: const Key('filters-done'),
-                onPressed: () => Navigator.pop(context, _result()),
-                child: Text(found == null ? 'Done' : 'See $found ${found == 1 ? 'home' : 'homes'}'),
+              SizedBox(width: b.spacing.md),
+              Expanded(
+                child: FilledButton(
+                  key: const Key('filters-done'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusMd)),
+                    textStyle: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  onPressed: () => Navigator.pop(context, _result()),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    if (found != null) ...[const Icon(Icons.search, size: 20), SizedBox(width: b.spacing.sm)],
+                    Flexible(child: Text(found == null ? 'Done' : 'See $found ${found == 1 ? 'home' : 'homes'}', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  ]),
+                ),
               ),
-            ),
-          ]),
+            ]),
+          ),
         ),
       ]),
     );

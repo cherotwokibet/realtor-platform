@@ -362,6 +362,12 @@ void main() {
       expect(find.descendant(of: sheet, matching: find.text(label)), findsOneWidget, reason: label);
     }
     expect(find.text('See 3 homes'), findsOneWidget);
+    // The foot: Reset all on one line beside the wide button, the same height.
+    final reset = tester.getRect(find.byKey(const Key('filters-reset'))), done = tester.getRect(find.byKey(const Key('filters-done')));
+    expect(reset.height, done.height);
+    expect(reset.center.dy, done.center.dy);
+    expect(done.width, greaterThan(reset.width));
+    expect(find.text('Reset all'), findsOneWidget);
     await tester.tap(find.descendant(of: sheet, matching: find.text('Floor plans')));
     await tester.pumpAndSettle();
     expect(find.text('See 1 home'), findsOneWidget);
