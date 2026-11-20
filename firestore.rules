@@ -131,14 +131,21 @@ service cloud.firestore {
     match /savedSearches/{id} {
       // The shape functions/src/model/schema.ts expects, with bounded sizes:
       // the saved search sweep reads these, so junk must not get in.
+      // A drawn area, as the search link writes it: 3 to 20 corners
+      // "lat,lng" joined by "~", each to at most 6 decimal places.
+      function validArea(p) {
+        return p is string && p.size() <= 600
+          && p.matches('^(-?[0-9]{1,3}([.][0-9]{1,6})?,-?[0-9]{1,3}([.][0-9]{1,6})?~){2,19}-?[0-9]{1,3}([.][0-9]{1,6})?,-?[0-9]{1,3}([.][0-9]{1,6})?$');
+      }
       function validFilters(f) {
         return f is map
-          && f.keys().hasOnly(['purpose', 'types', 'areas', 'minBeds', 'maxPriceKES'])
+          && f.keys().hasOnly(['purpose', 'types', 'areas', 'minBeds', 'maxPriceKES', 'poly'])
           && f.purpose in ['rent', 'sale', 'short-stay']
           && (!('types' in f) || (f.types is list && f.types.size() <= 12))
           && (!('areas' in f) || (f.areas is list && f.areas.size() <= 20))
           && (!('minBeds' in f) || (f.minBeds is int && f.minBeds >= 0 && f.minBeds <= 20))
-          && (!('maxPriceKES' in f) || (f.maxPriceKES is int && f.maxPriceKES >= 0));
+          && (!('maxPriceKES' in f) || (f.maxPriceKES is int && f.maxPriceKES >= 0))
+          && (!('poly' in f) || validArea(f.poly));
       }
       function valid(d) {
         return d.keys().hasOnly(['userId', 'filters', 'channels', 'lastNotifiedAt', 'createdAt'])

@@ -55,6 +55,12 @@ void main() {
       'maxPriceKES': 60000
     });
     expect(describeSearch(filtersFromAlert(alertFilters(f))), 'Rent · Apartment · Kilimani · 2+ bed · up to KES 60,000');
+    // A drawn area is kept as the search link writes it, and comes back.
+    final drawn = f.copyWith(polygon: const [GeoPoint(-1.2, 36.88), GeoPoint(-1.2, 36.92), GeoPoint(-1.24, 36.92), GeoPoint(-1.24, 36.88)]);
+    expect(alertFilters(drawn)['poly'], '-1.2,36.88~-1.2,36.92~-1.24,36.92~-1.24,36.88');
+    expect(filtersFromAlert(alertFilters(drawn)).polygon, drawn.polygon);
+    expect(describeSearch(drawn), endsWith('Drawn area'));
+    expect(filtersFromAlert({'purpose': 'rent', 'poly': '-1.2,36.88~junk'}).polygon, isEmpty);
   });
 
   testWidgets('signed out, "Get alerts" asks to sign in; the emailed link signs in on this device', (tester) async {

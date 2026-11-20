@@ -10,7 +10,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:realtor_core/realtor_core.dart';
 import 'package:realtor_ui/realtor_ui.dart';
 
+import '../account/account_screen.dart' show AlertButton;
 import '../providers.dart';
+import 'draw_area.dart';
 import 'results_screen.dart';
 
 /// Results as a list or on the map (P3-s04, P4-s02). Kept while filters
@@ -56,7 +58,13 @@ class ResultsMap extends ConsumerStatefulWidget {
 
 class _ResultsMapState extends ConsumerState<ResultsMap> {
   bool _drawing = false;
-  final _corners = <LatLng>[];
+  var _corners = <LatLng>[];
+
+  /// The shapes before each change, for Undo.
+  final _history = <List<LatLng>>[];
+
+  /// A finger or the mouse is down on a corner: the map holds still while it moves.
+  bool _holding = false;
   ListingSummary? _selected;
   final _controller = MapController();
   bool _hint = false;
@@ -113,10 +121,16 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
       minZoom: 5,
       maxZoom: 18,
       // In a page the wheel belongs to the page (Ctrl + wheel zooms, below).
-      interactionOptions: InteractionOptions(flags: widget.inPage ? InteractiveFlag.all & ~InteractiveFlag.scrollWheelZoom : InteractiveFlag.all),
+      interactionOptions: InteractionOptions(
+        flags: (widget.inPage ? InteractiveFlag.all & ~InteractiveFlag.scrollWheelZoom : InteractiveFlag.all) &
+            (_holding ? ~(InteractiveFlag.drag | InteractiveFlag.flingAnimation | InteractiveFlag.pinchMove) : InteractiveFlag.all),
+      ),
       onTap: (_, at) => setState(() {
         if (_drawing) {
-          if (_corners.length < maxPolygonPoints) _corners.add(at);
+          if (_corners.length < maxPolygonPoints) {
+            _history.add(_corners);
+            _corners = addCorner(_corners, at);
+          }
         } else {
           _selected = null;
         }
@@ -126,11 +140,20 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
 
   void _search() {
     final area = [for (final c in _corners) roundedPoint(c.latitude, c.longitude)];
-    setState(() {
-      _drawing = false;
-      _corners.clear();
-    });
+    _stopDrawing();
     widget.onChange(widget.filters.copyWith(polygon: area));
+  }
+
+  void _stopDrawing() => setState(() {
+        _drawing = false;
+        _corners = [];
+        _history.clear();
+      });
+
+  /// Moves corner [i] by a drag of [delta] on the screen.
+  void _drag(int i, Offset delta) {
+    final camera = _controller.camera;
+    setState(() => _corners = [..._corners]..[i] = camera.screenOffsetToLatLng(camera.latLngToScreenOffset(_corners[i]) + delta));
   }
 
   @override
@@ -163,13 +186,42 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
                 height: 32,
                 child: _Pin(label: pinPrice(l.priceKES), selected: _selected?.id == l.id, onTap: () => setState(() => _selected = l)),
               ),
-          for (final c in _corners)
+          // Each corner can be dragged; let go and the outline is put back
+          // in order if the move made its edges cross.
+          for (final (i, c) in _corners.indexed)
             Marker(
               point: c,
-              width: 14,
-              height: 14,
-              child:
-                  DecoratedBox(decoration: BoxDecoration(color: scheme.primary, shape: BoxShape.circle, border: Border.all(color: scheme.onPrimary, width: 2))),
+              width: 40,
+              height: 40,
+              child: Listener(
+                onPointerDown: (_) => setState(() => _holding = true),
+                onPointerUp: (_) => setState(() => _holding = false),
+                onPointerCancel: (_) => setState(() => _holding = false),
+                child: GestureDetector(
+                  key: Key('corner-$i'),
+                  behavior: HitTestBehavior.opaque,
+                  // The corner keeps up with the finger from where it pressed.
+                  dragStartBehavior: DragStartBehavior.down,
+                  onPanStart: (_) => _history.add(_corners),
+                  onPanUpdate: (d) => _drag(i, d.delta),
+                  onPanEnd: (_) => setState(() => _corners = untangle(_corners)),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.move,
+                    child: Center(
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: scheme.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: scheme.onPrimary, width: 3),
+                          boxShadow: [BoxShadow(color: scheme.scrim.withValues(alpha: 0.3), blurRadius: 4)],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
         ]),
         SimpleAttributionWidget(source: Text(tenant.mapAttribution, style: text.labelSmall)),
@@ -220,45 +272,77 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
         top: b.spacing.sm,
         left: b.spacing.sm,
         right: b.spacing.sm,
-        child: Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, crossAxisAlignment: WrapCrossAlignment.center, children: [
-          if (!_drawing) ...[
-            FilledButton.tonalIcon(
-              onPressed: () => setState(() {
-                _drawing = true;
-                _selected = null;
-              }),
-              icon: const Icon(Icons.draw_outlined),
-              label: Text(widget.filters.polygon.isEmpty ? 'Draw area' : 'Redraw area'),
-            ),
-            if (widget.filters.polygon.isNotEmpty)
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(backgroundColor: scheme.surface),
-                onPressed: () => widget.onChange(widget.filters.copyWith(polygon: const [])),
-                child: const Text('Clear area'),
+        child: !_drawing
+            ? Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                FilledButton.tonalIcon(
+                  onPressed: () => setState(() {
+                    _drawing = true;
+                    _selected = null;
+                  }),
+                  icon: const Icon(Icons.draw_outlined),
+                  label: Text(widget.filters.polygon.isEmpty ? 'Draw area' : 'Redraw area'),
+                ),
+                if (widget.filters.polygon.isNotEmpty) ...[
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(backgroundColor: scheme.surface),
+                    onPressed: () => widget.onChange(widget.filters.copyWith(polygon: const [])),
+                    child: const Text('Clear area'),
+                  ),
+                  // The homes in a drawn area can be saved like any search, for alerts.
+                  AlertButton(
+                    filters: widget.filters,
+                    builder: (save) => FilledButton.icon(
+                      key: const Key('map-save-search'),
+                      onPressed: save,
+                      icon: const Icon(Icons.notifications_active_outlined, size: 18),
+                      label: const Text('Save search'),
+                    ),
+                  ),
+                ],
+              ])
+            // Drawing: one panel that says what to do, with Cancel, Undo and Search.
+            : Material(
+                key: const Key('draw-panel'),
+                color: scheme.surface,
+                elevation: 3,
+                shadowColor: scheme.scrim.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(b.radiusMd),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(b.spacing.md, b.spacing.md, b.spacing.md, b.spacing.sm),
+                  child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Icon(Icons.touch_app_outlined, size: 20, color: scheme.primary),
+                      SizedBox(width: b.spacing.sm),
+                      Expanded(
+                        child: Text(
+                          _corners.length < minDrawCorners
+                              ? 'Tap the map to place at least $minDrawCorners corners (${_corners.length} of $minDrawCorners). Drag a corner to move it.'
+                              : '${_corners.length} corners. Tap to add more, drag to move.',
+                          key: const Key('draw-hint'),
+                          style: text.bodyMedium,
+                        ),
+                      ),
+                    ]),
+                    SizedBox(height: b.spacing.sm),
+                    Row(children: [
+                      TextButton(onPressed: _stopDrawing, child: const Text('Cancel')),
+                      TextButton.icon(
+                        onPressed: _history.isEmpty ? null : () => setState(() => _corners = _history.removeLast()),
+                        icon: const Icon(Icons.undo, size: 18),
+                        label: const Text('Undo'),
+                      ),
+                      const Spacer(),
+                      Flexible(
+                        flex: 4,
+                        child: FilledButton(
+                          onPressed: _corners.length >= minDrawCorners ? _search : null,
+                          child: const Text('Search this area', maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                    ]),
+                  ]),
+                ),
               ),
-          ] else ...[
-            Card(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: b.spacing.md, vertical: b.spacing.sm),
-                child: Text(_corners.length < 3 ? 'Tap the map to mark the corners (${_corners.length} of at least 3)' : '${_corners.length} corners',
-                    style: text.bodySmall),
-              ),
-            ),
-            FilledButton(onPressed: _corners.length >= 3 ? _search : null, child: const Text('Search this area')),
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(backgroundColor: scheme.surface),
-              onPressed: _corners.isEmpty ? null : () => setState(_corners.removeLast),
-              child: const Text('Undo'),
-            ),
-            TextButton(
-              onPressed: () => setState(() {
-                _drawing = false;
-                _corners.clear();
-              }),
-              child: const Text('Cancel'),
-            ),
-          ],
-        ]),
       ),
       if (_selected != null)
         Positioned(left: b.spacing.sm, right: b.spacing.sm, bottom: b.spacing.xl, child: ListingCard(listing: _selected!, layout: CardLayout.compact)),

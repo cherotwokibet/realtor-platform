@@ -52,6 +52,7 @@ String describeSearch(ListingFilters f) => [
       ...f.areas.map(areaName),
       if (f.minBeds != null) '${f.minBeds}+ bed',
       if (f.maxPriceKES != null) 'up to ${formatKes(f.maxPriceKES!)}',
+      if (f.polygon.isNotEmpty) 'Drawn area',
     ].join(' · ');
 
 String label(Purpose p) => switch (p) { Purpose.rent => 'Rent', Purpose.sale => 'Buy', Purpose.shortStay => 'Short stay' };
@@ -663,8 +664,11 @@ class SavedSearchesList extends ConsumerWidget {
 
 /// On results: save this search for alerts, or sign in first.
 class AlertButton extends ConsumerWidget {
-  const AlertButton({super.key, required this.filters, this.compact = false});
+  const AlertButton({super.key, required this.filters, this.compact = false, this.builder});
   final ListingFilters filters;
+
+  /// A button of the caller's own, given what a press does (the map's Save search).
+  final Widget Function(VoidCallback save)? builder;
 
   /// "Save Search" as a plain text button, for the wide filter bar.
   final bool compact;
@@ -685,6 +689,7 @@ class AlertButton extends ConsumerWidget {
       await offerPush(ref, customer.uid);
     }
 
+    if (builder != null) return builder!(save);
     if (compact) {
       return TextButton(
         key: const Key('save-search'),

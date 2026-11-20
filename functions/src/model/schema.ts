@@ -161,6 +161,12 @@ export const savedSearch = z.object({
     areas: z.array(slug).optional(),
     minBeds: z.number().int().min(0).optional(),
     maxPriceKES: kes.optional(),
+    /** A drawn area (P3-s04), as the search link writes it: 3 to 20 "lat,lng" joined by "~". */
+    poly: z
+      .string()
+      .max(600)
+      .regex(/^(-?\d{1,3}(\.\d{1,6})?,-?\d{1,3}(\.\d{1,6})?~){2,19}-?\d{1,3}(\.\d{1,6})?,-?\d{1,3}(\.\d{1,6})?$/)
+      .optional(),
   }),
   /** inbox: alerts in the app (D18); email and push once their senders are set up. */
   channels: z.array(z.enum(['inbox', 'push', 'email', 'whatsapp'])).min(1),
