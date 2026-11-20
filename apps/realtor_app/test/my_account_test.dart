@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,13 +28,13 @@ late DemoAccount account;
 late MemoryActivity activity;
 final opened = <Uri>[];
 
-Future<ProviderContainer> open(WidgetTester tester, String path, {bool signedIn = true}) async {
+Future<ProviderContainer> open(WidgetTester tester, String path, {bool signedIn = true, TenantConfig? config}) async {
   tester.view.physicalSize = const Size(412, 1800);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   if (signedIn) await account.signInWithGoogle();
   final c = ProviderContainer(overrides: [
-    tenantProvider.overrideWithValue(tenant()),
+    tenantProvider.overrideWithValue(config ?? tenant()),
     demoAccountProvider.overrideWithValue(account),
     activityStoreProvider.overrideWithValue(activity),
     urlOpenerProvider.overrideWithValue((u) async {
@@ -194,6 +196,18 @@ void main() {
     expect(find.text('Kilimani'), findsOneWidget);
   });
 
+  testWidgets('a store badge with a link in the tenant file opens it', (tester) async {
+    final json = jsonDecode(File('../../tenants/realtime-estates.json').readAsStringSync()) as Map<String, Object?>;
+    (json['apps'] as Map<String, Object?>)['googlePlayUrl'] = 'https://play.google.com/store/apps/details?id=example';
+    await open(tester, '/', config: TenantConfig.fromJson(json));
+    await tester.tap(find.byTooltip('Open navigation menu'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('badge-google-play')));
+    await tester.tap(find.byKey(const Key('badge-google-play')));
+    await tester.pumpAndSettle();
+    expect(opened.last.host, 'play.google.com');
+  });
+
   testWidgets('the phone menu: initials, icons, Download the app, no Company or Get in touch; Log out only when signed in', (tester) async {
     final c = await open(tester, '/');
     await tester.tap(find.byTooltip('Open navigation menu'));
@@ -217,9 +231,15 @@ void main() {
     await tester.tap(find.byKey(const Key('badge-app-store')));
     await tester.pump();
     expect(find.text('The Realtime Estates Ltd app is coming soon to the App Store.'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('badge-google-play')));
+    // Not on Google Play yet either (no link in the tenant file): the same note, nothing opened.
+    tester.state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger).first).hideCurrentSnackBar();
     await tester.pumpAndSettle();
-    expect(opened.last.host, 'play.google.com');
+    final openedBefore = opened.length;
+    await tester.tap(find.byKey(const Key('badge-google-play')));
+    await tester.pump();
+    expect(find.text('The Realtime Estates Ltd app is coming soon to the Google Play Store.'), findsOneWidget);
+    expect(opened.length, openedBefore);
+    await tester.pumpAndSettle();
 
     // Logout: a full-width button under the badges.
     final logout = find.byKey(const Key('drawer-logout'));
