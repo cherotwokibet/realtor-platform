@@ -1,3 +1,4 @@
+import 'listing_amenities.dart';
 import 'listing_draft.dart';
 import 'money.dart';
 
@@ -68,7 +69,9 @@ String _cap(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}
 String _article(String next) => RegExp(r'^[aeiou8]|^11-|^18-', caseSensitive: false).hasMatch(next) ? 'An' : 'A';
 
 /// "Parking" -> "parking", "Borehole" -> "a borehole"; anything else as typed.
-String _amenity(String a) {
+String _amenity(String key) {
+  // Ticked amenities are stored by key ("swimming-pool"): use their words.
+  final a = amenityLabel(key);
   final lower = a.toLowerCase();
   const countable = {'borehole', 'lift', 'gym', 'swimming pool', 'pool', 'garden', 'balcony', 'generator', 'backup generator', 'playground'};
   if (countable.contains(lower)) return '${_article(lower).toLowerCase()} $lower';

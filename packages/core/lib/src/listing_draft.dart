@@ -3,10 +3,37 @@
 /// form can say what to fix before a round trip; the Function still decides.
 library;
 
+import 'geo.dart';
 import 'listing_filters.dart';
 
-/// An area to pick in the form, with its centre for a first map pin.
-typedef AreaOption = ({String slug, String name, double lat, double lng});
+/// An area to pick in the form, with its centre for a first map pin and its
+/// outline (geofence; empty when it has none) the pin must fall inside.
+typedef AreaOption = ({String slug, String name, double lat, double lng, List<GeoPoint> boundary});
+
+/// A payment on top of the price (agency fee, water, garbage...), `per`
+/// once, month or night, as the listing page lists it.
+class ExtraCharge {
+  const ExtraCharge({required this.name, required this.amountKES, this.per = 'once'});
+  final String name;
+  final int amountKES;
+  final String per;
+
+  static const periods = ['once', 'month', 'night'];
+
+  static ExtraCharge? fromJson(Object? v) {
+    if (v is! Map) return null;
+    final name = v['name'], amount = v['amountKES'], per = v['per'];
+    if (name is! String || amount is! num) return null;
+    return ExtraCharge(name: name, amountKES: amount.toInt(), per: periods.contains(per) ? per as String : 'once');
+  }
+
+  Map<String, Object?> toJson() => {'name': name.trim(), 'amountKES': amountKES, 'per': per};
+
+  @override
+  bool operator ==(Object other) => other is ExtraCharge && other.name == name && other.amountKES == amountKES && other.per == per;
+  @override
+  int get hashCode => Object.hash(name, amountKES, per);
+}
 
 final _slug = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
 const _maxKes = 10000000000;
@@ -29,6 +56,7 @@ class ListingDraft {
     this.estate,
     this.description = '',
     this.amenities = const [],
+    this.extraCharges = const [],
     this.agentId,
   });
 
@@ -46,6 +74,9 @@ class ListingDraft {
   /// The listing's text (P7-s02); may be empty.
   final String description;
   final List<String> amenities;
+
+  /// Paid besides the price, deposit and service charge (at most 10).
+  final List<ExtraCharge> extraCharges;
 
   /// Who it is listed for; managers choose, an agent is always themself.
   final String? agentId;
@@ -71,6 +102,7 @@ class ListingDraft {
       estate: d['estate'] as String?,
       description: d['description'] as String? ?? '',
       amenities: [for (final a in (d['amenities'] as List<Object?>?) ?? const []) '$a'],
+      extraCharges: [for (final c in (d['extraCharges'] as List<Object?>?) ?? const []) if (ExtraCharge.fromJson(c) case final e?) e],
       agentId: d['agentId'] as String?,
     );
   }
@@ -91,6 +123,7 @@ class ListingDraft {
     String? Function()? estate,
     String? description,
     List<String>? amenities,
+    List<ExtraCharge>? extraCharges,
     String? agentId,
   }) =>
       ListingDraft(
@@ -110,6 +143,7 @@ class ListingDraft {
         estate: estate == null ? this.estate : estate(),
         description: description ?? this.description,
         amenities: amenities ?? this.amenities,
+        extraCharges: extraCharges ?? this.extraCharges,
         agentId: agentId ?? this.agentId,
       );
 
@@ -129,6 +163,9 @@ class ListingDraft {
         if ((estate ?? '').length > 80) 'estate': 'Under 80 characters.',
         if (description.trim().length > 3000) 'description': 'Under 3,000 characters.',
         if (amenities.length > 40 || amenities.any((a) => a.length > 40)) 'amenities': 'Up to 40, each under 40 characters.',
+        if (extraCharges.length > 10 ||
+            extraCharges.any((c) => c.name.trim().length < 2 || c.name.trim().length > 40 || c.amountKES <= 0 || c.amountKES > _maxKes))
+          'extraCharges': 'Each needs a name (2 to 40 characters) and an amount.',
       };
 
   /// The `submitListing` input. Media is left out, so the listing keeps its
@@ -150,6 +187,7 @@ class ListingDraft {
         if ((estate ?? '').trim().isNotEmpty) 'estate': estate!.trim(),
         if (description.trim().isNotEmpty) 'description': description.trim(),
         'amenities': [for (final a in amenities) if (a.trim().isNotEmpty) a.trim()],
+        if (extraCharges.isNotEmpty) 'extraCharges': [for (final c in extraCharges) c.toJson()],
         if (agentId != null) 'agentId': agentId,
       };
 }

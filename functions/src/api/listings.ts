@@ -2,8 +2,8 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import { canMove, type ListingStatus, verificationExpiry } from '../listing-rules';
-import { geohash, slugify } from '../model/geo';
-import { docId, kes, listing, listingPurpose, listingType, MAX_VIEWING_FEE_KES, mediaItem, slug } from '../model/schema';
+import { geohash, insidePolygon, slugify } from '../model/geo';
+import { docId, extraCharge, kes, listing, listingPurpose, listingType, MAX_VIEWING_FEE_KES, mediaItem, slug } from '../model/schema';
 import transitions from '../model/transitions.json';
 import { audit } from './audit';
 import { requirePurposeOn, tenantFeatures } from './features';
@@ -27,6 +27,7 @@ export const submitListingInput = z.object({
   estate: z.string().max(80).optional(),
   description: z.string().trim().max(3000).optional(),
   amenities: z.array(z.string().max(40)).max(40).default([]),
+  extraCharges: z.array(extraCharge).max(10).optional(),
   utilities: z.object({ water: z.boolean(), electricity: z.boolean(), wifi: z.boolean() }).partial().default({}),
   /**
    * The listing's own photos and videos, in the order to show them. Only
@@ -46,7 +47,13 @@ export async function submitListing(db: Firestore, caller: Caller, input: unknow
   const req = parseInput(submitListingInput, input);
   const agentId = isManager(caller) ? req.agentId ?? caller.agentId : caller.agentId;
   if (!agentId) throw new HttpsError('invalid-argument', 'agentId is required');
-  if (!(await db.collection('areas').doc(req.area).get()).exists) throw new HttpsError('invalid-argument', `unknown area ${req.area}`);
+  const area = await db.collection('areas').doc(req.area).get();
+  if (!area.exists) throw new HttpsError('invalid-argument', `unknown area ${req.area}`);
+  // Geofence: an area with an outline only takes pins inside it.
+  const outline = area.get('boundary') as { lat: number; lng: number }[] | null | undefined;
+  if (outline && outline.length >= 3 && !insidePolygon(req.lat, req.lng, outline)) {
+    throw new HttpsError('invalid-argument', `location: the pin is outside ${area.get('name') ?? req.area}. Move it, or pick the area it is in`);
+  }
   requirePurposeOn(await tenantFeatures(db), req.purpose);
 
   const ref = req.listingId ? db.collection('listings').doc(req.listingId) : db.collection('listings').doc();

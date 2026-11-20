@@ -540,6 +540,8 @@ class _ExtraPayments extends StatelessWidget {
       if (months != null && months > 0) ('Deposit', '$months month${months == 1 ? '' : 's'} · ${formatKes(months * l.priceKES)}'),
       if ((detail.serviceChargeKES ?? 0) > 0) ('Service charge', '${formatKes(detail.serviceChargeKES!)} a month'),
       if (mpesa && (detail.viewingFeeKES ?? 0) > 0) ('Viewing fee', '${formatKes(detail.viewingFeeKES!)}, by M-Pesa after you book'),
+      for (final c in detail.extraCharges)
+        (c.name, switch (c.per) { 'month' => '${formatKes(c.amountKES)} a month', 'night' => '${formatKes(c.amountKES)} a night', _ => '${formatKes(c.amountKES)} once' }),
     ];
     if (rows.isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -1100,7 +1102,7 @@ class _Amenities extends StatelessWidget {
     Widget amenity(String a) => Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(amenityIcon(a), size: 26, color: scheme.onSurface),
           SizedBox(height: b.spacing.sm),
-          Text(typeName(a), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodySmall),
+          Text(amenityLabel(a) == a ? typeName(a) : amenityLabel(a), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodySmall),
         ]);
     // Everything, grouped as the portals group it; full screen on phones.
     void showAll() {

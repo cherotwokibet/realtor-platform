@@ -138,6 +138,7 @@ class FirestoreListingRepository implements ListingRepository {
       viewingFeeKES: (d['viewingFeeKES'] as num?)?.toInt(),
       description: d['description'] as String? ?? '',
       serviceChargeKES: (d['serviceChargeKES'] as num?)?.toInt(),
+      extraCharges: [for (final c in (d['extraCharges'] as List<Object?>?) ?? const []) if (ExtraCharge.fromJson(c) case final e?) e],
       listedAt: _time(d['createdAt']),
       utilities: {
         for (final MapEntry(:key, :value) in ((d['utilities'] as Map?) ?? const {}).entries)

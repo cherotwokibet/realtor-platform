@@ -13,6 +13,7 @@ import 'package:realtor_admin/src/demo_admin.dart';
 import 'package:realtor_admin/src/format.dart';
 import 'package:realtor_admin/src/links.dart';
 import 'package:realtor_admin/src/listing_media.dart';
+import 'package:realtor_admin/src/maps.dart';
 import 'package:realtor_admin/src/providers.dart';
 import 'package:realtor_admin/src/reports.dart';
 import 'package:realtor_admin/src/session.dart';
@@ -187,6 +188,7 @@ Future<void> open(WidgetTester tester,
   container = ProviderContainer(overrides: [
     tenantProvider.overrideWithValue(tenant(tenantId)),
     demoAdminProvider.overrideWithValue(demo),
+    adminMapTilesProvider.overrideWithValue(false),
     if (slowActions) adminActionsProvider.overrideWithValue(slow),
     ...overrides,
   ]);
@@ -703,13 +705,12 @@ void main() {
     expect(find.text('Use 5 to 120 characters.'), findsOneWidget);
     expect(find.text('Pick an area.'), findsOneWidget);
 
-    await tester.enterText(find.widgetWithText(TextField, 'Title'), '2 bedroom flat near Yaya');
-    await tester.enterText(find.widgetWithText(TextField, 'Rent a month (KES)'), '68,000');
-    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'Area'));
-    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('listing-title')), '2 bedroom flat near Yaya');
+    await tester.enterText(find.byKey(const Key('listing-price')), '68,000');
+    await tapVisible(tester, find.byKey(const Key('listing-area')));
     await tester.tap(find.text('Kilimani').last);
     await tester.pumpAndSettle();
-    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Latitude')).controller!.text, '-1.292100');
+    expect(tester.widget<TextField>(find.byKey(const Key('listing-lat'))).controller!.text, '-1.292100');
     await tester.tap(find.text('Save and send for review'));
     await tester.pumpAndSettle();
     expect(find.text('Saved. The listing waits in Pending for approval.'), findsOneWidget);
@@ -721,31 +722,110 @@ void main() {
     expect((draft!.lat, draft.lng), (-1.2921, 36.7856));
   });
 
+  testWidgets('New listing: pin by pasted link, checked against the area outline; amenities and extra charges saved', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New listing'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('listing-title')), 'Riverside Heights, 2 bedroom');
+    await tester.enterText(find.byKey(const Key('listing-price')), '70000');
+    // A pasted Westlands position first, with no area: Westlands has no outline, so nothing is picked.
+    await tester.enterText(find.byKey(const Key('listing-paste')), 'https://www.google.com/maps/@-1.2676,36.8108,16z');
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byKey(const Key('listing-lat'))).controller!.text, '-1.267600');
+    // Kilimani has an outline (demo); the Westlands pin is outside it.
+    await tapVisible(tester, find.byKey(const Key('listing-area')));
+    await tester.tap(find.text('Kilimani').last);
+    await tester.pumpAndSettle();
+    expect(find.text('The pin is outside Kilimani.'), findsOneWidget);
+    await tapVisible(tester, find.byKey(const Key('amenity-parking')));
+    await tapVisible(tester, find.byKey(const Key('amenity-swimming-pool')));
+    await tapVisible(tester, find.byKey(const Key('add-charge')));
+    await tester.enterText(find.byKey(const Key('charge-name-0')), 'Water');
+    await tester.enterText(find.byKey(const Key('charge-amount-0')), '500');
+    await tester.tap(find.text('Save and send for review'));
+    await tester.pumpAndSettle();
+    expect(find.text('New listing'), findsWidgets, reason: 'not saved: the pin is outside');
+    // Coordinates inside Kilimani clear it.
+    await tester.enterText(find.byKey(const Key('listing-paste')), '-1.2925, 36.7871');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pin-outside')), findsNothing);
+    await tester.tap(find.text('Save and send for review'));
+    await tester.pumpAndSettle();
+    final row =
+        (await container.read(adminRepositoryProvider).listings(wanjiku, status: 'pending', limit: 50)).rows.firstWhere((r) => r.title.startsWith('Riverside'));
+    final d = (await container.read(adminRepositoryProvider).listingDraft(wanjiku, row.id))!;
+    expect((d.lat, d.lng, d.area), (-1.2925, 36.7871, 'kilimani'));
+    expect(d.amenities.toSet(), {'parking', 'swimming-pool'});
+    expect(d.extraCharges, [const ExtraCharge(name: 'Water', amountKES: 500)]);
+  });
+
+  testWidgets('a pin inside an area outline picks that area when none is chosen yet', (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New listing'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('listing-paste')), '-1.2925, 36.7871');
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(const Key('listing-area')), matching: find.text('Kilimani')), findsOneWidget);
+  });
+
+  testWidgets('Areas: a manager clears and redraws an outline by tapping the map', (tester) async {
+    await open(tester, as: manager, at: '/areas');
+    expect(find.descendant(of: find.byKey(const Key('area-kilimani')), matching: find.text('Outline')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('area-kilimani')));
+    await tester.pumpAndSettle();
+    expect(find.text('4 corners'), findsOneWidget);
+    await tester.tap(find.text('Clear outline'));
+    await tester.pumpAndSettle();
+    expect(find.text('0 corners'), findsOneWidget);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(find.text('4 corners'), findsOneWidget);
+    await tester.tap(find.text('Clear outline'));
+    await tester.pumpAndSettle();
+    final map = tester.getRect(find.byType(OutlineMap));
+    for (final o in [const Offset(-120, -100), const Offset(120, -100), const Offset(120, 100), const Offset(-120, 100)]) {
+      await tester.tapAt(map.center + o);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('4 corners'), findsOneWidget);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    final k = (await container.read(adminRepositoryProvider).areaGuides()).firstWhere((a) => a.slug == 'kilimani');
+    expect(k.boundary, hasLength(4));
+    expect(outlineCrosses(k.boundary), isFalse);
+    expect(insideOutline(GeoPoint(k.lat, k.lng), k.boundary), isTrue, reason: 'the centre (map middle) is inside');
+  });
+
   testWidgets('"Suggest title & description" drafts both from the facts; asks before replacing (P7-s02)', (tester) async {
     await open(tester, as: wanjiku);
     await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('New listing'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextField, 'Rent a month (KES)'), '68,000');
-    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'Area'));
-    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('listing-price')), '68,000');
+    await tapVisible(tester, find.byKey(const Key('listing-area')));
     await tester.tap(find.text('Kilimani').last);
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextField, 'Amenities, separated by commas'), 'Parking, Borehole');
+    await tapVisible(tester, find.byKey(const Key('amenity-parking')));
+    await tapVisible(tester, find.byKey(const Key('amenity-borehole')));
     await tapVisible(tester, find.text('Suggest title & description'));
-    final title = tester.widget<TextField>(find.widgetWithText(TextField, 'Title')).controller!.text;
+    final title = tester.widget<TextField>(find.byKey(const Key('listing-title'))).controller!.text;
     expect(title, '1 bedroom apartment to let in Kilimani');
     final description = tester.widget<TextField>(find.widgetWithText(TextField, 'Description')).controller!.text;
     expect(description, contains('It comes with parking and a borehole.'));
 
     // With text already there, it asks first; "Keep mine" changes nothing.
-    await tester.enterText(find.widgetWithText(TextField, 'Title'), 'My own title here');
+    await tester.enterText(find.byKey(const Key('listing-title')), 'My own title here');
     await tapVisible(tester, find.text('Suggest title & description'));
     expect(find.text('Replace the title and description?'), findsOneWidget);
     await tester.tap(find.text('Keep mine'));
     await tester.pumpAndSettle();
-    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Title')).controller!.text, 'My own title here');
+    expect(tester.widget<TextField>(find.byKey(const Key('listing-title'))).controller!.text, 'My own title here');
 
     await tapVisible(tester, find.text('Save and send for review'));
     final row =
@@ -762,8 +842,8 @@ void main() {
     await tester.tap(find.text(first.title).first);
     await tester.pumpAndSettle();
     expect(find.text('Edit listing'), findsOneWidget);
-    expect(find.widgetWithText(DropdownButtonFormField<String>, 'Agent'), findsOneWidget);
-    await tester.enterText(find.widgetWithText(TextField, 'Title'), '${first.title}, renovated');
+    expect(find.byKey(const Key('listing-agent')), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('listing-title')), '${first.title}, renovated');
     await tester.tap(find.text('Save and send for review'));
     await tester.pumpAndSettle();
     final row = (await container.read(adminRepositoryProvider).listings(manager, limit: 1)).rows.single;
@@ -890,7 +970,7 @@ void main() {
     await tester.tap(find.text('Time off…'));
     await tester.pumpAndSettle();
     expect(find.text('None coming up.'), findsOneWidget);
-    expect(find.widgetWithText(DropdownButtonFormField<String>, 'Agent'), findsNothing);
+    expect(find.byKey(const Key('listing-agent')), findsNothing);
     final day = viewingDays(now, count: 26)[4];
     await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, 'From'));
     await tester.pumpAndSettle();
@@ -1037,9 +1117,7 @@ void main() {
 
   testWidgets('a manager adds an area guide; it is offered in the listing form', (tester) async {
     await open(tester, as: manager);
-    await tester.tap(find.text('Listings'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Areas…'));
+    await tester.tap(find.byKey(const Key('nav-areas')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add area'));
     await tester.pumpAndSettle();
@@ -1053,6 +1131,7 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(find.text('Muthaiga North'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('area-muthaiga-north')), matching: find.text('No outline')), findsOneWidget);
     final options = await container.read(adminRepositoryProvider).areas();
     expect(options.map((a) => a.slug), contains('muthaiga-north'));
   });
@@ -1102,7 +1181,7 @@ void main() {
     await open(tester, as: wanjiku);
     await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
-    expect(find.text('Areas…'), findsNothing);
+    expect(find.byKey(const Key('nav-areas')), findsNothing);
   });
 
   testWidgets('a done viewing offers its review link on WhatsApp to the client', (tester) async {
