@@ -1,9 +1,9 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { docId } from '../model/schema';
+import { docId, kenyanPhone } from '../model/schema';
 import { audit } from './audit';
-import { type Caller, parseInput, requireOwner } from './auth';
+import { type Caller, parseInput, requireOwner, requireStaff } from './auth';
 
 type Role = 'owner' | 'manager' | 'agent';
 
@@ -11,6 +11,7 @@ type Role = 'owner' | 'manager' | 'agent';
 export interface StaffAuth {
   getUserByEmail(email: string): Promise<{ uid: string; email?: string; displayName?: string; customClaims?: Record<string, unknown> }>;
   setCustomUserClaims(uid: string, claims: Record<string, unknown> | null): Promise<void>;
+  updateUser(uid: string, props: { displayName?: string }): Promise<unknown>;
 }
 
 export const setStaffRoleInput = z
@@ -79,4 +80,25 @@ async function applyRole(
   else batch.delete(ref);
   audit(batch, db, caller, { action: 'staff.role', target: { collection: 'staff', id: user.uid, label: user.email }, from: typeof prev === 'string' ? prev : null, to: role ?? 'none' }, now);
   await batch.commit();
+}
+
+export const saveStaffProfileInput = z.object({
+  name: z.string().trim().min(2).max(80),
+  /** E.164 Kenyan mobile; null clears it. */
+  phone: kenyanPhone.nullable().optional(),
+});
+
+/**
+ * Any staff member's own name and phone (Account). The name is also the
+ * account's display name, which the audit log shows; staff/{uid} keeps both
+ * for the team list and its search.
+ */
+export async function saveStaffProfile(db: Firestore, auth: StaffAuth, caller: Caller, input: unknown, now = new Date()): Promise<{ ok: true }> {
+  requireStaff(caller);
+  const req = parseInput(saveStaffProfileInput, input);
+  const ref = db.collection('staff').doc(caller.uid!);
+  if (!(await ref.get()).exists) throw new HttpsError('failed-precondition', 'no staff record for this account yet');
+  await auth.updateUser(caller.uid!, { displayName: req.name });
+  await ref.set({ name: req.name, phone: req.phone ?? null, updatedAt: now }, { merge: true });
+  return { ok: true };
 }

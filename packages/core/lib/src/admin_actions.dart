@@ -162,6 +162,9 @@ abstract interface class AdminActions {
   /// a pending listing; at most [importChunk] rows per call.
   Future<ImportOutcome> importListings(StaffUser who, List<Map<String, Object?>> rows);
 
+  /// `saveStaffProfile`: any staff member's own name and phone (Account).
+  Future<void> saveMyProfile(StaffUser who, {required String name, String? phone});
+
   /// `setStaffRole`, owners only: give an account that has signed in once a
   /// role (an agent needs [agentId]), or take it away with a null [role].
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId});

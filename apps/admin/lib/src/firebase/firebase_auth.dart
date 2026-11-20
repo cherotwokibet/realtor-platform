@@ -27,12 +27,10 @@ class FirebaseAdminAuth implements AdminAuth {
   Future<void> signInAs(StaffUser user) => throw UnsupportedError('demo accounts only');
 
   @override
-  Future<void> signInWithPassword(String email, String password) =>
-      _run(() => _auth.signInWithEmailAndPassword(email: email, password: password));
+  Future<void> signInWithPassword(String email, String password) => _run(() => _auth.signInWithEmailAndPassword(email: email, password: password));
 
   @override
-  Future<void> createAccount(String email, String password) =>
-      _run(() => _auth.createUserWithEmailAndPassword(email: email, password: password));
+  Future<void> createAccount(String email, String password) => _run(() => _auth.createUserWithEmailAndPassword(email: email, password: password));
 
   @override
   Future<void> sendPasswordReset(String email) => _run(() => _auth.sendPasswordResetEmail(email: email));
@@ -51,7 +49,31 @@ class FirebaseAdminAuth implements AdminAuth {
   }
 
   @override
-  Future<void> refresh() async => _auth.currentUser?.getIdToken(true);
+  Future<void> refresh() async {
+    await _auth.currentUser?.reload();
+    await _auth.currentUser?.getIdToken(true);
+  }
+
+  @override
+  String? get email => _auth.currentUser?.email;
+
+  @override
+  bool get hasPassword => _auth.currentUser?.providerData.any((p) => p.providerId == 'password') ?? false;
+
+  @override
+  Future<void> changePassword(String current, String next) async {
+    final user = _auth.currentUser;
+    if (user == null || user.email == null) throw SignInException('Sign in again first.');
+    try {
+      await user.reauthenticateWithCredential(EmailAuthProvider.credential(email: user.email!, password: current));
+      await user.updatePassword(next);
+    } on FirebaseAuthException catch (e) {
+      throw SignInException(switch (e.code) {
+        'invalid-credential' || 'wrong-password' => 'Your current password is not right.',
+        _ => signInMessage(e.code, e.message),
+      });
+    }
+  }
 
   @override
   Future<void> signOut() => _auth.signOut();
@@ -59,10 +81,7 @@ class FirebaseAdminAuth implements AdminAuth {
 
 /// What to tell the person for a Firebase Auth error code.
 String signInMessage(String code, String? fallback) => switch (code) {
-      'invalid-credential' ||
-      'wrong-password' ||
-      'user-not-found' =>
-        'That email and password do not match an account.',
+      'invalid-credential' || 'wrong-password' || 'user-not-found' => 'That email and password do not match an account.',
       'invalid-email' => 'That email address does not look right.',
       'email-already-in-use' => 'There is already an account with that email. Sign in instead.',
       'weak-password' => 'Choose a longer password (at least 8 characters).',

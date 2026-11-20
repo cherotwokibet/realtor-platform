@@ -35,8 +35,7 @@ class _TablePage extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         _Header(title, action: action),
-        if (subtitle != null)
-          Padding(padding: const EdgeInsets.only(top: 4), child: Text(subtitle!, style: t.bodyMedium)),
+        if (subtitle != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(subtitle!, style: t.bodyMedium)),
         if (filters != null) Padding(padding: const EdgeInsets.only(top: 12), child: filters),
         const SizedBox(height: 12),
         Card(clipBehavior: Clip.antiAlias, child: table),
@@ -76,13 +75,7 @@ Future<bool> _act(BuildContext context, Future<void> Function() change, String d
 
 /// The value as text, with a menu of [options] when there are any.
 class _MenuCell extends StatelessWidget {
-  const _MenuCell(
-      {required this.text,
-      required this.tooltip,
-      required this.options,
-      required this.labelOf,
-      required this.onSelected,
-      this.saving = false});
+  const _MenuCell({required this.text, required this.tooltip, required this.options, required this.labelOf, required this.onSelected, this.saving = false});
   final String text, tooltip;
   final List<String> options;
   final String Function(String) labelOf;
@@ -132,8 +125,7 @@ String moderationLabel(String action, String status) => switch ((action, status)
     };
 
 /// Asks why a listing is being rejected; null when cancelled.
-Future<String?> _askReason(BuildContext context, String title) =>
-    showDialog<String>(context: context, builder: (context) => _ReasonDialog(title: title));
+Future<String?> _askReason(BuildContext context, String title) => showDialog<String>(context: context, builder: (context) => _ReasonDialog(title: title));
 
 class _ReasonDialog extends StatefulWidget {
   const _ReasonDialog({required this.title});
@@ -214,8 +206,7 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
     return _TablePage(
       title: 'Leads',
       subtitle: who.isManager ? 'Every agent\'s leads, newest first.' : 'Your leads, newest first.',
-      filters: FilterChips(
-          values: leadStages, selected: _stage, labelOf: label, onSelected: (s) => setState(() => _stage = s)),
+      filters: FilterChips(values: leadStages, selected: _stage, labelOf: label, onSelected: (s) => setState(() => _stage = s)),
       table: PagedTable<LeadRow>(
         key: ValueKey(('leads', who.uid, _stage)),
         empty: 'No leads at this stage.',
@@ -350,9 +341,7 @@ class _ViewingsScreenState extends ConsumerState<ViewingsScreen> {
     return _TablePage(
       title: 'Viewings',
       action: actions,
-      subtitle: _status == null
-          ? 'Viewings to confirm or close, earliest first: past ones still need marking done or no-show.'
-          : 'Latest first.',
+      subtitle: _status == null ? 'Viewings to confirm or close, earliest first: past ones still need marking done or no-show.' : 'Latest first.',
       filters: FilterChips(
         values: viewingHistory,
         selected: _status,
@@ -510,8 +499,7 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
             label: const Text('Import CSV…'),
           ),
       ]),
-      subtitle:
-          who.isManager ? 'Every listing, most recently updated first.' : 'Your listings, most recently updated first.',
+      subtitle: who.isManager ? 'Every listing, most recently updated first.' : 'Your listings, most recently updated first.',
       filters: FilterChips(
         values: listingStatuses,
         selected: _status,
@@ -632,6 +620,16 @@ class TeamScreen extends ConsumerStatefulWidget {
 
 class _TeamScreenState extends ConsumerState<TeamScreen> {
   final _saving = <String>{};
+  final _search = TextEditingController();
+
+  /// Null: everyone.
+  StaffRole? _role;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   /// Loaded once, and again after a change: not on every build, or any
   /// rebuild (a token refresh, say) would start the query over and the
@@ -640,8 +638,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
 
   Future<List<StaffMember>> _load() => ref.read(adminRepositoryProvider).team(ref.read(staffProvider)!);
 
-  Future<void> _change(StaffUser who,
-      {required String email, StaffRole? role, String? agentId, required String done}) async {
+  Future<void> _change(StaffUser who, {required String email, StaffRole? role, String? agentId, required String done}) async {
     if (_saving.contains(email)) return;
     setState(() => _saving.add(email));
     final ok = await _act(
@@ -665,10 +662,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
     );
     if (r == null || !mounted) return;
     await _change(who,
-        email: r.email,
-        role: r.role,
-        agentId: r.agentId,
-        done: '${r.email} is now ${label(r.role.name).toLowerCase()}. They get it on their next sign-in.');
+        email: r.email, role: r.role, agentId: r.agentId, done: '${r.email} is now ${roleLabel(r.role).toLowerCase()}. They get it on their next sign-in.');
   }
 
   Future<void> _remove(StaffUser who, StaffMember m) async {
@@ -691,7 +685,7 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
   Widget build(BuildContext context) {
     final who = ref.watch(staffProvider)!;
     return _TablePage(
-      title: 'Team',
+      title: 'Users',
       action: Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton.icon(
           onPressed: () => showDialog<void>(context: context, builder: (_) => const ReviewsDialog()),
@@ -705,38 +699,76 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
         ),
       ]),
       subtitle: who.canManageStaff
-          ? 'Add people after they have signed in to this admin once. Changes apply on their next sign-in.'
-          : 'Only owners change roles.',
-      filters: who.canManageStaff
-          ? Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton.icon(
-                onPressed: () => _edit(who),
-                icon: const Icon(Icons.person_add_alt),
-                label: const Text('Add someone'),
-              ),
-            )
-          : null,
+          ? 'Admins see everything and manage users; managers run listings, leads and reports; agents see only their own. '
+              'Add people after they have signed in to this admin once. Changes apply on their next sign-in.'
+          : 'Only admins change roles.',
+      filters: Wrap(spacing: 12, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        SizedBox(
+          width: 340,
+          child: TextField(
+            key: const Key('team-search'),
+            controller: _search,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: const Icon(Icons.search),
+              hintText: 'Search by name, email or phone',
+              border: const OutlineInputBorder(),
+              suffixIcon: _search.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      icon: const Icon(Icons.close),
+                      onPressed: () => setState(_search.clear),
+                    ),
+            ),
+          ),
+        ),
+        for (final r in <StaffRole?>[null, ...StaffRole.values])
+          ChoiceChip(
+            key: Key('team-role-${r?.name ?? 'all'}'),
+            label: Text(r == null ? 'All' : '${roleLabel(r)}s'),
+            selected: _role == r,
+            showCheckmark: false,
+            onSelected: (_) => setState(() => _role = r),
+          ),
+        if (who.canManageStaff)
+          FilledButton.icon(
+            onPressed: () => _edit(who),
+            icon: const Icon(Icons.person_add_alt),
+            label: const Text('Add someone'),
+          ),
+      ]),
       table: FutureBuilder<List<StaffMember>>(
         future: _team,
         builder: (context, snap) {
           if (snap.hasError) {
             return Padding(
               padding: const EdgeInsets.all(24),
-              child: Text("Couldn't load the team: ${snap.error}",
-                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              child: Text("Couldn't load the team: ${snap.error}", style: TextStyle(color: Theme.of(context).colorScheme.error)),
             );
           }
-          final team = snap.data;
-          if (team == null) {
+          final all = snap.data;
+          if (all == null) {
             return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
+          }
+          final team = [
+            for (final m in all)
+              if ((_role == null || m.role == _role) && m.matches(_search.text)) m
+          ];
+          if (team.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.all(32),
+              child: Center(child: Text(all.isEmpty ? 'No staff yet.' : 'Nobody matches "${_search.text.trim()}".')),
+            );
           }
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
               columns: const [
-                DataColumn(label: Text('Email')),
                 DataColumn(label: Text('Name')),
+                DataColumn(label: Text('Email')),
+                DataColumn(label: Text('Phone')),
                 DataColumn(label: Text('Role')),
                 DataColumn(label: Text('Acts as agent')),
                 DataColumn(label: Text('Typical reply')),
@@ -744,16 +776,15 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
               rows: [
                 for (final m in team)
                   DataRow(cells: [
-                    DataCell(Text(m.email ?? '—')),
                     DataCell(Text(m.name ?? '—')),
+                    DataCell(Text(m.email ?? '—')),
+                    DataCell(Text(m.phone ?? '—')),
                     DataCell(_MenuCell(
-                      text: label(m.role.name),
+                      text: roleLabel(m.role),
                       tooltip: 'Change ${m.email ?? m.uid}',
                       saving: _saving.contains(m.email),
                       // Owners change anyone but themselves (no lock-out).
-                      options: who.canManageStaff && m.uid != who.uid && m.email != null
-                          ? const ['edit', 'remove']
-                          : const [],
+                      options: who.canManageStaff && m.uid != who.uid && m.email != null ? const ['edit', 'remove'] : const [],
                       labelOf: (o) => o == 'edit' ? 'Change role…' : 'Remove from staff…',
                       onSelected: (o) => o == 'edit' ? _edit(who, member: m) : _remove(who, m),
                     )),
@@ -818,7 +849,7 @@ class _StaffDialogState extends State<_StaffDialog> {
             DropdownButtonFormField<StaffRole>(
               initialValue: _role,
               decoration: const InputDecoration(labelText: 'Role'),
-              items: [for (final r in StaffRole.values) DropdownMenuItem(value: r, child: Text(label(r.name)))],
+              items: [for (final r in StaffRole.values) DropdownMenuItem(value: r, child: Text(roleLabel(r)))],
               onChanged: (r) => setState(() => _role = r ?? _role),
             ),
             if (_role == StaffRole.agent) ...[
@@ -826,8 +857,7 @@ class _StaffDialogState extends State<_StaffDialog> {
               DropdownButtonFormField<String>(
                 initialValue: widget.agents.any((a) => a.id == _agentId) ? _agentId : null,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                    labelText: 'Acts as agent', helperText: 'Sees only this agent\'s leads and listings.'),
+                decoration: const InputDecoration(labelText: 'Acts as agent', helperText: 'Sees only this agent\'s leads and listings.'),
                 items: [for (final a in widget.agents) DropdownMenuItem(value: a.id, child: Text(a.name))],
                 onChanged: (id) => setState(() => _agentId = id),
               ),
@@ -901,9 +931,7 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
       _result = null;
     });
     try {
-      final r = await ref
-          .read(adminActionsProvider)
-          .dataRequest(ref.read(staffProvider)!, kind: kind, phone: _phoneValue, email: _emailValue);
+      final r = await ref.read(adminActionsProvider).dataRequest(ref.read(staffProvider)!, kind: kind, phone: _phoneValue, email: _emailValue);
       if (mounted) setState(() => _result = r);
     } on AdminActionException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -1116,7 +1144,6 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
   }
 }
 
-
 /// Picks a new day and time for a viewing, from the slots clients can book.
 class _RescheduleDialog extends StatefulWidget {
   const _RescheduleDialog({required this.from});
@@ -1223,10 +1250,7 @@ class _TimeOffDialogState extends ConsumerState<_TimeOffDialog> {
     final who = ref.read(staffProvider)!;
     return _run(() async {
       await ref.read(adminActionsProvider).addTimeOff(who,
-          agentId: who.isManager ? _agent : null,
-          start: viewingSlot(_fromDay!, _fromTime),
-          end: viewingSlot(_toDay ?? _fromDay!, _toTime),
-          note: _note.text);
+          agentId: who.isManager ? _agent : null, start: viewingSlot(_fromDay!, _fromTime), end: viewingSlot(_toDay ?? _fromDay!, _toTime), note: _note.text);
       _note.clear();
     });
   }

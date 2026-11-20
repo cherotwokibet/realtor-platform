@@ -175,10 +175,23 @@ class AuditRow {
 /// One person on the team (staff/{uid}, the mirror of their role claims).
 class StaffMember {
   const StaffMember(
-      {required this.uid, required this.role, this.email, this.name, this.agentId, this.agentName, this.agentReplyMins});
+      {required this.uid, required this.role, this.email, this.name, this.agentId, this.agentName, this.agentReplyMins, this.phone});
   final String uid;
   final StaffRole role;
   final String? email, name, agentId, agentName;
+
+  /// Their own phone (Account), or their agent profile's.
+  final String? phone;
+
+  /// True when [q] (any case) is in their name, email, phone or agent name;
+  /// phones also match without spaces or the leading 0 / +254.
+  bool matches(String q) {
+    final t = q.trim().toLowerCase();
+    if (t.isEmpty) return true;
+    String digits(String? s) => (s ?? '').replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^(254|0)'), '');
+    final d = digits(t);
+    return [name, email, agentName].any((v) => (v ?? '').toLowerCase().contains(t)) || (d.length >= 3 && digits(phone).contains(d));
+  }
 
   /// The agent's typical first reply to a lead, in minutes (P5-s03); null until there are enough replies.
   final int? agentReplyMins;
@@ -237,6 +250,12 @@ class AgentOption {
 /// returns only what their role covers: agents get their own leads and
 /// listings, and no audit log. Changes go through the Functions (D7).
 abstract interface class AdminRepository {
+  /// [who]'s own staff record (Account), or null before they have one.
+  Future<StaffMember?> me(StaffUser who);
+
+  /// The Dashboard for [who] at [now].
+  Future<DashboardData> dashboard(StaffUser who, DateTime now);
+
   /// Newest first, optionally one [stage].
   Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25});
 
@@ -302,4 +321,60 @@ RowPage<T> pageAfter<T>(List<T> rows, String Function(T) idOf, {String? after, i
   final page = rows.skip(start).take(limit).toList();
   final more = start + page.length < rows.length;
   return RowPage(page, next: more && page.isNotEmpty ? idOf(page.last) : null);
+}
+
+/// The Dashboard (the admin's home): what needs doing now and how things
+/// are going, for one staff member (agents: their own only).
+class DashboardData {
+  const DashboardData({
+    required this.newLeads,
+    required this.leadsByDay,
+    required this.viewingsToday,
+    required this.viewingsWeek,
+    required this.liveListings,
+    required this.pendingListings,
+    required this.upcoming,
+    required this.latestLeads,
+    this.activity = const [],
+  });
+
+  /// Leads still at "new": nobody has replied yet.
+  final int newLeads;
+
+  /// Leads per day, the last [dashboardDays] days, oldest first (today last).
+  final List<int> leadsByDay;
+
+  /// Open (requested or confirmed) viewings today, and in the next 7 days.
+  final int viewingsToday, viewingsWeek;
+
+  final int liveListings;
+
+  /// Waiting for a manager to approve; 0 for agents' own count of theirs.
+  final int pendingListings;
+
+  /// The next few open viewings, soonest first.
+  final List<ViewingRow> upcoming;
+
+  /// The newest leads still at "new".
+  final List<LeadRow> latestLeads;
+
+  /// The latest audit entries (managers and owners only).
+  final List<AuditRow> activity;
+
+  int get leadsInPeriod => leadsByDay.fold(0, (a, b) => a + b);
+}
+
+/// How many days the Dashboard's leads chart covers.
+const dashboardDays = 14;
+
+/// Buckets [times] into [dashboardDays] days ending on [now]'s day (local).
+List<int> leadsPerDay(Iterable<DateTime> times, DateTime now) {
+  final today = DateTime(now.year, now.month, now.day);
+  final out = List.filled(dashboardDays, 0);
+  for (final t in times) {
+    final l = t.toLocal();
+    final back = today.difference(DateTime(l.year, l.month, l.day)).inDays;
+    if (back >= 0 && back < dashboardDays) out[dashboardDays - 1 - back]++;
+  }
+  return out;
 }

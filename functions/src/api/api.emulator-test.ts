@@ -25,7 +25,7 @@ import { purgeExpired } from './retention';
 import { updateAgentResponseTimes } from './response';
 import { dataRequest } from './privacy';
 import { deleteAccount, saveProfile, type CustomerAuth } from './profile';
-import { bootstrapOwner, setStaffRole, type StaffAuth } from './staff';
+import { bootstrapOwner, saveStaffProfile, setStaffRole, type StaffAuth } from './staff';
 
 let db: Firestore;
 const visitor: Caller = { uid: null, role: null, agentId: null };
@@ -289,6 +289,9 @@ class FakeAuth implements StaffAuth {
   claims(email: string) {
     return this.users.get(email)?.customClaims;
   }
+  async updateUser(uid: string, props: { displayName?: string }) {
+    for (const u of this.users.values()) if (u.uid === uid && props.displayName) u.displayName = props.displayName;
+  }
 }
 
 describe('staff roles', () => {
@@ -339,6 +342,22 @@ describe('staff roles', () => {
     await rejectsWith(setStaffRole(db, auth, owner, { email: 'nobody@example.com', role: 'manager' }), 'not-found');
     assert.equal(auth.claims('new@example.com'), undefined);
     assert.equal((await db.collection('audit').get()).size, 0);
+  });
+});
+
+describe('staff profile (Account)', () => {
+  test('staff save their own name and phone; others and bad input refused', async () => {
+    const auth = new FakeAuth();
+    auth.add('u-agent-wanjiku', 'wanjiku@example.com', { role: 'agent', agentId: 'agent-wanjiku' });
+    await db.collection('staff').doc('u-agent-wanjiku').set({ email: 'wanjiku@example.com', role: 'agent', agentId: 'agent-wanjiku' });
+    const me: Caller = { uid: 'u-agent-wanjiku', role: 'agent', agentId: 'agent-wanjiku' };
+    await saveStaffProfile(db, auth, me, { name: 'Wanjiku M.', phone: '+254712345678' }, now);
+    const s = (await db.collection('staff').doc('u-agent-wanjiku').get()).data()!;
+    assert.deepEqual([s.name, s.phone, s.role], ['Wanjiku M.', '+254712345678', 'agent']);
+    assert.equal(auth.users.get('wanjiku@example.com')!.displayName, 'Wanjiku M.');
+    await rejectsWith(saveStaffProfile(db, auth, me, { name: 'W', phone: '0712' }), 'invalid-argument');
+    await rejectsWith(saveStaffProfile(db, auth, { uid: 'c1', role: null, agentId: null }, { name: 'Customer' }), 'permission-denied');
+    await rejectsWith(saveStaffProfile(db, auth, { uid: 'ghost', role: 'manager', agentId: null }, { name: 'Ghost' }), 'failed-precondition');
   });
 });
 

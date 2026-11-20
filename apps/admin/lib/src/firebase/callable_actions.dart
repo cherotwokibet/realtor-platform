@@ -18,8 +18,7 @@ class CallableAdminActions implements AdminActions {
   final CallFunction _call;
 
   @override
-  Future<void> moveLead(StaffUser who, {required String leadId, required String stage}) =>
-      _run('updateLeadStage', {'leadId': leadId, 'stage': stage});
+  Future<void> moveLead(StaffUser who, {required String leadId, required String stage}) => _run('updateLeadStage', {'leadId': leadId, 'stage': stage});
 
   @override
   Future<void> moderateListing(StaffUser who, {required String listingId, required String action, String? reason}) =>
@@ -118,12 +117,14 @@ class CallableAdminActions implements AdminActions {
   }
 
   @override
-  Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) =>
-      _run('setStaffRole', {
+  Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId}) => _run('setStaffRole', {
         'email': email.trim(),
         'role': role?.name,
         if (role == StaffRole.agent) 'agentId': agentId,
       });
+
+  @override
+  Future<void> saveMyProfile(StaffUser who, {required String name, String? phone}) => _run('saveStaffProfile', {'name': name.trim(), 'phone': phone});
 
   @override
   Future<DataRequestResult> dataRequest(StaffUser who, {required DataRequestKind kind, String? phone, String? email}) async {

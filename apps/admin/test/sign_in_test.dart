@@ -48,6 +48,12 @@ class FakeAuth implements AdminAuth {
   Future<void> signInAs(StaffUser user) => throw UnsupportedError('');
   @override
   Future<void> signOut() async => emit(const SignedOut());
+  @override
+  String? get email => null;
+  @override
+  bool get hasPassword => true;
+  @override
+  Future<void> changePassword(String current, String next) => _call('password');
 }
 
 late ProviderContainer container;
@@ -90,7 +96,7 @@ void main() {
     expect(auth.calls, ['signIn boss@example.com ${typed(9)}']);
     auth.emit(const SignedIn(StaffUser(uid: 'u', name: 'Boss', role: StaffRole.owner)));
     await tester.pumpAndSettle();
-    expect(location(), '/leads');
+    expect(location(), '/dashboard');
   });
 
   testWidgets('creates an account only with a password of at least 8 characters', (tester) async {
