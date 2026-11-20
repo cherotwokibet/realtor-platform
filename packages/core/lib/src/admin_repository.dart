@@ -76,10 +76,36 @@ class LeadRow {
     required this.createdAt,
     this.contactName,
     this.contactPhone,
+    this.followUpAt,
+    this.notes = const [],
   });
   final String id, listingId, listingTitle, agentId, agentName, channel, stage;
   final DateTime createdAt;
   final String? contactName, contactPhone;
+
+  /// When to get in touch next; null: nothing planned.
+  final DateTime? followUpAt;
+
+  /// What was done or said, oldest first.
+  final List<({String text, String? by, DateTime at})> notes;
+
+  /// A follow-up is due by [now] and the lead is still open.
+  bool dueAt(DateTime now) => followUpAt != null && !followUpAt!.isAfter(now) && stage != 'won' && stage != 'lost';
+
+  LeadRow withFollowUp(DateTime? Function() followUpAt, {({String text, String? by, DateTime at})? note}) => LeadRow(
+        id: id,
+        listingId: listingId,
+        listingTitle: listingTitle,
+        agentId: agentId,
+        agentName: agentName,
+        channel: channel,
+        stage: stage,
+        createdAt: createdAt,
+        contactName: contactName,
+        contactPhone: contactPhone,
+        followUpAt: followUpAt(),
+        notes: [...notes, if (note != null) note],
+      );
 
   LeadRow withStage(String stage) => LeadRow(
         id: id,
@@ -92,6 +118,8 @@ class LeadRow {
         createdAt: createdAt,
         contactName: contactName,
         contactPhone: contactPhone,
+        followUpAt: followUpAt,
+        notes: notes,
       );
 }
 
@@ -211,7 +239,8 @@ class EditRequestRow {
 
 /// What an edit changes, field by field: (field, now, proposed); only the
 /// fields that differ, in the form's order.
-List<(String, String, String)> editChanges(ListingDraft now, ListingDraft next, {Map<String, String> areaNames = const {}, Map<String, String> agentNames = const {}}) {
+List<(String, String, String)> editChanges(ListingDraft now, ListingDraft next,
+    {Map<String, String> areaNames = const {}, Map<String, String> agentNames = const {}}) {
   String kes(int? v) => v == null ? '—' : formatKes(v);
   String words(List<String> xs) => xs.isEmpty ? '—' : xs.join(', ');
   final rows = <(String, String, String)>[
@@ -224,7 +253,11 @@ List<(String, String, String)> editChanges(ListingDraft now, ListingDraft next, 
     ('Deposit (months)', '${now.depositMonths ?? '—'}', '${next.depositMonths ?? '—'}'),
     ('Service charge', kes(now.serviceChargeKES), kes(next.serviceChargeKES)),
     ('Viewing fee', kes(now.viewingFeeKES), kes(next.viewingFeeKES)),
-    ('Other expenses', words([for (final c in now.extraCharges) '${c.name} ${kes(c.amountKES)}']), words([for (final c in next.extraCharges) '${c.name} ${kes(c.amountKES)}'])),
+    (
+      'Other expenses',
+      words([for (final c in now.extraCharges) '${c.name} ${kes(c.amountKES)}']),
+      words([for (final c in next.extraCharges) '${c.name} ${kes(c.amountKES)}'])
+    ),
     ('Area', areaNames[now.area] ?? now.area, areaNames[next.area] ?? next.area),
     ('Estate or building', now.estate ?? '—', next.estate ?? '—'),
     ('Map position', '${now.lat.toStringAsFixed(5)}, ${now.lng.toStringAsFixed(5)}', '${next.lat.toStringAsFixed(5)}, ${next.lng.toStringAsFixed(5)}'),
@@ -232,7 +265,10 @@ List<(String, String, String)> editChanges(ListingDraft now, ListingDraft next, 
     ('Description', now.description.trim(), next.description.trim()),
     ('Agent', agentNames[now.agentId] ?? now.agentId ?? '—', agentNames[next.agentId] ?? next.agentId ?? '—'),
   ];
-  return [for (final r in rows) if (r.$2 != r.$3) r];
+  return [
+    for (final r in rows)
+      if (r.$2 != r.$3) r
+  ];
 }
 
 class AuditRow {
@@ -257,8 +293,7 @@ class AuditRow {
 
 /// One person on the team (staff/{uid}, the mirror of their role claims).
 class StaffMember {
-  const StaffMember(
-      {required this.uid, required this.role, this.email, this.name, this.agentId, this.agentName, this.agentReplyMins, this.phone});
+  const StaffMember({required this.uid, required this.role, this.email, this.name, this.agentId, this.agentName, this.agentReplyMins, this.phone});
   final String uid;
   final StaffRole role;
   final String? email, name, agentId, agentName;
@@ -502,7 +537,9 @@ abstract interface class AdminRepository {
   Future<DashboardData> dashboard(StaffUser who, DateTime now);
 
   /// Newest first, optionally one [stage].
-  Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25});
+  ///
+  /// [dueBy]: only open leads with a follow-up at or before it, soonest first.
+  Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, DateTime? dueBy, String? after, int limit = 25});
 
   /// [status] null: open ones (requested or confirmed) with a slot from
   /// [from], earliest first, so past ones still to close come first;
@@ -513,7 +550,9 @@ abstract interface class AdminRepository {
   Future<RowPage<StaffListingRow>> listings(StaffUser who, {String? status, String? after, int limit = 25});
 
   /// Newest first. Throws [StaffAccessException] for agents.
-  Future<RowPage<AuditRow>> audit(StaffUser who, {String? after, int limit = 25});
+  ///
+  /// [actions]: only these (one of [auditGroups]); null: everything.
+  Future<RowPage<AuditRow>> audit(StaffUser who, {List<String>? actions, String? after, int limit = 25});
 
   /// The team, by email. Throws [StaffAccessException] for agents.
   Future<List<StaffMember>> team(StaffUser who);
@@ -581,6 +620,7 @@ class DashboardData {
     required this.upcoming,
     required this.latestLeads,
     this.activity = const [],
+    this.followUpsDue = 0,
   });
 
   /// Leads still at "new": nobody has replied yet.
@@ -606,8 +646,26 @@ class DashboardData {
   /// The latest audit entries (managers and owners only).
   final List<AuditRow> activity;
 
+  /// Open leads whose follow-up time has come.
+  final int followUpsDue;
+
   int get leadsInPeriod => leadsByDay.fold(0, (a, b) => a + b);
 }
+
+/// The audit log's filters: each a name and the actions it shows.
+const auditGroups = <(String, List<String>)>[
+  (
+    'Listings',
+    [
+      'listing.submit', 'listing.approve', 'listing.reject', 'listing.expire', 'listing.let', 'listing.sold', 'listing.confirm', 'listing.feature', //
+      'listing.hot', 'listing.recommend', 'listing.pin-newest', 'listing.edit', 'listing.edit-request', 'listing.edit-approve', 'listing.edit-reject',
+    ]
+  ),
+  ('Leads and viewings', ['lead.stage', 'lead.followup', 'viewing.status', 'viewing.reschedule', 'agent.block', 'agent.unblock']),
+  ('Users and agents', ['staff.role', 'agent.save', 'review.moderate']),
+  ('Site and ads', ['area.save', 'page.save', 'project.save', 'ad.save', 'ad.delete', 'feedback.update']),
+  ('Privacy', ['privacy.export', 'privacy.delete']),
+];
 
 /// How many days the Dashboard's leads chart covers.
 const dashboardDays = 14;

@@ -130,6 +130,16 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         contactPhone: '+2547000002${(i % 100).toString().padLeft(2, '0')}',
       ));
     }
+    // A few leads with a follow-up planned: some due already, one tomorrow.
+    for (final agentId in _agents.keys) {
+      final open = [for (final (n, l) in _leads.indexed) if (l.agentId == agentId && l.stage != 'won' && l.stage != 'lost') n];
+      for (final (k, hours) in [(0, -3), (1, 20)]) {
+        if (k >= open.length) break;
+        final l = _leads[open[k]];
+        _leads[open[k]] = l.withFollowUp(() => (now ?? _clock()).add(Duration(hours: hours)),
+            note: (text: 'Called; asked to ring back', by: l.agentName, at: _now.subtract(const Duration(days: 1))));
+      }
+    }
     for (var i = 0; i < 30; i++) {
       final manager = i % 3 != 0;
       final listing = _listings[i % _listings.length];
@@ -204,6 +214,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
       upcoming: open.take(5).toList(),
       latestLeads: fresh.take(5).toList(),
       activity: who.canOpen(AdminSection.audit) ? (_audit.toList()..sort((a, b) => b.at.compareTo(a.at))).take(6).toList() : const [],
+      followUpsDue: leads.where((l) => l.dueAt(now)).length,
     );
   }
 
@@ -225,8 +236,9 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   }
 
   @override
-  Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25}) async {
-    final rows = scopedTo(who, _leads, (r) => r.agentId).where((r) => stage == null || r.stage == stage).toList();
+  Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, DateTime? dueBy, String? after, int limit = 25}) async {
+    final rows = scopedTo(who, _leads, (r) => r.agentId).where((r) => (stage == null || r.stage == stage) && (dueBy == null || r.dueAt(dueBy))).toList();
+    if (dueBy != null) rows.sort((a, b) => a.followUpAt!.compareTo(b.followUpAt!));
     return pageAfter(rows, (r) => r.id, after: after, limit: limit);
   }
 
@@ -295,9 +307,22 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
   }
 
   @override
-  Future<RowPage<AuditRow>> audit(StaffUser who, {String? after, int limit = 25}) async {
+  Future<RowPage<AuditRow>> audit(StaffUser who, {List<String>? actions, String? after, int limit = 25}) async {
     if (!who.canOpen(AdminSection.audit)) throw StaffAccessException('the audit log is for owners and managers');
-    return pageAfter(_audit, (r) => r.id, after: after, limit: limit);
+    return pageAfter([for (final r in _audit) if (actions == null || actions.contains(r.action)) r], (r) => r.id, after: after, limit: limit);
+  }
+
+  @override
+  Future<void> followUpLead(StaffUser who, {required String leadId, String? note, DateTime? followUpAt, bool clearFollowUp = false}) async {
+    final i = _leads.indexWhere((l) => l.id == leadId);
+    if (i < 0) throw AdminActionException('not-found', 'no such lead');
+    final lead = _leads[i];
+    if (!who.isManager && lead.agentId != who.agentId) throw AdminActionException('permission-denied', 'not your lead');
+    if ((note ?? '').trim().isEmpty && followUpAt == null && !clearFollowUp) throw AdminActionException('invalid-argument', 'a note or a follow-up time');
+    final at = _clock();
+    _leads[i] = lead.withFollowUp(() => clearFollowUp ? null : (followUpAt ?? lead.followUpAt),
+        note: (note ?? '').trim().isEmpty ? null : (text: note!.trim(), by: who.name, at: at));
+    _log(who, 'lead.followup', lead.listingTitle, lead.followUpAt == null ? 'none' : 'set', clearFollowUp ? 'none' : 'set', at: at);
   }
 
   @override

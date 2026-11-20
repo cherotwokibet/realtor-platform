@@ -115,9 +115,9 @@ class _Body extends StatelessWidget {
         icon: Icons.mark_email_unread_outlined,
         label: 'New leads',
         value: data.newLeads,
-        caption: 'Waiting for a first reply',
-        onTap: () => context.go('/leads'),
-        urgent: data.newLeads > 0,
+        caption: data.followUpsDue == 0 ? 'Waiting for a first reply' : 'Waiting for a reply · ${data.followUpsDue} follow-ups due',
+        onTap: () => context.go(data.followUpsDue > 0 && data.newLeads == 0 ? '/leads?due=1' : '/leads'),
+        urgent: data.newLeads > 0 || data.followUpsDue > 0,
       ),
       _Stat(
         key: const Key('stat-leads-period'),
