@@ -241,7 +241,10 @@ class AppDrawer extends ConsumerWidget {
                     return Text(words, key: const Key('drawer-download'), maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: style);
                   }),
                   SizedBox(height: b.spacing.md),
-                  Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, children: badges),
+                  // Side by side, the same size, on one line.
+                  Row(children: [
+                    for (final (i, badge) in badges.indexed) ...[if (i > 0) SizedBox(width: b.spacing.sm), Expanded(child: badge)],
+                  ]),
                   // Log out, only for someone signed in.
                   if (customer != null) ...[
                     Divider(height: b.spacing.xl * 2, color: scheme.outlineVariant),
@@ -285,10 +288,10 @@ class StoreBadge extends StatelessWidget {
   const StoreBadge._({super.key, required this.top, required this.name, required this.mark, required this.onTap});
 
   factory StoreBadge.googlePlay({Key? key, required VoidCallback onTap}) => StoreBadge._(
-      key: key ?? const Key('badge-google-play'), top: 'GET IT ON', name: 'Google Play', mark: const Icon(Icons.play_arrow_rounded, size: 30), onTap: onTap);
+      key: key ?? const Key('badge-google-play'), top: 'GET IT ON', name: 'Google Play', mark: const Icon(Icons.play_arrow_rounded, size: 28), onTap: onTap);
 
   factory StoreBadge.appStore({Key? key, required VoidCallback onTap}) =>
-      StoreBadge._(key: key ?? const Key('badge-app-store'), top: 'Download on the', name: 'App Store', mark: const Icon(Icons.apple, size: 26), onTap: onTap);
+      StoreBadge._(key: key ?? const Key('badge-app-store'), top: 'Download on the', name: 'App Store', mark: const Icon(Icons.apple, size: 24), onTap: onTap);
 
   final String top, name;
   final Widget mark;
@@ -304,20 +307,29 @@ class StoreBadge extends StatelessWidget {
       label: '$top $name',
       child: Material(
         color: scheme.onSurface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 6, 14, 6),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              SizedBox.square(dimension: 26, child: Center(child: IconTheme(data: IconThemeData(color: ink), child: mark))),
-              const SizedBox(width: 8),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                Text(top, style: TextStyle(color: ink, fontSize: 9, letterSpacing: 0.4, height: 1.1)),
-                Text(name, style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w600, height: 1.15)),
-              ]),
-            ]),
+          // One height for both badges; the words shrink to fit a narrow menu.
+          child: SizedBox(
+            height: 48,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    SizedBox.square(dimension: 24, child: Center(child: IconTheme(data: IconThemeData(color: ink, size: 24), child: mark))),
+                    const SizedBox(width: 8),
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                      Text(top, style: TextStyle(color: ink, fontSize: 9, letterSpacing: 0.3, height: 1.1)),
+                      Text(name, style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w600, height: 1.15)),
+                    ]),
+                  ]),
+                ),
+              ),
+            ),
           ),
         ),
       ),
