@@ -64,7 +64,6 @@
   "apps": {
     "androidId": "ke.co.realtimeestates.app",
     "iosId": "ke.co.realtimeestates.app",
-    "googlePlayUrl": "https://play.google.com/store/apps/details?id=ke.co.realtimeestates.app",
     "testCerts": [
       {
         "name": "Cloud Shell debug key (Boniface)",
