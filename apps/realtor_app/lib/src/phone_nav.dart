@@ -245,14 +245,16 @@ class AppDrawer extends ConsumerWidget {
                   // Log out, only for someone signed in.
                   if (customer != null) ...[
                     Divider(height: b.spacing.xl * 2, color: scheme.outlineVariant),
-                    OutlinedButton(
+                    // Logout: a soft tint of the brand colour with its icon, clear but not alarming.
+                    FilledButton.icon(
                       key: const Key('drawer-logout'),
-                      style: OutlinedButton.styleFrom(
+                      style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(52),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusSm)),
-                        side: BorderSide(color: scheme.outlineVariant),
-                        foregroundColor: scheme.onSurface,
-                        textStyle: text.titleSmall,
+                        backgroundColor: b.primarySoft,
+                        foregroundColor: scheme.primary,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusMd)),
+                        textStyle: text.titleSmall?.copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.2),
                       ),
                       onPressed: () async {
                         Navigator.pop(context);
@@ -263,7 +265,8 @@ class AppDrawer extends ConsumerWidget {
                         }
                         await ref.read(customerAccountProvider).signOut();
                       },
-                      child: const Text('Logout'),
+                      icon: const Icon(Icons.logout_rounded, size: 22),
+                      label: const Text('Log out'),
                     ),
                   ],
                 ]),

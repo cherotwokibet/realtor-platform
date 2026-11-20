@@ -592,55 +592,72 @@ class SavedSearchesList extends ConsumerWidget {
         ]),
       );
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      for (final s in searches) ...[
-        Material(
-          key: Key('saved-search-${s.id}'),
-          color: scheme.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusMd), side: BorderSide(color: scheme.outlineVariant)),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: () => context.push(s.filters.toUri().toString()),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(b.spacing.lg, b.spacing.md, b.spacing.sm, b.spacing.sm),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(
-                      s.filters.types.isEmpty
-                          ? 'Homes ${s.filters.purpose.heading}'
-                          : '${s.filters.types.map(typeName).join(', ')} ${s.filters.purpose.heading}',
-                      style: text.labelLarge?.copyWith(color: scheme.primary),
-                    ),
-                    SizedBox(height: b.spacing.xs),
-                    Text(s.filters.areas.isEmpty ? 'Anywhere' : s.filters.areas.map(areaName).join(', '),
-                        style: text.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
-                    SizedBox(height: b.spacing.xs),
-                    for (final line in [
-                      if (s.filters.minBeds != null) '${s.filters.minBeds}+ bedrooms',
-                      if (s.filters.maxPriceKES != null)
-                        'Up to ${formatKes(s.filters.maxPriceKES!)}${s.filters.purpose.period == null ? '' : ' a ${s.filters.purpose.period}'}',
-                      'Alerts on',
-                    ])
-                      Text(line, style: text.bodyMedium?.copyWith(color: b.textMuted)),
+    // Compact cards, three across on a computer, two on a tablet, one on a
+    // phone: what and where, the other filters as small chips, Alerts on,
+    // and a bin. A tap runs the search again.
+    Widget card(SavedSearchRow s) {
+      final f = s.filters;
+      final what = f.types.isEmpty ? 'Homes ${f.purpose.heading}' : '${f.types.map(typeName).join(', ')} ${f.purpose.heading}';
+      final chips = [
+        if (f.minBeds != null) '${f.minBeds}+ beds',
+        if (f.maxPriceKES != null) 'Up to ${formatKes(f.maxPriceKES!, compact: true)}${f.purpose.period == null ? '' : ' / ${f.purpose.period}'}',
+      ];
+      return Material(
+        key: Key('saved-search-${s.id}'),
+        color: scheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(b.radiusMd), side: BorderSide(color: scheme.outlineVariant)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.push(f.toUri().toString()),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(b.spacing.md, b.spacing.md, b.spacing.xs, b.spacing.md),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: b.primarySoft, shape: BoxShape.circle),
+                child: Icon(Icons.notifications_active_outlined, size: 20, color: scheme.primary),
+              ),
+              SizedBox(width: b.spacing.md),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(what,
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: text.labelLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
+                  Text(f.areas.isEmpty ? 'Anywhere' : f.areas.map(areaName).join(', '),
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  SizedBox(height: b.spacing.xs),
+                  Wrap(spacing: b.spacing.xs, runSpacing: b.spacing.xs, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                    for (final c in chips)
+                      DecoratedBox(
+                        decoration: BoxDecoration(color: b.surfaceAlt, borderRadius: BorderRadius.circular(999)),
+                        child: Padding(padding: EdgeInsets.symmetric(horizontal: b.spacing.sm, vertical: 2), child: Text(c, style: text.labelSmall)),
+                      ),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.circle, size: 8, color: b.success),
+                      SizedBox(width: b.spacing.xs),
+                      Text('Alerts on', style: text.labelSmall?.copyWith(color: b.textMuted)),
+                    ]),
                   ]),
-                ),
-                Column(children: [
-                  const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.chevron_right)),
-                  SizedBox(height: b.spacing.lg),
-                  IconButton(
-                    tooltip: 'Stop these alerts',
-                    icon: Icon(Icons.delete_outline, color: b.textMuted),
-                    onPressed: () => ref.read(alertsRepositoryProvider).deleteSearch(s.id),
-                  ),
                 ]),
-              ]),
-            ),
+              ),
+              IconButton(
+                tooltip: 'Stop these alerts',
+                visualDensity: VisualDensity.compact,
+                icon: Icon(Icons.delete_outline, color: b.textMuted, size: 20),
+                onPressed: () => ref.read(alertsRepositoryProvider).deleteSearch(s.id),
+              ),
+            ]),
           ),
         ),
-        SizedBox(height: b.spacing.md),
-      ],
-    ]);
+      );
+    }
+
+    return LayoutBuilder(builder: (context, box) {
+      final gap = b.spacing.md;
+      final across = box.maxWidth >= 900 ? 3 : (box.maxWidth >= 600 ? 2 : 1);
+      final width = (box.maxWidth - gap * (across - 1)) / across;
+      return Wrap(spacing: gap, runSpacing: gap, children: [for (final s in searches) SizedBox(width: width, child: card(s))]);
+    });
   }
 }
 
