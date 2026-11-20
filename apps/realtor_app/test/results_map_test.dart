@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_app/src/app.dart';
@@ -61,6 +62,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    expect(tester.getRect(find.byKey(const Key('draw-panel'))).bottom, lessThanOrEqualTo(tester.getRect(find.byType(FlutterMap)).top),
+        reason: 'the panel sits above the map, not over the shape');
     FilledButton search() => tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Search this area'));
     // Tapped in a crossing order: top left, bottom right, top right, bottom left.
     for (final o in [const Offset(-150, -100), const Offset(150, 200), const Offset(150, -100)]) {
