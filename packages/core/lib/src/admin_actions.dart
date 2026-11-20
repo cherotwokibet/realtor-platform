@@ -153,6 +153,13 @@ abstract interface class AdminActions {
   /// Properties, or takes it out. Completes with the new state.
   Future<bool> setHotListing(StaffUser who, {required String listingId, required bool hot});
 
+  /// `setPlacement`, managers: a live listing in or out of a home page row
+  /// ('hot', 'recommended', or 'newest' to pin it first). Featured is [featureListing].
+  Future<bool> setPlacement(StaffUser who, {required String listingId, required String placement, required bool on});
+
+  /// `moderateEdit`, managers: apply an agent's waiting edit, or reject it with [reason].
+  Future<void> moderateEdit(StaffUser who, {required String listingId, required bool approve, String? reason});
+
   /// `submitListing` (P5-s02): creates or edits a listing and sends it for
   /// review (pending). Agents submit their own; managers for any agent.
   /// Completes with the listing id.

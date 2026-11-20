@@ -152,6 +152,14 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<bool> setPlacement(StaffUser who, {required String listingId, required String placement, required bool on}) =>
+      inner.setPlacement(who, listingId: listingId, placement: placement, on: on);
+
+  @override
+  Future<void> moderateEdit(StaffUser who, {required String listingId, required bool approve, String? reason}) =>
+      inner.moderateEdit(who, listingId: listingId, approve: approve, reason: reason);
+
+  @override
   Future<void> saveMyProfile(StaffUser who, {required String name, String? phone}) => inner.saveMyProfile(who, name: name, phone: phone);
 
   @override
@@ -834,20 +842,107 @@ void main() {
     expect(draft!.description, description, reason: 'the description is saved with the listing');
   });
 
-  testWidgets('a manager edits a listing from its title; the edit goes back to Pending', (tester) async {
+  testWidgets('a manager edits a listing from its title: a draft goes to Pending, a live one stays live', (tester) async {
     await open(tester, as: manager);
     await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
-    final first = (await container.read(adminRepositoryProvider).listings(manager, limit: 1)).rows.single;
-    await tester.tap(find.text(first.title).first);
+    final rows = (await container.read(adminRepositoryProvider).listings(manager, limit: 15)).rows;
+    for (final first in [rows.firstWhere((r) => r.status == 'draft'), rows.firstWhere((r) => r.status == 'live')]) {
+      await tapVisible(tester, find.text(first.title).first);
+      expect(find.text('Edit listing'), findsOneWidget);
+      expect(find.byKey(const Key('listing-agent')), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('listing-title')), '${first.title}, renovated');
+      await tester.tap(find.text('Save and send for review'));
+      await tester.pumpAndSettle();
+      final row = (await container.read(adminRepositoryProvider).listings(manager, limit: 50)).rows.firstWhere((r) => r.id == first.id);
+      expect((row.title, row.status), ('${first.title}, renovated', first.status == 'live' ? 'live' : 'pending'));
+      if (first.status == 'live') expect(find.text('Saved. The changes are live.'), findsOneWidget);
+      // Rows reorder after a save: tap the next one by its title, found afresh.
+      await tester.pumpAndSettle(const Duration(seconds: 5));
+    }
+  });
+
+  testWidgets("an agent's change to a live listing waits in Edit requests; a manager sees the changes and approves", (tester) async {
+    await open(tester, as: wanjiku);
+    await tester.tap(find.text('Listings'));
     await tester.pumpAndSettle();
-    expect(find.text('Edit listing'), findsOneWidget);
-    expect(find.byKey(const Key('listing-agent')), findsOneWidget);
-    await tester.enterText(find.byKey(const Key('listing-title')), '${first.title}, renovated');
+    final live = (await container.read(adminRepositoryProvider).listings(wanjiku, status: 'live', limit: 5)).rows.first;
+    await tapVisible(tester, find.text(live.title).first);
+    await tester.enterText(find.byKey(const Key('listing-price')), '99000');
     await tester.tap(find.text('Save and send for review'));
     await tester.pumpAndSettle();
-    final row = (await container.read(adminRepositoryProvider).listings(manager, limit: 1)).rows.single;
-    expect((row.id, row.title, row.status), (first.id, '${first.title}, renovated', 'pending'));
+    expect(find.textContaining('stays live as it was'), findsOneWidget);
+    var row = (await container.read(adminRepositoryProvider).listings(manager, limit: 50)).rows.firstWhere((r) => r.id == live.id);
+    expect((row.status, row.priceKES), ('live', live.priceKES), reason: 'unchanged until approved');
+    await tester.tap(find.byKey(const Key('nav-edits')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(Key('edit-${live.id}')), findsOneWidget, reason: 'the agent sees their own');
+
+    await container.read(adminAuthProvider).signOut();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(manager.name));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nav-edits')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(Key('edit-${live.id}')));
+    await tester.pumpAndSettle();
+    expect(find.text('Price'), findsOneWidget);
+    expect(find.text('KES 99,000'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('edit-approve')));
+    await tester.pumpAndSettle();
+    row = (await container.read(adminRepositoryProvider).listings(manager, limit: 50)).rows.firstWhere((r) => r.id == live.id);
+    expect((row.status, row.priceKES), ('live', 99000));
+    expect(find.text('No edits waiting.'), findsOneWidget);
+  });
+
+  testWidgets('a manager rejects an edit with a reason; the agent sees why', (tester) async {
+    await open(tester, as: wanjiku);
+    final live = (await container.read(adminRepositoryProvider).listings(wanjiku, status: 'live', limit: 5)).rows.first;
+    final draft = (await container.read(adminRepositoryProvider).listingDraft(wanjiku, live.id))!;
+    await container.read(adminActionsProvider).submitListing(wanjiku, draft.copyWith(priceKES: 1));
+    await container.read(adminAuthProvider).signOut();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(manager.name));
+    await tester.pumpAndSettle();
+    container.read(routerProvider).go('/edits');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(Key('edit-${live.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-reject')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-reject')));
+    await tester.pumpAndSettle();
+    expect(find.text('Say why, so the agent can fix it.'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('edit-reason')), 'That price looks wrong');
+    await tester.tap(find.byKey(const Key('edit-reject')));
+    await tester.pumpAndSettle();
+    final mine = await container.read(adminRepositoryProvider).editRequests(wanjiku);
+    expect((mine.first.status, mine.first.reason), ('rejected', 'That price looks wrong'));
+  });
+
+  testWidgets('Home page: a manager adds a live listing to Recommended and takes one out of Hot properties', (tester) async {
+    await open(tester, as: manager, at: '/homePage');
+    final repo = container.read(adminRepositoryProvider);
+    final before = (await repo.listings(manager, status: 'live', limit: 100)).rows;
+    final candidate = before.firstWhere((l) => !l.recommended);
+    final rec = find.byKey(const Key('placement-recommended'));
+    await tester.tap(find.descendant(of: rec, matching: find.text('Add')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('pick-listing-search')), candidate.title);
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(Dialog), matching: find.text(candidate.title)).last);
+    await tester.pumpAndSettle();
+    expect((await repo.listings(manager, status: 'live', limit: 100)).rows.firstWhere((l) => l.id == candidate.id).recommended, isTrue);
+    expect(find.descendant(of: rec, matching: find.text(candidate.title)), findsOneWidget);
+    await tester.tap(find.descendant(of: rec, matching: find.byTooltip('Take out of Recommended')).first);
+    await tester.pumpAndSettle();
+    expect((await repo.listings(manager, status: 'live', limit: 100)).rows.where((l) => l.recommended), hasLength(before.where((l) => l.recommended).length));
+  });
+
+  testWidgets('agents see their own edit requests but not the Home page', (tester) async {
+    await open(tester, as: wanjiku);
+    expect(find.byKey(const Key('nav-edits')), findsOneWidget);
+    expect(find.byKey(const Key('nav-homePage')), findsNothing);
   });
 
   testWidgets('photos: a new listing says to save first; an existing one uploads, refusing what the rules would', (tester) async {

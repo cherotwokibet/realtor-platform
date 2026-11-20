@@ -100,6 +100,16 @@ class CallableAdminActions implements AdminActions {
   }
 
   @override
+  Future<bool> setPlacement(StaffUser who, {required String listingId, required String placement, required bool on}) async {
+    final r = await _run('setPlacement', {'listingId': listingId, 'placement': placement, 'on': on}) as Map<Object?, Object?>;
+    return r['on'] == true;
+  }
+
+  @override
+  Future<void> moderateEdit(StaffUser who, {required String listingId, required bool approve, String? reason}) =>
+      _run('moderateEdit', {'listingId': listingId, 'action': approve ? 'approve' : 'reject', if (reason != null) 'reason': reason});
+
+  @override
   Future<String> submitListing(StaffUser who, ListingDraft draft) async {
     final r = await _run('submitListing', draft.toCallable()) as Map<Object?, Object?>;
     return r['listingId'] as String;

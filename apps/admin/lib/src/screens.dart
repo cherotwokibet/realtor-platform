@@ -455,12 +455,21 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
     });
   }
 
-  /// Opens the editor; a save sends the listing to Pending.
-  Future<void> _edit(String? listingId) async {
+  /// Opens the editor. A save sends a new or offline listing to Pending; a
+  /// live one stays live (a manager's change applies now, an agent's waits
+  /// in Edit requests).
+  Future<void> _edit(String? listingId, {String? status}) async {
     final messenger = ScaffoldMessenger.of(context);
+    final who = ref.read(staffProvider)!;
     final saved = await showDialog<String>(context: context, builder: (_) => ListingEditorDialog(listingId: listingId));
     if (saved == null || !mounted) return;
-    messenger.showSnackBar(const SnackBar(content: Text('Saved. The listing waits in Pending for approval.')));
+    messenger.showSnackBar(SnackBar(
+      content: Text(switch ((status, who.isManager)) {
+        ('live', true) => 'Saved. The changes are live.',
+        ('live', false) => 'Sent for review. The listing stays live as it was until a manager approves the changes.',
+        _ => 'Saved. The listing waits in Pending for approval.',
+      }),
+    ));
     setState(() => _reload++);
   }
 
@@ -514,7 +523,7 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
               final featured = r.featuredAt(DateTime.now());
               final title = Tooltip(
                 message: 'Edit ${r.title}',
-                child: InkWell(onTap: () => _edit(r.id), child: Text(r.title, style: const TextStyle(decoration: TextDecoration.underline))),
+                child: InkWell(onTap: () => _edit(r.id, status: r.status), child: Text(r.title, style: const TextStyle(decoration: TextDecoration.underline))),
               );
               if (!r.photoMatch && !featured && !r.hot) return title;
               return Row(mainAxisSize: MainAxisSize.min, children: [

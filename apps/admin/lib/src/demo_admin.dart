@@ -79,6 +79,15 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         featuredUntil: i == 0 ? (now ?? _clock()).add(const Duration(days: 12)) : null,
       ));
     }
+    // Home page rows: two Recommended and one pinned first in Newest, among the live ones.
+    final live = [
+      for (final (i, l) in _listings.indexed)
+        if (l.status == 'live') i
+    ];
+    for (final i in live.take(2)) {
+      _listings[i] = _listings[i].withStatus('live', _listings[i].updatedAt, recommended: true);
+    }
+    if (live.length > 2) _listings[live[2]] = _listings[live[2]].withStatus('live', _listings[live[2]].updatedAt, pinnedNewest: true);
     // Viewings: some past (done, no-show, cancelled, one still confirmed to close), most this week.
     for (var i = 0; i < 14; i++) {
       final listing = _listings[(i * 5) % _listings.length];
@@ -365,6 +374,81 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     _listings[i] = listing.withStatus(listing.status, at, hot: hot);
     _log(who, 'listing.hot', listing.title, listing.hot ? 'hot' : 'none', hot ? 'hot' : 'none', at: at);
     return hot;
+  }
+
+  @override
+  Future<bool> setPlacement(StaffUser who, {required String listingId, required String placement, required bool on}) async {
+    if (placement == 'hot') return setHotListing(who, listingId: listingId, hot: on);
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    if (placement != 'recommended' && placement != 'newest') throw AdminActionException('invalid-argument', 'no row "$placement"');
+    final i = _listings.indexWhere((l) => l.id == listingId);
+    if (i < 0) throw AdminActionException('not-found', 'no such listing');
+    final listing = _listings[i];
+    if (on && listing.status != 'live') throw AdminActionException('failed-precondition', 'only a live listing can be placed on the home page');
+    final at = _clock();
+    _listings[i] =
+        placement == 'recommended' ? listing.withStatus(listing.status, at, recommended: on) : listing.withStatus(listing.status, at, pinnedNewest: on);
+    _log(who, placement == 'recommended' ? 'listing.recommend' : 'listing.pin-newest', listing.title, listing.inPlacement(placement, at) ? placement : 'none',
+        on ? placement : 'none',
+        at: at);
+    return on;
+  }
+
+  /// Agents' edits to live listings, by listing id.
+  final _edits = <String, EditRequestRow>{};
+
+  @override
+  Future<List<EditRequestRow>> editRequests(StaffUser who) async => [
+        for (final e in _edits.values)
+          if (who.agentScope == null ? e.status == 'pending' : e.agentId == who.agentScope) e
+      ]..sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+
+  @override
+  Future<void> moderateEdit(StaffUser who, {required String listingId, required bool approve, String? reason}) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final e = _edits[listingId];
+    if (e == null || e.status != 'pending') throw AdminActionException('not-found', 'no edit waiting for this listing');
+    if (!approve && (reason ?? '').trim().isEmpty) throw AdminActionException('invalid-argument', 'a rejection needs a reason');
+    final at = _clock();
+    final i = _listings.indexWhere((l) => l.id == listingId);
+    if (approve && i >= 0) {
+      final l = _listings[i];
+      _listings[i] = StaffListingRow(
+        id: l.id,
+        slug: l.slug,
+        title: e.proposed.title.trim(),
+        area: e.proposed.area,
+        priceKES: e.proposed.priceKES,
+        status: l.status,
+        agentId: l.agentId,
+        agentName: l.agentName,
+        updatedAt: at,
+        leads: l.leads,
+        calls: l.calls,
+        whatsapps: l.whatsapps,
+        expiresAt: l.expiresAt,
+        featuredUntil: l.featuredUntil,
+        hot: l.hot,
+        recommended: l.recommended,
+        pinnedNewest: l.pinnedNewest,
+        photoMatch: l.photoMatch,
+      );
+      _drafts[listingId] = e.proposed;
+    }
+    _edits[listingId] = EditRequestRow(
+      listingId: e.listingId,
+      title: e.title,
+      agentId: e.agentId,
+      agentName: e.agentName,
+      status: approve ? 'approved' : 'rejected',
+      submittedAt: e.submittedAt,
+      proposed: e.proposed,
+      current: e.current,
+      changed: e.changed,
+      submittedBy: e.submittedBy,
+      reason: approve ? null : reason!.trim(),
+    );
+    _log(who, approve ? 'listing.edit-approve' : 'listing.edit-reject', e.title, 'pending edit', approve ? 'applied' : 'rejected', at: at);
   }
 
   @override
@@ -734,6 +818,49 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     if (i >= 0 && !who.isManager && _listings[i].agentId != who.agentId) throw AdminActionException('permission-denied', 'not your listing');
     final id = i >= 0 ? _listings[i].id : 'listing-new-${_listings.length + 1}';
     final before = i >= 0 ? _listings[i] : null;
+    // A live listing stays live: a manager's edit applies now; an agent's waits for a manager.
+    if (before != null && before.status == 'live') {
+      final now = await listingDraft(who, id);
+      final next = ListingDraft.fromDoc(id, {...draft.toCallable(), 'agentId': agentId});
+      if (!who.isManager) {
+        _edits[id] = EditRequestRow(
+          listingId: id,
+          title: before.title,
+          agentId: agentId,
+          agentName: _agents[agentId]!,
+          status: 'pending',
+          submittedAt: at,
+          proposed: next,
+          current: now,
+          submittedBy: who.name,
+        );
+        _log(who, 'listing.edit-request', before.title, 'live', 'pending edit', at: at);
+        return id;
+      }
+      _listings[i] = StaffListingRow(
+        id: id,
+        slug: before.slug,
+        title: draft.title.trim(),
+        area: draft.area,
+        priceKES: draft.priceKES,
+        status: 'live',
+        agentId: agentId,
+        agentName: _agents[agentId]!,
+        updatedAt: at,
+        leads: before.leads,
+        calls: before.calls,
+        whatsapps: before.whatsapps,
+        expiresAt: before.expiresAt,
+        featuredUntil: before.featuredUntil,
+        hot: before.hot,
+        recommended: before.recommended,
+        pinnedNewest: before.pinnedNewest,
+        photoMatch: before.photoMatch,
+      );
+      _drafts[id] = next;
+      _log(who, 'listing.edit', before.title, 'live', 'live', at: at);
+      return id;
+    }
     final row = StaffListingRow(
       id: id,
       slug: before?.slug ?? draft.title.toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-'),

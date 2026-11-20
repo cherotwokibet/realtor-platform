@@ -42,7 +42,49 @@ export const submitListingInput = z.object({
 });
 
 /** Creates or edits a listing and sends it for review (status pending). */
-export async function submitListing(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ listingId: string; slug: string }> {
+/**
+ * What a listing says (the part an edit changes); everything else (status,
+ * verification, placements, stats, slug) stays as it is when a live listing
+ * is edited.
+ */
+const CONTENT_KEYS = [
+  'title', 'purpose', 'type', 'beds', 'baths', 'priceKES', 'depositMonths', 'serviceChargeKES', 'viewingFeeKES',
+  'geo', 'area', 'estate', 'description', 'amenities', 'extraCharges', 'utilities', 'media', 'agentId',
+] as const;
+
+/** [data] without its content, so content left out of an edit is removed rather than kept. */
+function withoutContent(data: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...data };
+  for (const k of CONTENT_KEYS) delete out[k];
+  return out;
+}
+
+/** A copy of [data] with Firestore Timestamps as Dates, to check against the schema. */
+function asDates(data: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) {
+    out[k] = v && typeof v === 'object' && typeof (v as { toDate?: unknown }).toDate === 'function' ? (v as { toDate(): Date }).toDate() : v;
+  }
+  return out;
+}
+
+/** Which content fields differ between [before] and [after] (for the audit log and the review). */
+export function changedFields(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
+  return CONTENT_KEYS.filter((k) => JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null));
+}
+
+/**
+ * Creates or edits a listing. New, draft, pending and closed listings go to
+ * pending for review, as before. A live listing stays live: a manager's edit
+ * applies at once, an agent's becomes an edit request (listingEdits/{id},
+ * one per listing) that a manager approves or rejects (moderateEdit).
+ */
+export async function submitListing(
+  db: Firestore,
+  caller: Caller,
+  input: unknown,
+  now = new Date(),
+): Promise<{ listingId: string; slug: string; editRequest?: boolean; changed?: string[] }> {
   requireStaff(caller);
   const req = parseInput(submitListingInput, input);
   const agentId = isManager(caller) ? req.agentId ?? caller.agentId : caller.agentId;
@@ -59,8 +101,45 @@ export async function submitListing(db: Firestore, caller: Caller, input: unknow
   const ref = req.listingId ? db.collection('listings').doc(req.listingId) : db.collection('listings').doc();
   const base = slugify(req.title);
   let finalSlug = '';
+  let editRequest = false;
+  let changed: string[] | undefined;
   await db.runTransaction(async (tx) => {
     const existing = await tx.get(ref);
+    if (existing.exists && existing.get('status') === 'live') {
+      if (!isManager(caller) && existing.get('agentId') !== caller.agentId) throw new HttpsError('permission-denied', 'not your listing');
+      const { listingId: _id, lat, lng, agentId: _a, media: wanted, ...fields } = req;
+      const before = existing.data() as Record<string, unknown>;
+      const stored = (before.media ?? []) as z.infer<typeof mediaItem>[];
+      const content: Record<string, unknown> = {
+        ...fields,
+        media: wanted === undefined ? stored : ownMedia(stored, wanted),
+        geo: { lat, lng, geohash: geohash(lat, lng) },
+        agentId,
+      };
+      const merged = { ...withoutContent(before), ...content, updatedAt: now };
+      parseInput(listing, asDates(merged));
+      changed = changedFields(before, content);
+      finalSlug = before.slug as string;
+      const target = { collection: 'listings' as const, id: ref.id, label: before.title as string | undefined };
+      if (isManager(caller)) {
+        tx.set(ref, merged);
+        audit(tx, db, caller, { action: 'listing.edit', target, from: 'live', to: 'live', reason: changed.join(', ') || undefined }, now);
+      } else {
+        editRequest = true;
+        tx.set(db.collection('listingEdits').doc(ref.id), {
+          listingId: ref.id,
+          agentId,
+          title: before.title,
+          proposed: content,
+          changed,
+          status: 'pending',
+          submittedAt: now,
+          submittedBy: caller.name ?? null,
+        });
+        audit(tx, db, caller, { action: 'listing.edit-request', target, from: 'live', to: 'pending edit', reason: changed.join(', ') || undefined }, now);
+      }
+      return;
+    }
     if (existing.exists) {
       if (!isManager(caller) && existing.get('agentId') !== caller.agentId) throw new HttpsError('permission-denied', 'not your listing');
       const from = existing.get('status') as ListingStatus;
@@ -89,7 +168,36 @@ export async function submitListing(db: Firestore, caller: Caller, input: unknow
     const from = existing.exists ? (existing.get('status') as ListingStatus) : null;
     audit(tx, db, caller, { action: 'listing.submit', target: { collection: 'listings', id: ref.id, label: req.title }, from, to: 'pending' }, now);
   });
-  return { listingId: ref.id, slug: finalSlug };
+  return { listingId: ref.id, slug: finalSlug, ...(editRequest ? { editRequest } : {}), ...(changed ? { changed } : {}) };
+}
+
+export const moderateEditInput = z
+  .object({ listingId: docId, action: z.enum(['approve', 'reject']), reason: z.string().max(500).optional() })
+  .refine((r) => r.action !== 'reject' || !!r.reason, { message: 'a rejection needs a reason', path: ['reason'] });
+
+/** Managers apply an agent's pending edit to the listing (it stays as it is otherwise), or reject it with a reason. */
+export async function moderateEdit(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ status: 'approved' | 'rejected' }> {
+  requireManager(caller);
+  const req = parseInput(moderateEditInput, input);
+  const editRef = db.collection('listingEdits').doc(req.listingId);
+  const ref = db.collection('listings').doc(req.listingId);
+  await db.runTransaction(async (tx) => {
+    const [edit, snap] = [await tx.get(editRef), await tx.get(ref)];
+    if (!edit.exists || edit.get('status') !== 'pending') throw new HttpsError('not-found', 'no edit waiting for this listing');
+    if (!snap.exists) throw new HttpsError('not-found', 'no such listing');
+    const target = { collection: 'listings' as const, id: ref.id, label: snap.get('title') as string | undefined };
+    if (req.action === 'approve') {
+      const before = snap.data() as Record<string, unknown>;
+      const merged = { ...withoutContent(before), ...(edit.get('proposed') as Record<string, unknown>), updatedAt: now };
+      tx.set(ref, merged);
+      tx.update(editRef, { status: 'approved', decidedAt: now, decidedBy: caller.name ?? null });
+      audit(tx, db, caller, { action: 'listing.edit-approve', target, from: 'pending edit', to: 'applied' }, now);
+    } else {
+      tx.update(editRef, { status: 'rejected', reason: req.reason, decidedAt: now, decidedBy: caller.name ?? null });
+      audit(tx, db, caller, { action: 'listing.edit-reject', target, from: 'pending edit', to: 'rejected', reason: req.reason }, now);
+    }
+  });
+  return { status: req.action === 'approve' ? 'approved' : 'rejected' };
 }
 
 const mediaKey = (m: { variants: Record<string, string> }) => m.variants.full ?? m.variants.hls ?? null;
@@ -235,28 +343,43 @@ export async function featureListing(db: Firestore, caller: Caller, input: unkno
   return { featuredUntil: until?.toISOString() ?? null };
 }
 
-export const setHotListingInput = z.object({ listingId: docId, hot: z.boolean() });
+/** The home page's rows a manager places a listing in, and the field that says so. */
+export const PLACEMENT_FIELDS = { hot: 'hot', recommended: 'recommended', newest: 'pinnedNewest' } as const;
+const PLACEMENT_AUDIT = { hot: 'listing.hot', recommended: 'listing.recommend', newest: 'listing.pin-newest' } as const;
+
+export const setPlacementInput = z.object({ listingId: docId, placement: z.enum(['hot', 'recommended', 'newest']), on: z.boolean() });
 
 /**
- * Managers put a live listing in the home page's Hot Properties (`hot`),
- * or take it out. The customer app only reads the flag.
+ * Managers put a live listing in a home page row (Hot properties,
+ * Recommended, or pinned first in Newest), or take it out. Featured has its
+ * own end date (featureListing). The customer app only reads the flags.
  */
-export async function setHotListing(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ hot: boolean }> {
+export async function setPlacement(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ on: boolean }> {
   requireManager(caller);
-  const req = parseInput(setHotListingInput, input);
+  const req = parseInput(setPlacementInput, input);
+  const field = PLACEMENT_FIELDS[req.placement];
   const ref = db.collection('listings').doc(req.listingId);
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'no such listing');
-    if (req.hot && snap.get('status') !== 'live') throw new HttpsError('failed-precondition', 'only a live listing can be a hot property');
-    tx.update(ref, { hot: req.hot, updatedAt: now });
+    if (req.on && snap.get('status') !== 'live') throw new HttpsError('failed-precondition', 'only a live listing can be placed on the home page');
+    tx.update(ref, { [field]: req.on, updatedAt: now });
     audit(tx, db, caller, {
-      action: 'listing.hot',
+      action: PLACEMENT_AUDIT[req.placement],
       target: { collection: 'listings', id: ref.id, label: snap.get('title') as string | undefined },
-      from: snap.get('hot') === true ? 'hot' : 'none',
-      to: req.hot ? 'hot' : 'none',
+      from: snap.get(field) === true ? req.placement : 'none',
+      to: req.on ? req.placement : 'none',
     }, now);
   });
+  return { on: req.on };
+}
+
+export const setHotListingInput = z.object({ listingId: docId, hot: z.boolean() });
+
+/** Hot Properties on or off: setPlacement for `hot`, kept for older admins. */
+export async function setHotListing(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ hot: boolean }> {
+  const req = parseInput(setHotListingInput, input);
+  await setPlacement(db, caller, { listingId: req.listingId, placement: 'hot', on: req.hot }, now);
   return { hot: req.hot };
 }
 

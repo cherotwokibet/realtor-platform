@@ -22,6 +22,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // An agent's edit to a live listing, waiting for a manager (moderateEdit).
+    match /listingEdits/{id} {
+      allow read: if isManager() || isOwnAgent(resource.data.agentId);
+      allow write: if false;
+    }
+
     match /agents/{id} {
       allow read: if resource.data.active == true || isStaff();
       allow write: if false;

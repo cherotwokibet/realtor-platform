@@ -17,6 +17,8 @@ class ListingSummary {
     this.verified = false,
     this.featured = false,
     this.hot = false,
+    this.recommended = false,
+    this.pinnedNewest = false,
     this.amenities = const [],
     this.thumb,
     this.blurhash,
@@ -38,6 +40,9 @@ class ListingSummary {
 
   /// A manager put it in the home page's Hot Properties.
   final bool hot;
+
+  /// A manager put it in the home page's Recommended; first in Newest.
+  final bool recommended, pinnedNewest;
   final List<String> amenities;
   final String? thumb, blurhash;
 
@@ -67,6 +72,8 @@ class ListingSummary {
         'verified': verified,
         if (featured) 'featured': true,
         if (hot) 'hot': true,
+        if (recommended) 'recommended': true,
+        if (pinnedNewest) 'pinnedNewest': true,
         'amenities': amenities,
         if (thumb != null) 'thumb': thumb,
         if (blurhash != null) 'blurhash': blurhash,
@@ -96,6 +103,8 @@ class ListingSummary {
         verified: j['verified'] == true,
         featured: j['featured'] == true,
         hot: j['hot'] == true,
+        recommended: j['recommended'] == true,
+        pinnedNewest: j['pinnedNewest'] == true,
         amenities: [for (final a in (j['amenities'] as List?) ?? const []) '$a'],
         thumb: j['thumb'] as String?,
         blurhash: j['blurhash'] as String?,

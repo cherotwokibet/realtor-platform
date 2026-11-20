@@ -67,6 +67,8 @@ class FirestoreAdminRepository implements AdminRepository {
             expiresAt: d.data()['expiresAt'] == null ? null : _date(d.data()['expiresAt']),
             featuredUntil: d.data()['featuredUntil'] == null ? null : _date(d.data()['featuredUntil']),
             hot: d.data()['hot'] == true,
+            recommended: d.data()['recommended'] == true,
+            pinnedNewest: d.data()['pinnedNewest'] == true,
             photoMatch: flagged.contains(d.id),
           ),
       ];
@@ -139,6 +141,35 @@ class FirestoreAdminRepository implements AdminRepository {
           }(),
       ];
     });
+  }
+
+  @override
+  Future<List<EditRequestRow>> editRequests(StaffUser who) async {
+    Query<Map<String, Object?>> q = _db.collection('listingEdits');
+    // Managers: what waits for them. Agents: their own, whatever became of them.
+    q = who.agentScope == null ? q.where('status', isEqualTo: 'pending') : q.where('agentId', isEqualTo: who.agentScope);
+    final docs = (await q.limit(100).get()).docs;
+    final names = await _agents();
+    final rows = await Future.wait([
+      for (final d in docs)
+        _db.collection('listings').doc(d.id).get().then<Map<String, Object?>?>((l) => l.data(), onError: (Object _) => null).then((current) {
+          final data = d.data();
+          return EditRequestRow(
+            listingId: d.id,
+            title: data['title'] as String? ?? current?['title'] as String? ?? d.id,
+            agentId: data['agentId'] as String? ?? '',
+            agentName: names[data['agentId']] ?? data['agentId'] as String? ?? '',
+            status: data['status'] as String? ?? 'pending',
+            submittedAt: _date(data['submittedAt']),
+            submittedBy: data['submittedBy'] as String?,
+            reason: data['reason'] as String?,
+            changed: [for (final c in (data['changed'] as List?) ?? const []) '$c'],
+            proposed: ListingDraft.fromDoc(d.id, ((data['proposed'] as Map?) ?? const {}).cast<String, Object?>()),
+            current: current == null ? null : ListingDraft.fromDoc(d.id, current),
+          );
+        }),
+    ]);
+    return rows..sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
   }
 
   @override
