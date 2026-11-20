@@ -33,7 +33,8 @@
     "typescript": "^7.0.2"
   },
   "overrides": {
-    "@grpc/grpc-js": "^1.14.6"
+    "@grpc/grpc-js": "^1.14.6",
+    "rimraf": "^6.1.4"
   },
   "license": "UNLICENSED"
 }
