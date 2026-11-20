@@ -2,6 +2,7 @@ import 'agent_profile.dart';
 import 'area_guide.dart';
 import 'off_plan_project.dart';
 import 'listing_draft.dart';
+import 'money.dart';
 import 'staff.dart';
 import 'viewing_week.dart';
 
@@ -111,6 +112,8 @@ class StaffListingRow {
     this.expiresAt,
     this.featuredUntil,
     this.hot = false,
+    this.recommended = false,
+    this.pinnedNewest = false,
     this.photoMatch = false,
   });
   final String id, slug, title, area, status, agentId, agentName;
@@ -128,10 +131,23 @@ class StaffListingRow {
   /// In the home page's Hot Properties.
   final bool hot;
 
+  /// In the home page's Recommended; pinned first in Newest.
+  final bool recommended, pinnedNewest;
+
+  /// Whether it is in [placement] ('hot', 'featured', 'recommended', 'newest') at [now].
+  bool inPlacement(String placement, DateTime now) => switch (placement) {
+        'hot' => hot,
+        'featured' => featuredAt(now),
+        'recommended' => recommended,
+        'newest' => pinnedNewest,
+        _ => false,
+      };
+
   /// A photo here matches another listing's (`photoFlags`, P6-s05). Managers only.
   final bool photoMatch;
 
-  StaffListingRow withStatus(String status, DateTime updatedAt, {DateTime? expiresAt, DateTime? Function()? featuredUntil, bool? hot}) =>
+  StaffListingRow withStatus(String status, DateTime updatedAt,
+          {DateTime? expiresAt, DateTime? Function()? featuredUntil, bool? hot, bool? recommended, bool? pinnedNewest}) =>
       StaffListingRow(
         id: id,
         slug: slug,
@@ -148,8 +164,75 @@ class StaffListingRow {
         expiresAt: expiresAt ?? this.expiresAt,
         featuredUntil: featuredUntil == null ? this.featuredUntil : featuredUntil(),
         hot: hot ?? this.hot,
+        recommended: recommended ?? this.recommended,
+        pinnedNewest: pinnedNewest ?? this.pinnedNewest,
         photoMatch: photoMatch,
       );
+}
+
+/// The home page's rows managers fill, in the order the site shows them.
+const homePlacements = <(String, String)>[
+  ('hot', 'Hot properties'),
+  ('featured', 'Featured'),
+  ('recommended', 'Recommended'),
+  ('newest', 'Newest to rent (pinned first)'),
+];
+
+/// An agent's edit to a live listing, waiting for a manager (listingEdits/{listingId}).
+class EditRequestRow {
+  const EditRequestRow({
+    required this.listingId,
+    required this.title,
+    required this.agentId,
+    required this.agentName,
+    required this.status,
+    required this.submittedAt,
+    required this.proposed,
+    this.current,
+    this.changed = const [],
+    this.submittedBy,
+    this.reason,
+  });
+  final String listingId, title, agentId, agentName;
+
+  /// pending, approved or rejected.
+  final String status;
+  final DateTime submittedAt;
+  final ListingDraft proposed;
+
+  /// The listing as it is now; null when it has gone.
+  final ListingDraft? current;
+  final List<String> changed;
+  final String? submittedBy;
+
+  /// Why a manager rejected it.
+  final String? reason;
+}
+
+/// What an edit changes, field by field: (field, now, proposed); only the
+/// fields that differ, in the form's order.
+List<(String, String, String)> editChanges(ListingDraft now, ListingDraft next, {Map<String, String> areaNames = const {}, Map<String, String> agentNames = const {}}) {
+  String kes(int? v) => v == null ? '—' : formatKes(v);
+  String words(List<String> xs) => xs.isEmpty ? '—' : xs.join(', ');
+  final rows = <(String, String, String)>[
+    ('Title', now.title, next.title),
+    ('For', now.purpose, next.purpose),
+    ('Type', now.type, next.type),
+    ('Bedrooms', '${now.beds}', '${next.beds}'),
+    ('Bathrooms', '${now.baths}', '${next.baths}'),
+    ('Price', kes(now.priceKES), kes(next.priceKES)),
+    ('Deposit (months)', '${now.depositMonths ?? '—'}', '${next.depositMonths ?? '—'}'),
+    ('Service charge', kes(now.serviceChargeKES), kes(next.serviceChargeKES)),
+    ('Viewing fee', kes(now.viewingFeeKES), kes(next.viewingFeeKES)),
+    ('Other expenses', words([for (final c in now.extraCharges) '${c.name} ${kes(c.amountKES)}']), words([for (final c in next.extraCharges) '${c.name} ${kes(c.amountKES)}'])),
+    ('Area', areaNames[now.area] ?? now.area, areaNames[next.area] ?? next.area),
+    ('Estate or building', now.estate ?? '—', next.estate ?? '—'),
+    ('Map position', '${now.lat.toStringAsFixed(5)}, ${now.lng.toStringAsFixed(5)}', '${next.lat.toStringAsFixed(5)}, ${next.lng.toStringAsFixed(5)}'),
+    ('Amenities', words([...now.amenities]..sort()), words([...next.amenities]..sort())),
+    ('Description', now.description.trim(), next.description.trim()),
+    ('Agent', agentNames[now.agentId] ?? now.agentId ?? '—', agentNames[next.agentId] ?? next.agentId ?? '—'),
+  ];
+  return [for (final r in rows) if (r.$2 != r.$3) r];
 }
 
 class AuditRow {
@@ -252,6 +335,9 @@ class AgentOption {
 abstract interface class AdminRepository {
   /// [who]'s own staff record (Account), or null before they have one.
   Future<StaffMember?> me(StaffUser who);
+
+  /// Edits to live listings: managers see those waiting; agents their own, newest first.
+  Future<List<EditRequestRow>> editRequests(StaffUser who);
 
   /// The Dashboard for [who] at [now].
   Future<DashboardData> dashboard(StaffUser who, DateTime now);

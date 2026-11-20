@@ -243,6 +243,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 // Two rows of homes, as the big portals' home pages have them:
                 // the realtor's Hot Properties, then the newest.
                 const _HotRow(),
+                // The rows managers fill in the admin (Home page); each only when it has homes.
+                _PicksRow(
+                    rowKey: const Key('featured-row'), title: 'Featured properties', icon: Icons.workspace_premium_outlined, homes: featuredHomesProvider),
+                _PicksRow(rowKey: const Key('recommended-row'), title: 'Recommended', icon: Icons.thumb_up_alt_outlined, homes: recommendedHomesProvider),
                 _Newest(purpose: _purpose, onSeeAll: () => _search()),
               ]),
             ),
@@ -488,6 +492,26 @@ class _HotRow extends ConsumerWidget {
   }
 }
 
+/// A row of homes a manager picked (Featured, Recommended); nothing while
+/// loading, on an error or when there are none.
+class _PicksRow extends ConsumerWidget {
+  const _PicksRow({required this.rowKey, required this.title, required this.icon, required this.homes});
+  final Key rowKey;
+  final String title;
+  final IconData icon;
+  final FutureProvider<List<ListingSummary>> homes;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hits = ref.watch(homes).value ?? const [];
+    if (hits.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: EdgeInsets.only(top: context.brand.spacing.xl),
+      child: HomeRow(key: rowKey, title: title, icon: icon, listings: hits.take(12).toList()),
+    );
+  }
+}
+
 /// The newest few homes for [purpose]; nothing at all while loading, on an
 /// error or when there are none, so the search above stays the focus.
 class _Newest extends ConsumerWidget {
@@ -497,8 +521,10 @@ class _Newest extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hits = ref.watch(searchResultsProvider(ListingFilters(purpose: purpose))).value?.hits ?? const [];
-    if (hits.isEmpty) return const SizedBox.shrink();
+    final found = ref.watch(searchResultsProvider(ListingFilters(purpose: purpose))).value?.hits ?? const [];
+    if (found.isEmpty) return const SizedBox.shrink();
+    // Homes a manager pinned come first, the rest as they were.
+    final hits = [...found.where((l) => l.pinnedNewest), ...found.where((l) => !l.pinnedNewest)];
     return Padding(
       padding: EdgeInsets.only(top: context.brand.spacing.xl),
       child: HomeRow(

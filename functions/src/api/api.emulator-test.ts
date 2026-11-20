@@ -9,7 +9,7 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
 import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
-import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateListing, setHotListing, submitListing } from './listings';
+import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateEdit, moderateListing, setHotListing, setPlacement, submitListing } from './listings';
 import { bookViewing, openSlots, rescheduleViewing, updateViewingStatus } from './viewings';
 import { addAgentBlock, removeAgentBlock } from './availability';
 import { saveAgent } from './agents';
@@ -595,6 +595,56 @@ describe('featuring and CSV import (P5-s02)', () => {
     assert.deepEqual([entry.from, entry.to], ['none', 'hot']);
     await setHotListing(db, manager, { listingId, hot: false }, now);
     assert.equal((await ref.get()).get('hot'), false);
+  });
+
+  test('Recommended and pinned-first-in-Newest: managers place live listings; audited', async () => {
+    const { listingId } = await submitListing(db, wanjiku, newListing, now);
+    await rejectsWith(setPlacement(db, manager, { listingId, placement: 'recommended', on: true }, now), 'failed-precondition');
+    await moderateListing(db, manager, { listingId, action: 'approve' }, now);
+    await rejectsWith(setPlacement(db, wanjiku, { listingId, placement: 'recommended', on: true }, now), 'permission-denied');
+    await rejectsWith(setPlacement(db, manager, { listingId, placement: 'banner', on: true }, now), 'invalid-argument');
+    await setPlacement(db, manager, { listingId, placement: 'recommended', on: true }, now);
+    await setPlacement(db, manager, { listingId, placement: 'newest', on: true }, now);
+    const l = (await db.collection('listings').doc(listingId).get()).data()!;
+    assert.deepEqual([l.recommended, l.pinnedNewest], [true, true]);
+    const actions = (await db.collection('audit').where('target.id', '==', listingId).get()).docs.map((d) => d.get('action'));
+    assert.ok(actions.includes('listing.recommend') && actions.includes('listing.pin-newest'));
+  });
+
+  test("an agent's edit to a live listing waits for a manager; the listing stays live and keeps its placements", async () => {
+    const { listingId } = await submitListing(db, wanjiku, newListing, now);
+    await moderateListing(db, manager, { listingId, action: 'approve' }, now);
+    await setPlacement(db, manager, { listingId, placement: 'hot', on: true }, now);
+    const ref = db.collection('listings').doc(listingId);
+
+    const r = await submitListing(db, wanjiku, { ...newListing, listingId, priceKES: 75000, estate: 'Riverside' }, now);
+    assert.equal(r.editRequest, true);
+    assert.deepEqual(r.changed?.sort(), ['estate', 'priceKES']);
+    let l = (await ref.get()).data()!;
+    assert.deepEqual([l.status, l.priceKES, l.hot], ['live', 70000, true], 'unchanged until approved');
+    const edit = (await db.collection('listingEdits').doc(listingId).get()).data()!;
+    assert.deepEqual([edit.status, edit.agentId, edit.proposed.priceKES], ['pending', 'agent-wanjiku', 75000]);
+
+    await rejectsWith(moderateEdit(db, wanjiku, { listingId, action: 'approve' }, now), 'permission-denied');
+    await rejectsWith(moderateEdit(db, manager, { listingId, action: 'reject' }, now), 'invalid-argument'); // needs a reason
+    await moderateEdit(db, manager, { listingId, action: 'approve' }, now);
+    l = (await ref.get()).data()!;
+    assert.deepEqual([l.status, l.priceKES, l.estate, l.hot], ['live', 75000, 'Riverside', true]);
+    await rejectsWith(moderateEdit(db, manager, { listingId, action: 'approve' }, now), 'not-found'); // nothing waiting now
+
+    // A second edit, rejected: the listing is unchanged; the agent sees why.
+    await submitListing(db, wanjiku, { ...newListing, listingId, priceKES: 1000 }, now);
+    await moderateEdit(db, manager, { listingId, action: 'reject', reason: 'That price looks wrong' }, now);
+    assert.equal((await ref.get()).get('priceKES'), 75000);
+    assert.deepEqual([(await db.collection('listingEdits').doc(listingId).get()).get('status')], ['rejected']);
+
+    // A manager's own edit applies at once and stays live; leaving out an optional field removes it.
+    const m = await submitListing(db, manager, { ...newListing, listingId, agentId: 'agent-wanjiku', priceKES: 80000 }, now);
+    assert.equal(m.editRequest, undefined);
+    l = (await ref.get()).data()!;
+    assert.deepEqual([l.status, l.priceKES, l.estate, l.hot], ['live', 80000, undefined, true]);
+    // Not someone else's.
+    await rejectsWith(submitListing(db, otieno, { ...newListing, listingId, priceKES: 1 }, now), 'permission-denied');
   });
 
   test('import makes pending listings row by row; bad rows are reported, the rest go in', async () => {

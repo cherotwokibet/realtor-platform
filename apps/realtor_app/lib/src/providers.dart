@@ -51,6 +51,18 @@ final hotHomesProvider = FutureProvider<List<ListingSummary>>((ref) async {
   return live.where((l) => l.hot).toList();
 });
 
+/// Featured homes (managers feature them for some days), for the home page's Featured row.
+final featuredHomesProvider = FutureProvider<List<ListingSummary>>((ref) async {
+  final live = await ref.watch(listingRepositoryProvider).live(limit: 500);
+  return live.where((l) => l.featured).toList();
+});
+
+/// The realtor's Recommended picks (managers choose them in the admin).
+final recommendedHomesProvider = FutureProvider<List<ListingSummary>>((ref) async {
+  final live = await ref.watch(listingRepositoryProvider).live(limit: 500);
+  return live.where((l) => l.recommended).toList();
+});
+
 /// Live listings in an area (`area`) or by an agent (`agent`), newest first.
 final liveListingsProvider = FutureProvider.family<List<ListingSummary>, ({String? area, String? agent})>(
   (ref, q) => ref.watch(listingRepositoryProvider).live(area: q.area, agentId: q.agent),

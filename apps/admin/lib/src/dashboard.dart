@@ -28,7 +28,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _newListing() async {
     final id = await showDialog<String>(context: context, builder: (_) => const ListingEditorDialog());
-    if (id != null && mounted) setState(() => _data = _load());
+    if (id != null && mounted) {
+      setState(() {
+        _data = _load();
+      });
+    }
   }
 
   @override
@@ -42,7 +46,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     return RefreshIndicator(
       onRefresh: () async {
-        setState(() => _data = _load());
+        setState(() {
+          _data = _load();
+        });
         await _data;
       },
       child: ListView(padding: const EdgeInsets.all(24), children: [
@@ -62,7 +68,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ]),
             Wrap(spacing: 8, runSpacing: 8, children: [
               OutlinedButton.icon(
-                onPressed: () => setState(() => _data = _load()),
+                onPressed: () => setState(() {
+                  _data = _load();
+                }),
                 icon: const Icon(Icons.refresh, size: 18),
                 label: const Text('Refresh'),
               ),

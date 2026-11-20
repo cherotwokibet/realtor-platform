@@ -81,6 +81,10 @@ export const listing = z
     verifiedAt: timestamp.nullable(),
     expiresAt: timestamp.nullable(),
     featuredUntil: timestamp.nullable(),
+    /** Home page rows a manager placed it in (setPlacement). */
+    hot: z.boolean().optional(),
+    recommended: z.boolean().optional(),
+    pinnedNewest: z.boolean().optional(),
     stats: z.object({
       views: z.number().int().min(0),
       leads: z.number().int().min(0),

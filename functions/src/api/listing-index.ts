@@ -10,7 +10,7 @@ import type { Firestore } from 'firebase-admin/firestore';
  */
 export const INDEX_FIELDS = [
   'slug', 'title', 'purpose', 'type', 'beds', 'baths', 'priceKES', 'area', 'agentId', 'geo',
-  'verifiedAt', 'expiresAt', 'featuredUntil', 'hot', 'amenities', 'updatedAt',
+  'verifiedAt', 'expiresAt', 'featuredUntil', 'hot', 'recommended', 'pinnedNewest', 'amenities', 'updatedAt',
 ] as const;
 
 /** How long browsers and the CDN may keep it: fresh homes show within minutes. */

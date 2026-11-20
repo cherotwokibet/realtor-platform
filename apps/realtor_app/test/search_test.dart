@@ -121,6 +121,16 @@ void main() {
     expect(h.location, startsWith('/rent'));
   });
 
+  testWidgets('home shows the rows managers fill: Featured and Recommended', (tester) async {
+    await open(tester, '/');
+    for (final (key, title) in [('featured-row', 'Featured properties'), ('recommended-row', 'Recommended')]) {
+      final row = find.byKey(Key(key));
+      await tester.scrollUntilVisible(row, 300, scrollable: find.byType(Scrollable).first);
+      expect(find.descendant(of: row, matching: find.text(title)), findsOneWidget);
+      expect(find.descendant(of: row, matching: find.byType(ListingCard)), findsWidgets);
+    }
+  });
+
   testWidgets('home has no WhatsApp bar along the bottom, even with a number (the footer has WhatsApp)', (tester) async {
     await tester.pumpWidget(ProviderScope(overrides: [tenantProvider.overrideWithValue(tenant('realtime-estates'))], child: const RealtorApp()));
     await tester.pumpAndSettle();

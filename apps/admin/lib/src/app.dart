@@ -8,6 +8,8 @@ import 'providers.dart';
 import 'account.dart';
 import 'area_guides.dart';
 import 'dashboard.dart';
+import 'edit_requests.dart';
+import 'home_page.dart';
 import 'reports.dart';
 import 'screens.dart';
 import 'session.dart';
@@ -28,6 +30,8 @@ final _sections = [
   _Section(AdminSection.leads, 'Leads', Icons.inbox_outlined, 'Sales', () => const LeadsScreen()),
   _Section(AdminSection.viewings, 'Viewings', Icons.event_outlined, 'Sales', () => const ViewingsScreen()),
   _Section(AdminSection.listings, 'Listings', Icons.home_work_outlined, 'Properties', () => const ListingsScreen()),
+  _Section(AdminSection.edits, 'Edit requests', Icons.rule_outlined, 'Properties', () => const EditRequestsScreen()),
+  _Section(AdminSection.homePage, 'Home page', Icons.web_outlined, 'Properties', () => const HomePlacementsScreen()),
   _Section(AdminSection.areas, 'Areas', Icons.map_outlined, 'Properties', () => const AreasScreen()),
   _Section(AdminSection.team, 'Users', Icons.group_outlined, 'People', () => const TeamScreen()),
   _Section(AdminSection.reports, 'Reports', Icons.insights_outlined, 'Insights', () => const ReportsScreen()),

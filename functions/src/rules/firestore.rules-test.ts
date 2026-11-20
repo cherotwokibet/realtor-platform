@@ -247,6 +247,20 @@ describe('audit', () => {
   });
 });
 
+describe('listingEdits', () => {
+  test("managers read every edit waiting; an agent only their own; nobody writes", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'listingEdits', 'l-1'), { listingId: 'l-1', agentId: 'agent-wanjiku', status: 'pending', proposed: { priceKES: 1 } });
+    });
+    await assertSucceeds(getDoc(doc(manager(), 'listingEdits', 'l-1')));
+    await assertSucceeds(getDoc(doc(agent('agent-wanjiku'), 'listingEdits', 'l-1')));
+    await assertFails(getDoc(doc(agent('agent-otieno'), 'listingEdits', 'l-1')));
+    await assertFails(getDoc(doc(visitor(), 'listingEdits', 'l-1')));
+    await assertFails(setDoc(doc(agent('agent-wanjiku'), 'listingEdits', 'l-2'), { listingId: 'l-2', agentId: 'agent-wanjiku', status: 'pending' }));
+    await assertFails(updateDoc(doc(manager(), 'listingEdits', 'l-1'), { status: 'approved' }));
+  });
+});
+
 describe('savedSearches', () => {
   const mine = { userId: 'alice', filters: { purpose: 'rent', areas: ['kilimani'] }, channels: ['push'], lastNotifiedAt: null };
   test('a user creates, reads, edits and deletes their own', async () => {
