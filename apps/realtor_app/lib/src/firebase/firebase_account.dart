@@ -148,13 +148,26 @@ class FirestoreAlerts implements AlertsRepository {
       ]);
 
   @override
-  Future<void> saveSearch(String uid, ListingFilters filters) => _db.collection('savedSearches').add({
+  Future<bool> saveSearch(String uid, ListingFilters filters) async {
+    // Already saved (also those saved before ids came from the search)?
+    final key = searchKey(filters);
+    final mine = await _db.collection('savedSearches').where('userId', isEqualTo: uid).get();
+    if (mine.docs.any((d) => searchKey(filtersFromAlert((d.data()['filters'] as Map?) ?? const {})) == key)) return false;
+    try {
+      await _db.collection('savedSearches').doc(savedSearchId(uid, filters)).set({
         'userId': uid,
         'filters': alertFilters(filters),
         'channels': ['inbox'],
         'lastNotifiedAt': null,
         'createdAt': FieldValue.serverTimestamp(),
       });
+      return true;
+    } on FirebaseException catch (e) {
+      // Saved a moment ago (a double tap): the rules refuse to write it again.
+      if (e.code == 'permission-denied') return false;
+      rethrow;
+    }
+  }
 
   @override
   Future<void> deleteSearch(String id) => _db.collection('savedSearches').doc(id).delete();

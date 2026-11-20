@@ -36,13 +36,16 @@ String pinPrice(int kes) {
   return '$kes';
 }
 
+/// In a page: the height the drawing bar and the gap under it take above the map.
+const drawBarExtent = 64.0;
+
 /// Nairobi CBD: where the map opens when there is nothing to show yet.
 const _fallbackCentre = LatLng(-1.2864, 36.8172);
 
 /// The results on an OpenStreetMap map (or the tenant's own tiles), one price
 /// pin per home, and "Draw area": tap corners, then search inside them.
 class ResultsMap extends ConsumerStatefulWidget {
-  const ResultsMap({super.key, required this.hits, required this.filters, required this.onChange, this.inPage = false});
+  const ResultsMap({super.key, required this.hits, required this.filters, required this.onChange, this.inPage = false, this.onDrawing});
   final List<ListingSummary> hits;
   final ListingFilters filters;
   final ValueChanged<ListingFilters> onChange;
@@ -51,6 +54,10 @@ class ResultsMap extends ConsumerStatefulWidget {
   /// wheel then scrolls the page and Ctrl + wheel zooms the map, as maps set
   /// in a web page do, with + and - buttons beside it.
   final bool inPage;
+
+  /// Told when drawing starts and stops: in a page, the page makes room for
+  /// the drawing bar ([drawBarExtent]) so the map keeps its size.
+  final ValueChanged<bool>? onDrawing;
 
   @override
   ConsumerState<ResultsMap> createState() => _ResultsMapState();
@@ -144,11 +151,14 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
     widget.onChange(widget.filters.copyWith(polygon: area));
   }
 
-  void _stopDrawing() => setState(() {
-        _drawing = false;
-        _corners = [];
-        _history.clear();
-      });
+  void _stopDrawing() {
+    setState(() {
+      _drawing = false;
+      _corners = [];
+      _history.clear();
+    });
+    widget.onDrawing?.call(false);
+  }
 
   /// Moves corner [i] by a drag of [delta] on the screen.
   void _drag(int i, Offset delta) {
@@ -275,10 +285,13 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
           right: b.spacing.sm,
           child: Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, crossAxisAlignment: WrapCrossAlignment.center, children: [
             FilledButton.tonalIcon(
-              onPressed: () => setState(() {
-                _drawing = true;
-                _selected = null;
-              }),
+              onPressed: () {
+                setState(() {
+                  _drawing = true;
+                  _selected = null;
+                });
+                widget.onDrawing?.call(true);
+              },
               icon: const Icon(Icons.draw_outlined),
               label: Text(widget.filters.polygon.isEmpty ? 'Draw area' : 'Redraw area'),
             ),
@@ -359,7 +372,11 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
       ),
     );
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Padding(padding: EdgeInsets.only(bottom: b.spacing.sm), child: panel),
+      // In a page the bar has a set height, which the page adds above the map.
+      if (widget.inPage)
+        SizedBox(height: drawBarExtent, child: Padding(padding: EdgeInsets.only(bottom: b.spacing.sm), child: panel))
+      else
+        Padding(padding: EdgeInsets.only(bottom: b.spacing.sm), child: panel),
       Expanded(child: stack),
     ]);
   }

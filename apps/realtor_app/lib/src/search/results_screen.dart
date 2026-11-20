@@ -153,10 +153,9 @@ class ResultsScreen extends ConsumerWidget {
                             SliverToBoxAdapter(child: menu),
                             SliverPersistentHeader(pinned: true, delegate: _PinnedBar(height: barHeight, child: bar)),
                             SliverToBoxAdapter(
-                              child: SizedBox(
-                                key: const Key('results-map-fit'),
-                                height: fit,
-                                child: page(result.when(
+                              child: _MapSection(
+                                fit: fit,
+                                builder: (onDrawing) => page(result.when(
                                   loading: () => const Center(child: CircularProgressIndicator()),
                                   error: (e, _) => Center(child: Text('Search is not available right now.', style: text.bodyMedium)),
                                   data: (r) => Padding(
@@ -168,7 +167,7 @@ class ResultsScreen extends ConsumerWidget {
                                       Expanded(
                                         child: ClipRRect(
                                           borderRadius: BorderRadius.circular(b.radiusMd),
-                                          child: ResultsMap(hits: r.hits, filters: filters, onChange: change, inPage: true),
+                                          child: ResultsMap(hits: r.hits, filters: filters, onChange: change, inPage: true, onDrawing: onDrawing),
                                         ),
                                       ),
                                     ]),
@@ -205,6 +204,31 @@ class ResultsScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The wide map's part of the page: [fit] high, and taller by the drawing
+/// bar while an area is drawn, so the bar goes above the map without
+/// taking from it.
+class _MapSection extends StatefulWidget {
+  const _MapSection({required this.fit, required this.builder});
+  final double fit;
+  final Widget Function(ValueChanged<bool> onDrawing) builder;
+
+  @override
+  State<_MapSection> createState() => _MapSectionState();
+}
+
+class _MapSectionState extends State<_MapSection> {
+  bool _drawing = false;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        key: const Key('results-map-fit'),
+        height: widget.fit + (_drawing ? drawBarExtent : 0),
+        child: widget.builder((d) {
+          if (d != _drawing && mounted) setState(() => _drawing = d);
+        }),
+      );
 }
 
 /// The least height of the wide map's part of the page (heading and map),

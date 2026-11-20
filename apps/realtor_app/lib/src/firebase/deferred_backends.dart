@@ -113,7 +113,7 @@ class DeferredAlertsRepository implements AlertsRepository {
   @override
   Stream<List<SavedSearchRow>> searches(String uid) => Stream.fromFuture(_inner).asyncExpand((r) => r.searches(uid));
   @override
-  Future<void> saveSearch(String uid, ListingFilters filters) async => (await _inner).saveSearch(uid, filters);
+  Future<bool> saveSearch(String uid, ListingFilters filters) async => (await _inner).saveSearch(uid, filters);
   @override
   Future<void> deleteSearch(String id) async => (await _inner).deleteSearch(id);
   @override

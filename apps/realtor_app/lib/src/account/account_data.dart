@@ -71,8 +71,10 @@ abstract interface class ProfileRepository {
 abstract interface class AlertsRepository {
   Stream<List<SavedSearchRow>> searches(String uid);
 
-  /// Saves what alerts can match on: purpose, types, areas, beds, top price.
-  Future<void> saveSearch(String uid, ListingFilters filters);
+  /// Saves what alerts can match on: purpose, types, areas, beds, top price,
+  /// drawn area. False, and nothing saved, when the same search is already
+  /// saved ([searchKey]).
+  Future<bool> saveSearch(String uid, ListingFilters filters);
   Future<void> deleteSearch(String id);
   Stream<List<AlertRow>> alerts(String uid);
   Future<void> markRead(String uid, String alertId);
@@ -89,6 +91,34 @@ Map<String, Object?> alertFilters(ListingFilters f) => {
       // A drawn area as the search link writes it ("lat,lng~lat,lng~..."), to 6 places at most.
       if (f.polygon.length >= 3) 'poly': f.polygon.take(20).map((p) => '${_place(p.lat)},${_place(p.lng)}').join('~'),
     };
+
+/// What makes two saved searches the same: the filters alerts match on,
+/// with the lists in one order (Kilimani, Westlands is Westlands, Kilimani).
+String searchKey(ListingFilters f) {
+  final m = alertFilters(f);
+  return [
+    m['purpose'],
+    ([...?(m['types'] as List?)]..sort()).join(','),
+    ([...?(m['areas'] as List?)]..sort()).join(','),
+    m['minBeds'] ?? '',
+    m['maxPriceKES'] ?? '',
+    m['poly'] ?? '',
+  ].join('|');
+}
+
+/// The saved search's document id: the person and the search, so saving the
+/// same search twice (a double tap) lands on one document, which the rules
+/// then refuse to write again.
+String savedSearchId(String uid, ListingFilters f) {
+  final key = searchKey(f);
+  // Two small hashes, safe in JavaScript numbers on the web.
+  var a = 7, c = 11;
+  for (final u in key.codeUnits) {
+    a = (a * 31 + u) % 2147483647;
+    c = (c * 131 + u) % 2147483629;
+  }
+  return '$uid-${a.toRadixString(36)}${c.toRadixString(36)}';
+}
 
 String _place(double v) => v.toStringAsFixed(6).replaceFirst(RegExp(r'\.?0+$'), '');
 
@@ -188,9 +218,11 @@ class DemoAccount implements CustomerAccount, AlertsRepository, ProfileRepositor
   Stream<List<SavedSearchRow>> searches(String uid) => _watch(() => [..._searches]);
 
   @override
-  Future<void> saveSearch(String uid, ListingFilters filters) async {
+  Future<bool> saveSearch(String uid, ListingFilters filters) async {
+    if (_searches.any((s) => searchKey(s.filters) == searchKey(filters))) return false;
     _searches.add((id: 'search-${_searches.length + 1}', filters: filtersFromAlert(alertFilters(filters)), lastNotifiedAt: null));
     _changed.add(null);
+    return true;
   }
 
   @override

@@ -274,6 +274,11 @@ describe('savedSearches', () => {
     await assertFails(updateDoc(doc(user(), 'savedSearches', 'ss-1'), { channels: ['push', 'fax'] }));
     await assertFails(updateDoc(doc(user(), 'savedSearches', 'ss-1'), { filters: { purpose: 'rent', junk: true } }));
   });
+  test('the same search saved twice (the id comes from the search) is refused the second time', async () => {
+    const again = () => setDoc(doc(user(), 'savedSearches', 'alice-samekey'), { ...mine, createdAt: serverTimestamp() });
+    await assertSucceeds(again());
+    await assertFails(again());
+  });
   test('a drawn area: 3 to 20 corners written as the search link writes them', async () => {
     const make = (poly: unknown) => setDoc(doc(user(), 'savedSearches', `ss-${Math.random()}`), { ...mine, filters: { purpose: 'rent', poly }, createdAt: serverTimestamp() });
     const area = (n: number) => Array.from({ length: n }, (_, i) => `${(-1.28 - i / 1000).toFixed(5)},${(36.78 + i / 1000).toFixed(5)}`).join('~');
