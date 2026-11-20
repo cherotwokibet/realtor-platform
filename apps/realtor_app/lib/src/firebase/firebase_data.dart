@@ -7,6 +7,7 @@ import 'package:realtor_core/realtor_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../search/demo_search.dart';
+import '../support/site_services.dart';
 
 /// Public URL of a media-pipeline variant in the project's media bucket
 /// (`<project>-media`, made by Terraform).
@@ -140,7 +141,10 @@ class FirestoreListingRepository implements ListingRepository {
       viewingFeeKES: (d['viewingFeeKES'] as num?)?.toInt(),
       description: d['description'] as String? ?? '',
       serviceChargeKES: (d['serviceChargeKES'] as num?)?.toInt(),
-      extraCharges: [for (final c in (d['extraCharges'] as List<Object?>?) ?? const []) if (ExtraCharge.fromJson(c) case final e?) e],
+      extraCharges: [
+        for (final c in (d['extraCharges'] as List<Object?>?) ?? const [])
+          if (ExtraCharge.fromJson(c) case final e?) e
+      ],
       listedAt: _time(d['createdAt']),
       utilities: {
         for (final MapEntry(:key, :value) in ((d['utilities'] as Map?) ?? const {}).entries)
@@ -432,5 +436,40 @@ class SnapshotListingSearch implements ListingSearch {
       }
     }
     return DemoListingSearch(await _refresh(p)).search(filters);
+  }
+}
+
+/// Adverts from Firestore (those switched on; the rules allow just those)
+/// and Help & feedback through `submitFeedback`.
+class FirebaseSiteServices implements SiteServices {
+  FirebaseSiteServices(this._db, this._call, {required this.bucket});
+  final FirebaseFirestore _db;
+  final CallFunction _call;
+  final String bucket;
+
+  @override
+  Future<List<AdRow>> ads() async {
+    final snap = await _db.collection('ads').where('active', isEqualTo: true).limit(20).get();
+    return [for (final d in snap.docs) AdRow.fromDoc(d.id, d.data())];
+  }
+
+  @override
+  String? imageUrl(String path) => mediaUrl(bucket, path);
+
+  @override
+  Future<void> sendFeedback({required String kind, required String message, String? name, String? phone, String? email, String? page}) async {
+    try {
+      await _call('submitFeedback', {
+        'kind': kind,
+        'message': message.trim(),
+        if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+        'contact': {if (phone != null) 'phone': phone, if (email != null && email.trim().isNotEmpty) 'email': email.trim()},
+        if (page != null) 'page': page,
+      });
+    } on FirebaseException catch (e) {
+      final code = e.code.replaceFirst('functions/', '');
+      throw FeedbackException(
+          code == 'resource-exhausted' ? 'You have sent a few already. Try again in an hour.' : 'Could not send it. Check the details and try again.');
+    }
   }
 }

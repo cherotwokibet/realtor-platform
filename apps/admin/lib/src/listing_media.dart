@@ -28,6 +28,9 @@ abstract interface class ListingMedia {
   /// it the agent's photo.
   Future<void> uploadAgentPhoto(StaffUser who, String agentId, PickedFile file);
 
+  /// An advert's photo (managers): stored under ads/(adId)/; returns its path for the ad.
+  Future<String> uploadAdPhoto(StaffUser who, String adId, PickedFile file);
+
   /// Public URL of a media path, or null where there is none (demo).
   String? url(String path);
 }
@@ -63,6 +66,10 @@ String uploadPath(StaffUser who, String listingId, String fileName, DateTime at)
 }
 
 /// Demo: uploads are counted as if the pipeline took them at once.
+/// Where an advert's photo goes: ads/(adId)/(time)-(name), names kept to safe characters.
+String adPhotoPath(String adId, String fileName, DateTime now) =>
+    'ads/$adId/${now.millisecondsSinceEpoch}-${fileName.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-')}';
+
 class DemoListingMedia implements ListingMedia {
   final _photos = <String, List<String>>{};
   final _videos = <String, int>{};
@@ -90,6 +97,12 @@ class DemoListingMedia implements ListingMedia {
 
   /// Agents given a portrait in the demo.
   final agentPhotos = <String>[];
+
+  @override
+  Future<String> uploadAdPhoto(StaffUser who, String adId, PickedFile file) async {
+    if (!photoTypes.contains(file.type) || file.bytes.length >= maxPhotoBytes) throw ArgumentError('${file.name}: a photo under 20 MB');
+    return adPhotoPath(adId, file.name, DateTime.now());
+  }
 
   @override
   String? url(String path) => null;

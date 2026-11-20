@@ -30,6 +30,12 @@ service firebase.storage {
       allow create: if isManager() && request.auth.uid == uid && isPhoto();
     }
 
+    // Advert photos: managers upload them for the ad they edit; anyone reads.
+    match /ads/{adId}/{file} {
+      allow read: if true;
+      allow create, update, delete: if isManager() && (request.resource == null || isPhoto());
+    }
+
     match /media/{path=**} {
       allow read: if true;
     }

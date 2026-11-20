@@ -160,6 +160,16 @@ class SlowActions implements AdminActions {
       inner.moderateEdit(who, listingId: listingId, approve: approve, reason: reason);
 
   @override
+  Future<void> updateFeedback(StaffUser who, {required String feedbackId, String? status, String? note}) =>
+      inner.updateFeedback(who, feedbackId: feedbackId, status: status, note: note);
+
+  @override
+  Future<String> saveAd(StaffUser who, AdRow ad) => inner.saveAd(who, ad);
+
+  @override
+  Future<void> deleteAd(StaffUser who, String adId) => inner.deleteAd(who, adId);
+
+  @override
   Future<void> saveMyProfile(StaffUser who, {required String name, String? phone}) => inner.saveMyProfile(who, name: name, phone: phone);
 
   @override
@@ -1327,22 +1337,87 @@ void main() {
     expect(find.textContaining('Showed us three flats'), findsOneWidget);
   });
 
-  testWidgets('a manager writes and publishes the privacy notice', (tester) async {
-    await open(tester, as: manager);
-    await tester.tap(find.text('Privacy'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Site pages…'));
-    await tester.pumpAndSettle();
+  testWidgets('Content: a manager writes the Privacy Policy, previews it as the site shows it, and publishes', (tester) async {
+    await open(tester, as: manager, at: '/content');
     expect(find.text('Published · /about'), findsOneWidget);
-    await tester.tap(find.text('Privacy notice'));
+    await tester.tap(find.byKey(const Key('page-privacy')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextField, 'Text'), '# Who we are\nRealtime Estates Ltd.');
+    await tester.enterText(find.byKey(const Key('page-body')), '# Who we are\nRealtime Estates Ltd.\n\n- We keep your number\n- Only to reply');
+    await tester.tap(find.text('Preview'));
+    await tester.pumpAndSettle();
+    expect(find.text('Who we are'), findsOneWidget, reason: 'the heading, without its #');
+    expect(find.text('We keep your number'), findsOneWidget, reason: 'a list item, without its -');
     await tester.tap(find.text('Published'));
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Published · /privacy'), findsOneWidget);
     final privacy = (await container.read(adminRepositoryProvider).sitePages(manager)).firstWhere((p) => p.slug == 'privacy');
-    expect((privacy.title, privacy.published, privacy.body.startsWith('# Who we are')), ('Privacy notice', true, true));
+    expect((privacy.title, privacy.published, privacy.body.startsWith('# Who we are')), ('Privacy Policy', true, true));
+  });
+
+  testWidgets('Bookings & payments: this month in numbers, filtered by status; a viewing fee links to Viewings', (tester) async {
+    await open(tester, as: manager, at: '/payments');
+    expect(find.text('Bookings & payments'), findsWidgets);
+    expect(find.byKey(const Key('pay-total')), findsOneWidget);
+    expect(find.text('Viewing fee'), findsWidgets);
+    await tester.tap(find.byKey(const Key('pay-status-failed')));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: find.byType(DataTable), matching: find.text('Paid')), findsNothing);
+    expect(find.descendant(of: find.byType(DataTable), matching: find.text('Failed')), findsWidgets);
+  });
+
+  testWidgets('Ads: a manager adds an ad that runs on the home page, then pauses it', (tester) async {
+    await open(tester, as: manager, at: '/ads');
+    expect(find.text('Riverside Gardens: now letting'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('add-ad')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ad-save')));
+    await tester.pumpAndSettle();
+    expect(find.text('Use 2 to 80 characters.'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('ad-title-field')), 'Kilimani Heights: show flat open');
+    await tester.enterText(find.byKey(const Key('ad-link-field')), 'http://not-secure.example');
+    await tester.tap(find.byKey(const Key('ad-placement-home')));
+    await tester.tap(find.byKey(const Key('ad-save')));
+    await tester.pumpAndSettle();
+    expect(find.text('A full https:// address, or leave it empty.'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('ad-link-field')), '');
+    await tester.tap(find.byKey(const Key('ad-save')));
+    await tester.pumpAndSettle();
+    var ads = await container.read(adminRepositoryProvider).ads(manager);
+    final mine = ads.firstWhere((a) => a.title == 'Kilimani Heights: show flat open');
+    expect((mine.placement, mine.active, mine.linkUrl), ('home', true, null));
+    expect(find.text('Kilimani Heights: show flat open'), findsOneWidget);
+
+    await tester.tap(find.byKey(Key('ad-${mine.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ad-active')));
+    await tester.tap(find.byKey(const Key('ad-save')));
+    await tester.pumpAndSettle();
+    ads = await container.read(adminRepositoryProvider).ads(manager);
+    expect(ads.firstWhere((a) => a.id == mine.id).stateOn(DateTime.now()), 'paused');
+    expect(find.descendant(of: find.byKey(Key('ad-${mine.id}')), matching: find.text('Paused')), findsOneWidget);
+  });
+
+  testWidgets('Support: a manager opens a new message, adds a note and resolves it', (tester) async {
+    await open(tester, as: manager, at: '/support');
+    expect(find.textContaining('Do you have bedsitters in Ruaka'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('message-fb-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('+254722000111'), findsOneWidget, reason: 'call them back');
+    await tester.enterText(find.byKey(const Key('message-note')), 'Sent three Ruaka bedsitters on WhatsApp');
+    await tester.tap(find.text('Resolved'));
+    await tester.tap(find.byKey(const Key('message-save')));
+    await tester.pumpAndSettle();
+    final f = (await container.read(adminRepositoryProvider).feedback(manager)).firstWhere((m) => m.id == 'fb-1');
+    expect((f.status, f.notes.last.text), ('resolved', 'Sent three Ruaka bedsitters on WhatsApp'));
+    expect(find.byKey(const Key('message-fb-1')), findsNothing, reason: 'New shows only new ones');
+  });
+
+  testWidgets('agents see none of Bookings & payments, Ads, Support or Content', (tester) async {
+    await open(tester, as: wanjiku);
+    for (final s in ['payments', 'ads', 'support', 'content']) {
+      expect(find.byKey(Key('nav-$s')), findsNothing, reason: s);
+    }
   });
 
   testWidgets('signing out returns to sign in', (tester) async {

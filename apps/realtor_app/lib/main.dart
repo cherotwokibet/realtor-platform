@@ -19,6 +19,7 @@ import 'src/firebase/firebase_account.dart';
 import 'src/firebase/firebase_data.dart';
 import 'src/firebase/firebase_push.dart';
 import 'src/providers.dart';
+import 'src/support/site_services.dart';
 
 Future<void> main() async {
   // Clean URLs on the web (/listing/<slug>, not /#/listing/<slug>); a no-op elsewhere.
@@ -88,6 +89,11 @@ Future<void> main() async {
       leadRepositoryProvider.overrideWithValue(
         DeferredLeadRepository(once(() => CallableLeadRepository.firebase(FirebaseFunctions.instanceFor(region: tenant.firebaseRegion)))),
       ),
+      siteServicesProvider.overrideWithValue(DeferredSiteServices(once(() {
+        final functions = FirebaseFunctions.instanceFor(region: tenant.firebaseRegion);
+        return FirebaseSiteServices(FirebaseFirestore.instance, (name, data) async => (await functions.httpsCallable(name).call<Object?>(data)).data,
+            bucket: bucket);
+      }), bucket: bucket)),
       listingReviewsProvider.overrideWithValue(DeferredListingReviews(once(() {
         final functions = FirebaseFunctions.instanceFor(region: tenant.firebaseRegion);
         return FirestoreListingReviews(FirebaseFirestore.instance, (name, data) async => (await functions.httpsCallable(name).call<Object?>(data)).data);

@@ -675,7 +675,7 @@ class _ResultsList extends ConsumerWidget {
                     ]),
                   ),
                 ),
-                if (ads) ...[gap, const AdSlot(tall: true), gap, const AdSlot(tall: true)],
+                if (ads) ...[gap, const AdSlot(tall: true), gap, const AdSlot(tall: true, index: 1)],
               ]),
             ),
           ),
@@ -711,7 +711,7 @@ class _ResultsList extends ConsumerWidget {
             ListingGrid(listings: r.hits.sublist(i, i + chunk > r.hits.length ? r.hits.length : i + chunk)),
             gap,
             // After each full group of homes, never straight after a short last one.
-            if (ads && i + chunk <= r.hits.length) ...[const AdSlot(), gap],
+            if (ads && i + chunk <= r.hits.length) ...[AdSlot(index: i ~/ chunk), gap],
           ],
         ],
       );

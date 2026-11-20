@@ -2,6 +2,7 @@ import 'package:realtor_core/realtor_core.dart';
 
 import '../account/account_data.dart';
 import '../account/push.dart';
+import '../support/site_services.dart';
 
 /// Backends that are still starting. On the web, starting Firebase downloads
 /// and runs its SDK, seconds on a mid-range phone; the app draws its first
@@ -148,4 +149,21 @@ class DeferredListingReviews implements ListingReviews {
   @override
   Future<void> submit({required String listingId, required int rating, required String comment, String? name}) async =>
       (await _inner).submit(listingId: listingId, rating: rating, comment: comment, name: name);
+}
+
+class DeferredSiteServices implements SiteServices {
+  DeferredSiteServices(this._inner, {required this.bucket});
+  final Future<SiteServices> _inner;
+  final String bucket;
+
+  @override
+  Future<List<AdRow>> ads() async => (await _inner).ads();
+
+  /// No wait: the address is known from the bucket.
+  @override
+  String? imageUrl(String path) => 'https://firebasestorage.googleapis.com/v0/b/$bucket/o/${Uri.encodeComponent(path)}?alt=media';
+
+  @override
+  Future<void> sendFeedback({required String kind, required String message, String? name, String? phone, String? email, String? page}) async =>
+      (await _inner).sendFeedback(kind: kind, message: message, name: name, phone: phone, email: email, page: page);
 }

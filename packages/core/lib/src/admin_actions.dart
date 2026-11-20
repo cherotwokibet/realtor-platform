@@ -1,4 +1,4 @@
-import 'admin_repository.dart' show SitePageRow;
+import 'admin_repository.dart' show AdRow, SitePageRow;
 import 'agent_profile.dart';
 import 'area_guide.dart';
 import 'off_plan_project.dart';
@@ -172,6 +172,15 @@ abstract interface class AdminActions {
   /// `saveStaffProfile`: any staff member's own name and phone (Account).
   Future<void> saveMyProfile(StaffUser who, {required String name, String? phone});
 
+  /// `updateFeedback`, managers: a message's status (new, open, resolved) and/or a note.
+  Future<void> updateFeedback(StaffUser who, {required String feedbackId, String? status, String? note});
+
+  /// `saveAd`, managers: creates ([AdRow.id] null) or replaces an advert; returns its id.
+  Future<String> saveAd(StaffUser who, AdRow ad);
+
+  /// `deleteAd`, managers.
+  Future<void> deleteAd(StaffUser who, String adId);
+
   /// `setStaffRole`, owners only: give an account that has signed in once a
   /// role (an agent needs [agentId]), or take it away with a null [role].
   Future<void> setStaffRole(StaffUser who, {required String email, required StaffRole? role, String? agentId});
@@ -185,15 +194,18 @@ enum DataRequestKind { export, delete }
 
 /// What a data request found (export) or removed (delete).
 class DataRequestResult {
-  const DataRequestResult({required this.kind, required this.leads, required this.viewings, this.reviews = 0, this.exportJson});
+  const DataRequestResult({required this.kind, required this.leads, required this.viewings, this.reviews = 0, this.feedback = 0, this.exportJson});
 
   final DataRequestKind kind;
 
   /// Reviews left after the person's viewings (P6-s03).
   final int leads, viewings, reviews;
 
+  /// Messages they sent through Help & feedback.
+  final int feedback;
+
   /// The person's records as indented JSON, for an export; null for a delete.
   final String? exportJson;
 
-  bool get foundNothing => leads == 0 && viewings == 0;
+  bool get foundNothing => leads == 0 && viewings == 0 && feedback == 0;
 }

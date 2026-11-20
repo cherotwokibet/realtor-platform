@@ -26,6 +26,8 @@ import { updateAgentResponseTimes } from './response';
 import { dataRequest } from './privacy';
 import { deleteAccount, saveProfile, type CustomerAuth } from './profile';
 import { bootstrapOwner, saveStaffProfile, setStaffRole, type StaffAuth } from './staff';
+import { submitFeedback, updateFeedback } from './support';
+import { deleteAd, saveAd } from './ads';
 
 let db: Firestore;
 const visitor: Caller = { uid: null, role: null, agentId: null };
@@ -46,7 +48,7 @@ before(() => {
 });
 
 beforeEach(async () => {
-  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings', 'audit', 'staff', 'rateLimits', 'config']) {
+  for (const c of ['listings', 'leads', 'areas', 'agents', 'viewings', 'audit', 'staff', 'rateLimits', 'config', 'feedback', 'ads', 'listingEdits']) {
     const all = await db.collection(c).get();
     await Promise.all(all.docs.map((d) => d.ref.delete()));
   }
@@ -361,6 +363,52 @@ describe('staff profile (Account)', () => {
   });
 });
 
+describe('support and feedback', () => {
+  test('anyone sends a message; managers set its status and add notes; audited without the text', async () => {
+    const { feedbackId } = await submitFeedback(db, { kind: 'problem', message: 'The map does not load on my phone', name: 'Juma', contact: { email: 'Juma@Example.com' }, page: '/rent' }, now);
+    const f = (await db.collection('feedback').doc(feedbackId).get()).data()!;
+    assert.deepEqual([f.kind, f.status, f.contact.email, f.page], ['problem', 'new', 'juma@example.com', '/rent']);
+    await rejectsWith(submitFeedback(db, { kind: 'spam', message: 'hello there' }, now), 'invalid-argument');
+    await rejectsWith(submitFeedback(db, { kind: 'question', message: 'hi' }, now), 'invalid-argument');
+
+    await rejectsWith(updateFeedback(db, wanjiku, { feedbackId, status: 'open' }, now), 'permission-denied');
+    await rejectsWith(updateFeedback(db, manager, { feedbackId }, now), 'invalid-argument');
+    await updateFeedback(db, manager, { feedbackId, status: 'open', note: 'Asked for the phone model' }, now);
+    await updateFeedback(db, manager, { feedbackId, status: 'resolved', note: 'Fixed in the update' }, now);
+    const g = (await db.collection('feedback').doc(feedbackId).get()).data()!;
+    assert.deepEqual([g.status, g.notes.length, g.notes[0].text], ['resolved', 2, 'Asked for the phone model']);
+    const log = (await db.collection('audit').where('action', '==', 'feedback.update').get()).docs.map((d) => d.data());
+    assert.equal(log.length, 2);
+    assert.ok(!JSON.stringify(log).includes('map does not load') && !JSON.stringify(log).toLowerCase().includes('juma'));
+  });
+
+  test('one address cannot flood the inbox', async () => {
+    for (let i = 0; i < 5; i++) await submitFeedback(db, { kind: 'feedback', message: `Message number ${i}`, contact: { phone: '+254700000777' } }, now);
+    await rejectsWith(submitFeedback(db, { kind: 'feedback', message: 'One too many', contact: { phone: '+254700000777' } }, now), 'resource-exhausted');
+  });
+});
+
+describe('ads', () => {
+  test('managers add, change and delete adverts; dates and links are checked; audited', async () => {
+    const ad = { title: 'Riverside Gardens: now letting', text: 'Two and three bedrooms by the river.', advertiser: 'Riverside Ltd', placement: 'both', active: true, startsOn: '2026-11-01', endsOn: '2026-12-31' };
+    await rejectsWith(saveAd(db, wanjiku, ad, now), 'permission-denied');
+    await rejectsWith(saveAd(db, manager, { ...ad, endsOn: '2026-10-01' }, now), 'invalid-argument');
+    await rejectsWith(saveAd(db, manager, { ...ad, linkUrl: 'http://insecure.example' }, now), 'invalid-argument');
+    const { adId } = await saveAd(db, manager, { ...ad, linkUrl: 'https://riverside.example/ke' }, now);
+    let a = (await db.collection('ads').doc(adId).get()).data()!;
+    assert.deepEqual([a.title, a.placement, a.active, a.linkUrl, a.image], [ad.title, 'both', true, 'https://riverside.example/ke', null]);
+    await rejectsWith(saveAd(db, manager, { ...ad, adId, image: 'ads/other-ad/photo.webp' }, now), 'invalid-argument');
+    await saveAd(db, manager, { ...ad, adId, active: false, image: `ads/${adId}/photo.webp` }, now);
+    a = (await db.collection('ads').doc(adId).get()).data()!;
+    assert.deepEqual([a.active, a.image, a.linkUrl], [false, `ads/${adId}/photo.webp`, null]);
+    await rejectsWith(saveAd(db, manager, { ...ad, adId: 'no-such-ad' }, now), 'not-found');
+    await deleteAd(db, manager, { adId }, now);
+    assert.equal((await db.collection('ads').doc(adId).get()).exists, false);
+    const actions = (await db.collection('audit').where('target.id', '==', adId).get()).docs.map((d) => d.get('action')).sort();
+    assert.deepEqual(actions, ['ad.delete', 'ad.save', 'ad.save']);
+  });
+});
+
 describe('rate limits (P6-s05)', () => {
   const ask = (phone: string, listingId = 'listing-001') =>
     createLead(db, { listingId, channel: 'form', contact: { phone }, consent: true }, now);
@@ -434,7 +482,7 @@ describe('retention (D12)', () => {
   });
 
   test('does nothing while everything is within retention', async () => {
-    assert.deepEqual(await purgeExpired(db, now), { leads: 0, viewings: 0, blocks: 0 });
+    assert.deepEqual(await purgeExpired(db, now), { leads: 0, viewings: 0, blocks: 0, feedback: 0 });
   });
 });
 
@@ -483,6 +531,7 @@ describe('data requests (DPA 2019, P6-s04)', () => {
     await createLead(db, { listingId: 'listing-002', channel: 'form', contact: { email: 'amina@example.com' }, consent: true }, now);
     await bookViewing(db, { listingId: 'listing-003', slot, client: amina, consent: true }, now);
     await createLead(db, { listingId: 'listing-001', channel: 'form', contact: { phone: '+254700000902' }, consent: true }, now); // someone else
+    await submitFeedback(db, { kind: 'question', message: 'Do you list in Ruaka?', contact: { phone: amina.phone } }, now);
   }
 
   test('export finds a person by phone or email, as plain JSON, and is audited without their details', async () => {
@@ -492,6 +541,7 @@ describe('data requests (DPA 2019, P6-s04)', () => {
     if (byPhone.kind !== 'export') return;
     assert.equal(byPhone.data.leads.length, 2); // her form lead and the viewing's lead
     assert.equal(byPhone.data.viewings.length, 1);
+    assert.equal(byPhone.data.feedback.length, 1, 'her Help & feedback message');
     assert.equal(typeof byPhone.data.leads[0].consentAt, 'string');
     JSON.parse(JSON.stringify(byPhone.data));
 
@@ -508,13 +558,13 @@ describe('data requests (DPA 2019, P6-s04)', () => {
     await aminaAsked();
     const before = (await db.collection('leads').count().get()).data().count;
     const r = await dataRequest(db, manager, { kind: 'delete', phone: amina.phone }, now);
-    assert.deepEqual(r, { kind: 'delete', deleted: { leads: 2, viewings: 1, reviews: 0 } });
+    assert.deepEqual(r, { kind: 'delete', deleted: { leads: 2, viewings: 1, reviews: 0, feedback: 1 } });
     const r2 = await dataRequest(db, manager, { kind: 'delete', email: 'amina@example.com' }, now);
-    assert.deepEqual(r2, { kind: 'delete', deleted: { leads: 1, viewings: 0, reviews: 0 } });
+    assert.deepEqual(r2, { kind: 'delete', deleted: { leads: 1, viewings: 0, reviews: 0, feedback: 0 } });
     assert.equal((await db.collection('leads').count().get()).data().count, before - 3);
     assert.equal((await db.collection('leads').where('contact.phone', '==', '+254700000902').get()).size, 1);
     const entry = (await db.collection('audit').where('action', '==', 'privacy.delete').get()).docs.map((d) => d.data().target.label);
-    assert.deepEqual(entry.sort(), ['1 leads, 0 viewings, 0 reviews', '2 leads, 1 viewings, 0 reviews']);
+    assert.deepEqual(entry.sort(), ['1 leads, 0 viewings, 0 reviews, 0 messages', '2 leads, 1 viewings, 0 reviews, 1 messages']);
   });
 
   test('owners and managers only; needs a phone or an email', async () => {

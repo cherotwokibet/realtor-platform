@@ -261,6 +261,28 @@ describe('listingEdits', () => {
   });
 });
 
+describe('feedback and ads', () => {
+  test('feedback: managers read it; agents and visitors do not; nobody writes it', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'feedback', 'f-1'), { kind: 'question', message: 'Hi there', status: 'new', contact: { phone: '+254700000001' } });
+    });
+    await assertSucceeds(getDoc(doc(manager(), 'feedback', 'f-1')));
+    await assertFails(getDoc(doc(agent(), 'feedback', 'f-1')));
+    await assertFails(getDoc(doc(visitor(), 'feedback', 'f-1')));
+    await assertFails(setDoc(doc(visitor(), 'feedback', 'f-2'), { kind: 'question', message: 'Hi there' }));
+  });
+  test('ads: anyone reads those switched on; managers read all; nobody writes', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'ads', 'on'), { title: 'On', active: true });
+      await setDoc(doc(ctx.firestore(), 'ads', 'off'), { title: 'Off', active: false });
+    });
+    await assertSucceeds(getDoc(doc(visitor(), 'ads', 'on')));
+    await assertFails(getDoc(doc(visitor(), 'ads', 'off')));
+    await assertSucceeds(getDoc(doc(manager(), 'ads', 'off')));
+    await assertFails(setDoc(doc(manager(), 'ads', 'x'), { title: 'X', active: true }));
+  });
+});
+
 describe('savedSearches', () => {
   const mine = { userId: 'alice', filters: { purpose: 'rent', areas: ['kilimani'] }, channels: ['push'], lastNotifiedAt: null };
   test('a user creates, reads, edits and deletes their own', async () => {

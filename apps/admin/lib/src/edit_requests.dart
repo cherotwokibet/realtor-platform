@@ -83,7 +83,7 @@ class _EditRequestsScreenState extends ConsumerState<EditRequestsScreen> {
                     leading: CircleAvatar(
                       backgroundColor: switch (e.status) {
                         'approved' => b.success.withValues(alpha: 0.15),
-                        'rejected' => scheme.errorContainer,
+                        'rejected' => scheme.error.withValues(alpha: 0.12),
                         _ => b.primarySoft
                       },
                       child: Icon(

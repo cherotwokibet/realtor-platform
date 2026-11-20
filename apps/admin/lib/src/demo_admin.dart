@@ -394,6 +394,160 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     return on;
   }
 
+  /// Viewing fees paid (or not) by M-Pesa, one per demo viewing, and a featured-ad fee.
+  late final _payments = [
+    for (final (i, v) in _viewings.indexed)
+      PaymentRow(
+        id: 'viewing-fee_${v.id}',
+        purpose: 'viewing-fee',
+        amountKES: 500,
+        phone: v.clientPhone ?? '+254700000300',
+        status: switch (i % 4) { 0 || 1 => 'paid', 2 => 'pending', _ => 'failed' },
+        createdAt: v.slot.subtract(const Duration(days: 2)),
+        listingId: v.listingId,
+        listingTitle: v.listingTitle,
+        viewingId: v.id,
+        receipt: i % 4 < 2 ? 'SKD${(4521 + i * 37).toString()}XY' : null,
+        reason: i % 4 == 3 ? 'The customer cancelled on their phone' : null,
+      ),
+    PaymentRow(
+      id: 'featured-ad_demo',
+      purpose: 'featured-ad',
+      amountKES: 2500,
+      phone: '+254711222333',
+      status: 'paid',
+      createdAt: _now.subtract(const Duration(days: 3)),
+      listingId: _listings.first.id,
+      listingTitle: _listings.first.title,
+      receipt: 'SKF7781ZQ',
+    ),
+  ];
+
+  @override
+  Future<RowPage<PaymentRow>> payments(StaffUser who, {String? status, String? after, int limit = 25}) async {
+    if (!who.canOpen(AdminSection.payments)) throw StaffAccessException('payments are for owners and managers');
+    final rows = [
+      for (final p in _payments)
+        if (status == null || p.status == status) p
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final start = after == null ? 0 : rows.indexWhere((r) => r.id == after) + 1;
+    final page = rows.skip(start).take(limit).toList();
+    return RowPage(page, next: start + limit < rows.length ? page.last.id : null);
+  }
+
+  late final _feedback = <String, FeedbackRow>{
+    for (final (i, f) in [
+      ('question', 'Do you have bedsitters in Ruaka under KES 10,000?', 'Kevin O.', '+254722000111', null, '/rent', 'new'),
+      ('problem', 'The map does not load on my phone when I open a listing.', 'Faith W.', null, 'faith@example.com', '/listing/studio-kilimani', 'open'),
+      ('feedback', 'Love the new search. Saving a search was easy.', null, null, null, '/', 'resolved'),
+      ('complaint', 'An agent did not turn up for my viewing on Saturday.', 'Peter K.', '+254733000222', null, '/account', 'new'),
+    ].indexed)
+      'fb-${i + 1}': FeedbackRow(
+        id: 'fb-${i + 1}',
+        kind: f.$1,
+        message: f.$2,
+        name: f.$3,
+        phone: f.$4,
+        email: f.$5,
+        page: f.$6,
+        status: f.$7,
+        createdAt: _now.subtract(Duration(hours: 5 + i * 19)),
+        notes: f.$7 == 'open' ? [(text: 'Asked which phone they use', by: 'Demo Manager', at: _now.subtract(const Duration(hours: 20)))] : const [],
+      ),
+  };
+
+  @override
+  Future<List<FeedbackRow>> feedback(StaffUser who, {String? status}) async {
+    if (!who.canOpen(AdminSection.support)) throw StaffAccessException('support is for owners and managers');
+    return [
+      for (final f in _feedback.values)
+        if (status == null || f.status == status) f
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  @override
+  Future<void> updateFeedback(StaffUser who, {required String feedbackId, String? status, String? note}) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final f = _feedback[feedbackId];
+    if (f == null) throw AdminActionException('not-found', 'no such message');
+    if (status == null && (note ?? '').trim().isEmpty) throw AdminActionException('invalid-argument', 'a status or a note');
+    final at = _clock();
+    _feedback[feedbackId] = FeedbackRow(
+      id: f.id,
+      kind: f.kind,
+      message: f.message,
+      status: status ?? f.status,
+      createdAt: f.createdAt,
+      name: f.name,
+      phone: f.phone,
+      email: f.email,
+      page: f.page,
+      notes: [...f.notes, if ((note ?? '').trim().isNotEmpty) (text: note!.trim(), by: who.name, at: at)],
+    );
+    _log(who, 'feedback.update', f.kind, f.status, status ?? f.status, at: at);
+  }
+
+  late final _ads = <String, AdRow>{
+    'ad-1': AdRow(
+      id: 'ad-1',
+      title: 'Riverside Gardens: now letting',
+      text: 'Two and three bedroom apartments by the river, from KES 85,000.',
+      advertiser: 'Riverside Developers',
+      linkUrl: 'https://example.com/riverside',
+      placement: 'both',
+      startsOn: '2026-11-01',
+      updatedAt: _now.subtract(const Duration(days: 2)),
+    ),
+    'ad-2': AdRow(
+      id: 'ad-2',
+      title: 'Movers you can trust',
+      text: 'Same-day moves across Nairobi.',
+      advertiser: 'SwiftMove',
+      placement: 'results',
+      active: false,
+      updatedAt: _now.subtract(const Duration(days: 9)),
+    ),
+  };
+
+  @override
+  Future<List<AdRow>> ads(StaffUser who) async {
+    if (!who.canOpen(AdminSection.ads)) throw StaffAccessException('ads are for owners and managers');
+    return _ads.values.toList()..sort((a, b) => (b.updatedAt ?? _now).compareTo(a.updatedAt ?? _now));
+  }
+
+  @override
+  Future<String> saveAd(StaffUser who, AdRow ad) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final problems = ad.problems();
+    if (problems.isNotEmpty) throw AdminActionException('invalid-argument', problems.entries.map((e) => '${e.key}: ${e.value}').join('; '));
+    if (ad.id != null && !_ads.containsKey(ad.id)) throw AdminActionException('not-found', 'no such ad');
+    final id = ad.id ?? 'ad-${_ads.length + 1}-${_clock().millisecondsSinceEpoch % 100000}';
+    final before = _ads[id];
+    _ads[id] = AdRow(
+      id: id,
+      title: ad.title.trim(),
+      text: ad.text.trim(),
+      advertiser: ad.advertiser.trim(),
+      linkUrl: (ad.linkUrl ?? '').trim().isEmpty ? null : ad.linkUrl!.trim(),
+      image: ad.image,
+      placement: ad.placement,
+      active: ad.active,
+      startsOn: ad.startsOn,
+      endsOn: ad.endsOn,
+      updatedAt: _clock(),
+    );
+    _log(who, 'ad.save', ad.title.trim(), before == null ? 'none' : (before.active ? 'on' : 'off'), ad.active ? 'on' : 'off');
+    return id;
+  }
+
+  @override
+  Future<void> deleteAd(StaffUser who, String adId) async {
+    if (!who.isManager) throw AdminActionException('permission-denied', 'owner or manager only');
+    final ad = _ads.remove(adId);
+    if (ad == null) throw AdminActionException('not-found', 'no such ad');
+    _log(who, 'ad.delete', ad.title, 'saved', 'none');
+  }
+
   /// Agents' edits to live listings, by listing id.
   final _edits = <String, EditRequestRow>{};
 

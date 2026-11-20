@@ -173,6 +173,67 @@ class FirestoreAdminRepository implements AdminRepository {
   }
 
   @override
+  Future<RowPage<PaymentRow>> payments(StaffUser who, {String? status, String? after, int limit = 25}) async {
+    if (!who.canOpen(AdminSection.payments)) throw StaffAccessException('payments are for owners and managers');
+    Query<Map<String, Object?>> q = _db.collection('payments');
+    if (status != null) q = q.where('status', isEqualTo: status);
+    return _page('payments', q.orderBy('createdAt', descending: true), after, limit, (docs) async {
+      final titles = await _listingTitles({for (final d in docs) _str(d, 'listingId')});
+      return [
+        for (final d in docs)
+          PaymentRow(
+            id: d.id,
+            purpose: _str(d, 'purpose'),
+            amountKES: (d.data()['amountKES'] as num?)?.toInt() ?? 0,
+            phone: _str(d, 'phone'),
+            status: _str(d, 'status'),
+            createdAt: _date(d.data()['createdAt']),
+            listingId: d.data()['listingId'] as String?,
+            listingTitle: titles[_str(d, 'listingId')],
+            viewingId: d.data()['viewingId'] as String?,
+            receipt: d.data()['receipt'] as String?,
+            reason: d.data()['reason'] as String?,
+          ),
+      ];
+    });
+  }
+
+  @override
+  Future<List<FeedbackRow>> feedback(StaffUser who, {String? status}) async {
+    if (!who.canOpen(AdminSection.support)) throw StaffAccessException('support is for owners and managers');
+    Query<Map<String, Object?>> q = _db.collection('feedback');
+    if (status != null) q = q.where('status', isEqualTo: status);
+    final docs = (await q.limit(300).get()).docs;
+    return [
+      for (final d in docs)
+        FeedbackRow(
+          id: d.id,
+          kind: _str(d, 'kind'),
+          message: _str(d, 'message'),
+          status: _str(d, 'status'),
+          createdAt: _date(d.data()['createdAt']),
+          name: d.data()['name'] as String?,
+          phone: _map(d, 'contact')['phone'] as String?,
+          email: _map(d, 'contact')['email'] as String?,
+          page: d.data()['page'] as String?,
+          notes: [
+            for (final n in (d.data()['notes'] as List?) ?? const [])
+              if (n is Map) (text: '${n['text'] ?? ''}', by: n['by'] as String?, at: _date(n['at'])),
+          ],
+        ),
+    ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  @override
+  Future<List<AdRow>> ads(StaffUser who) async {
+    if (!who.canOpen(AdminSection.ads)) throw StaffAccessException('ads are for owners and managers');
+    final docs = (await _db.collection('ads').get()).docs;
+    final rows = [for (final d in docs) (AdRow.fromDoc(d.id, d.data()), _date(d.data()['updatedAt']))];
+    rows.sort((a, b) => b.$2.compareTo(a.$2));
+    return [for (final r in rows) r.$1];
+  }
+
+  @override
   Future<StaffMember?> me(StaffUser who) async {
     final d = await _db.collection('staff').doc(who.uid).get();
     final data = d.data();

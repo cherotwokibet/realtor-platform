@@ -26,6 +26,7 @@ import 'search/purpose.dart';
 import 'search/recent_searches.dart';
 import 'search/results_screen.dart';
 import 'sections.dart';
+import 'support/help_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final features = ref.watch(tenantProvider).features;
@@ -66,6 +67,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       // My account's own pages, full screen over the tabs, as on Bayut.
       GoRoute(path: '/account/edit', redirect: _signedInOnly, builder: (context, state) => const EditProfileScreen()),
       GoRoute(path: '/account/activity', builder: (context, state) => const ActivityScreen()),
+      // Help & feedback (the admin's Support inbox).
+      GoRoute(path: '/help', builder: (context, state) => HelpScreen(from: state.uri.queryParameters['from'])),
       // An emailed sign-in link that opened the app (P4-s03): Account finishes it.
       GoRoute(
         path: '/__/auth/links',

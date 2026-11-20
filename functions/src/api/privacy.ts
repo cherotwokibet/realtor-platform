@@ -26,11 +26,13 @@ export interface DataExport {
   leads: Record<string, unknown>[];
   viewings: Record<string, unknown>[];
   reviews: Record<string, unknown>[];
+  /** Messages sent through Help & feedback. */
+  feedback: Record<string, unknown>[];
 }
 
 export type DataRequestResult =
   | { kind: 'export'; data: DataExport }
-  | { kind: 'delete'; deleted: { leads: number; viewings: number; reviews: number } };
+  | { kind: 'delete'; deleted: { leads: number; viewings: number; reviews: number; feedback: number } };
 
 /** Timestamps become ISO strings so the export is plain JSON. */
 function plain(d: DocumentSnapshot): Record<string, unknown> {
@@ -45,7 +47,7 @@ async function find(
   db: Firestore,
   phone?: string,
   email?: string,
-): Promise<{ leads: DocumentSnapshot[]; viewings: DocumentSnapshot[]; reviews: DocumentSnapshot[] }> {
+): Promise<{ leads: DocumentSnapshot[]; viewings: DocumentSnapshot[]; reviews: DocumentSnapshot[]; feedback: DocumentSnapshot[] }> {
   const queries = [];
   if (phone) queries.push(db.collection('leads').where('contact.phone', '==', phone).get());
   // createLead stores emails lowercased; the form as typed covers older rows.
@@ -59,18 +61,23 @@ async function find(
     const ids = viewings.slice(i, i + 30).map((v) => v.id);
     reviews.push(...(await db.collection('reviews').where('viewingId', 'in', ids).get()).docs);
   }
-  return { leads: [...byId.values()], viewings, reviews };
+  const feedback = new Map<string, DocumentSnapshot>();
+  const fq = [];
+  if (phone) fq.push(db.collection('feedback').where('contact.phone', '==', phone).get());
+  if (email) fq.push(db.collection('feedback').where('contact.email', '==', email.toLowerCase()).get());
+  for (const snap of await Promise.all(fq)) for (const d of snap.docs) feedback.set(d.id, d);
+  return { leads: [...byId.values()], viewings, reviews, feedback: [...feedback.values()] };
 }
 
 export async function dataRequest(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<DataRequestResult> {
   requireManager(caller);
   const req = parseInput(dataRequestInput, input);
   const found = await find(db, req.phone, req.email);
-  const label = `${found.leads.length} leads, ${found.viewings.length} viewings, ${found.reviews.length} reviews`;
-  if (found.leads.length + found.viewings.length + found.reviews.length > 450) throw new HttpsError('failed-precondition', `${label}: too many for one request, ask the developer`);
+  const label = `${found.leads.length} leads, ${found.viewings.length} viewings, ${found.reviews.length} reviews, ${found.feedback.length} messages`;
+  if (found.leads.length + found.viewings.length + found.reviews.length + found.feedback.length > 450) throw new HttpsError('failed-precondition', `${label}: too many for one request, ask the developer`);
 
   const batch = db.batch();
-  if (req.kind === 'delete') for (const d of [...found.leads, ...found.viewings, ...found.reviews]) batch.delete(d.ref);
+  if (req.kind === 'delete') for (const d of [...found.leads, ...found.viewings, ...found.reviews, ...found.feedback]) batch.delete(d.ref);
   audit(batch, db, caller, { action: req.kind === 'export' ? 'privacy.export' : 'privacy.delete', target: { collection: 'people', id: 'request', label } }, now);
   await batch.commit();
   if (req.kind === 'delete') {
@@ -80,6 +87,6 @@ export async function dataRequest(db: Firestore, caller: Caller, input: unknown,
   }
 
   return req.kind === 'export'
-    ? { kind: 'export', data: { leads: found.leads.map(plain), viewings: found.viewings.map(plain), reviews: found.reviews.map(plain) } }
-    : { kind: 'delete', deleted: { leads: found.leads.length, viewings: found.viewings.length, reviews: found.reviews.length } };
+    ? { kind: 'export', data: { leads: found.leads.map(plain), viewings: found.viewings.map(plain), reviews: found.reviews.map(plain), feedback: found.feedback.map(plain) } }
+    : { kind: 'delete', deleted: { leads: found.leads.length, viewings: found.viewings.length, reviews: found.reviews.length, feedback: found.feedback.length } };
 }

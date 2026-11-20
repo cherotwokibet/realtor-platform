@@ -13,6 +13,8 @@ export interface PurgeResult {
   leads: number;
   viewings: number;
   blocks: number;
+  /** Help & feedback messages, kept as long as a lead. */
+  feedback: number;
 }
 
 export const BLOCK_KEEP_DAYS = 30;
@@ -24,6 +26,7 @@ export async function purgeExpired(db: Firestore, now: Date, page = 300): Promis
     leads: await deleteAll(db, db.collection('leads').where('retainUntil', '<=', now), page),
     viewings: await deleteAll(db, db.collection('viewings').where('slot', '<=', viewingCutoff), page),
     blocks: await deleteAll(db, db.collection('agentBlocks').where('end', '<=', new Date(now.getTime() - BLOCK_KEEP_DAYS * 86_400_000)), page),
+    feedback: await deleteAll(db, db.collection('feedback').where('retainUntil', '<=', now), page),
   };
 }
 

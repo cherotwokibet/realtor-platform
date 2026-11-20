@@ -29,7 +29,10 @@ class SiteFooter extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final open = ref.read(urlOpenerProvider);
-    final purposes = [for (final p in Purpose.values) if (tenant.features.isOn(p.feature)) p];
+    final purposes = [
+      for (final p in Purpose.values)
+        if (tenant.features.isOn(p.feature)) p
+    ];
     final narrow = MediaQuery.sizeOf(context).width < 700;
     Uri page(String slug) => Uri.https(tenant.shareDomain, '/$slug');
 
@@ -58,13 +61,17 @@ class SiteFooter extends ConsumerWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Image.asset(b.logoAsset, height: 56, filterQuality: FilterQuality.medium, semanticLabel: tenant.name, alignment: Alignment.centerLeft),
         if (tenant.tagline != null) ...[SizedBox(height: b.spacing.md), Text(tenant.tagline!, style: text.bodyMedium?.copyWith(color: b.textMuted))],
-        if (tenant.earbNo != null && tenant.earbNo != 'TBC') ...[SizedBox(height: b.spacing.sm), Text('EARB reg. ${tenant.earbNo}', style: text.bodySmall?.copyWith(color: b.textMuted))],
+        if (tenant.earbNo != null && tenant.earbNo != 'TBC') ...[
+          SizedBox(height: b.spacing.sm),
+          Text('EARB reg. ${tenant.earbNo}', style: text.bodySmall?.copyWith(color: b.textMuted))
+        ],
       ]),
     );
     final columns = [
       column('Browse', [for (final p in purposes) link('Homes ${p.heading}', () => context.go('/${p.pathSegment}'))]),
       column('Company', [
         for (final (slug, name) in sitePages.where((p) => p.$1 != 'privacy' && p.$1 != 'terms')) link(name, () => open(page(slug))),
+        link('Help & feedback', () => context.push(Uri(path: '/help', queryParameters: {'from': GoRouterState.of(context).uri.path}).toString())),
       ]),
       column('Get in touch', [
         if (tenant.hasContactNumbers) link(tenant.phone, () => open(Uri(scheme: 'tel', path: tenant.phone)), icon: Icons.call_outlined),
