@@ -18,6 +18,8 @@ export interface SearchFilters {
   areas?: string[];
   minBeds?: number;
   maxPriceKES?: number;
+  /** A drawn area (P3-s04), as the search link writes it: 3 to 20 "lat,lng" joined by "~". */
+  poly?: string;
 }
 
 export interface LiveRow {
@@ -29,6 +31,40 @@ export interface LiveRow {
   area: string;
   beds: number;
   priceKES: number;
+  lat?: number;
+  lng?: number;
+}
+
+/** True when the point is inside the closed outline (ray casting). */
+export function insidePolygon(lat: number, lng: number, poly: Array<{ lat: number; lng: number }>): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if (a.lat > lat !== b.lat > lat && lng < ((b.lng - a.lng) * (lat - a.lat)) / (b.lat - a.lat) + a.lng) inside = !inside;
+  }
+  return inside;
+}
+
+/** The corners of a saved drawn area, or null when it is not 3 to 20 real corners. */
+export function parseArea(poly: string): Array<{ lat: number; lng: number }> | null {
+  if (typeof poly !== 'string') return null;
+  const corners = poly.split('~').map((c) => {
+    const [lat, lng] = c.split(',').map(Number);
+    return { lat, lng };
+  });
+  const ok =
+    corners.length >= 3 &&
+    corners.length <= 20 &&
+    corners.every((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180);
+  return ok ? corners : null;
+}
+
+/** No drawn area matches anywhere; a damaged one matches nothing. */
+function inArea(f: SearchFilters, l: LiveRow): boolean {
+  if (f.poly == null) return true;
+  const corners = parseArea(f.poly);
+  if (corners == null || l.lat == null || l.lng == null) return false;
+  return insidePolygon(l.lat, l.lng, corners);
 }
 
 export function matches(f: SearchFilters, l: LiveRow): boolean {
@@ -37,7 +73,8 @@ export function matches(f: SearchFilters, l: LiveRow): boolean {
     (!f.types?.length || f.types.includes(l.type)) &&
     (!f.areas?.length || f.areas.includes(l.area)) &&
     (f.minBeds == null || l.beds >= f.minBeds) &&
-    (f.maxPriceKES == null || l.priceKES <= f.maxPriceKES)
+    (f.maxPriceKES == null || l.priceKES <= f.maxPriceKES) &&
+    inArea(f, l)
   );
 }
 
@@ -114,6 +151,8 @@ export async function sweepSavedSearches(
       area: d.get('area'),
       beds: d.get('beds'),
       priceKES: d.get('priceKES'),
+      lat: d.get('geo.lat'),
+      lng: d.get('geo.lng'),
     }));
     const writer = db.bulkWriter();
     const searches = await db.collection('savedSearches').where('channels', 'array-contains', 'inbox').get();

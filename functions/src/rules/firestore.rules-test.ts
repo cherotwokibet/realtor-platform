@@ -274,6 +274,18 @@ describe('savedSearches', () => {
     await assertFails(updateDoc(doc(user(), 'savedSearches', 'ss-1'), { channels: ['push', 'fax'] }));
     await assertFails(updateDoc(doc(user(), 'savedSearches', 'ss-1'), { filters: { purpose: 'rent', junk: true } }));
   });
+  test('a drawn area: 3 to 20 corners written as the search link writes them', async () => {
+    const make = (poly: unknown) => setDoc(doc(user(), 'savedSearches', `ss-${Math.random()}`), { ...mine, filters: { purpose: 'rent', poly }, createdAt: serverTimestamp() });
+    const area = (n: number) => Array.from({ length: n }, (_, i) => `${(-1.28 - i / 1000).toFixed(5)},${(36.78 + i / 1000).toFixed(5)}`).join('~');
+    await assertSucceeds(make(area(4)));
+    await assertSucceeds(make(area(20)));
+    await assertSucceeds(make('-1.2,36.8~-1.21,36.81~-1.22,36.8'));
+    await assertFails(make(area(2)));
+    await assertFails(make(area(21)));
+    await assertFails(make(`${area(3)}~<script>`));
+    await assertFails(make(`${area(3)} DROP`));
+    await assertFails(make([{ lat: -1.28, lng: 36.78 }, { lat: -1.29, lng: 36.79 }, { lat: -1.3, lng: 36.8 }]));
+  });
 });
 
 describe('photo flags (P6-s05)', () => {

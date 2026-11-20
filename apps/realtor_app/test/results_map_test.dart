@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:realtor_app/src/app.dart';
 import 'package:realtor_app/src/providers.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:realtor_app/src/search/draw_area.dart';
 import 'package:realtor_app/src/search/results_map.dart';
+import 'package:realtor_core/realtor_core.dart';
 
 import 'feature_flags_test.dart' show tenantWith;
 
@@ -45,25 +48,66 @@ void main() {
     expect(find.text('Draw area'), findsNothing);
   });
 
-  testWidgets('Draw area: tap three corners, search inside them, then clear it', (tester) async {
+  testWidgets('Draw area: four corners at least, never crossing, each can be dragged; then save the search', (tester) async {
     await openResults(tester, '/rent');
     await tester.tap(find.byTooltip('Map'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Draw area'));
     await tester.pumpAndSettle();
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Search this area')).onPressed, isNull, reason: 'needs 3 corners');
-    final map = tester.getRect(find.byType(ResultsMap));
-    for (final o in [const Offset(-150, -150), const Offset(150, -150), const Offset(0, 200)]) {
-      await tester.tapAt(map.center + o);
+    Future<void> tapMap(Offset o) async {
+      await tester.tapAt(tester.getRect(find.byType(ResultsMap)).center + o);
       // The map waits out the double-tap window before reporting a tap.
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
     }
-    expect(find.text('3 corners'), findsOneWidget);
+
+    FilledButton search() => tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Search this area'));
+    // Tapped in a crossing order: top left, bottom right, top right, bottom left.
+    for (final o in [const Offset(-150, -100), const Offset(150, 200), const Offset(150, -100)]) {
+      await tapMap(o);
+    }
+    expect(search().onPressed, isNull, reason: 'needs $minDrawCorners corners');
+    expect(find.textContaining('3 of 4'), findsOneWidget);
+    await tapMap(const Offset(-150, 200));
+    expect(find.text('4 corners. Tap to add more, drag to move.'), findsOneWidget);
+    expect(search().onPressed, isNotNull);
+
+    // Drag a corner; Undo puts it back.
+    final before = tester.getCenter(find.byKey(const Key('corner-0')));
+    final other = tester.getCenter(find.byKey(const Key('corner-2')));
+    // As a finger does: press, a frame, then move in steps.
+    final finger = await tester.startGesture(before);
+    await tester.pump();
+    for (var k = 0; k < 5; k++) {
+      await finger.moveBy(const Offset(-8, -6));
+      await tester.pump();
+    }
+    await finger.up();
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(find.byKey(const Key('corner-2'))), other, reason: 'the map held still');
+    expect((tester.getCenter(find.byKey(const Key('corner-0'))) - before).distance, moreOrLessEquals(50, epsilon: 1),
+        reason: 'the corner followed the finger all the way');
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect((tester.getCenter(find.byKey(const Key('corner-0'))) - before).distance, lessThan(1));
+
     await tester.tap(find.text('Search this area'));
     await tester.pumpAndSettle();
-    expect(path(tester), contains('poly='));
+    final area = ListingFilters.fromUri(Uri.parse(path(tester)))!.polygon;
+    expect(area, hasLength(4));
+    expect(selfIntersects([for (final p in area) LatLng(p.lat, p.lng)]), isFalse, reason: 'the outline does not cross itself');
     expect(find.widgetWithText(InputChip, 'Drawn area'), findsOneWidget);
+
+    // The drawn search can be saved: signed out, Account asks to sign in first.
+    await tester.tap(find.byKey(const Key('map-save-search')));
+    await tester.pumpAndSettle();
+    expect(path(tester), '/account');
+  });
+
+  testWidgets('Clear area drops the drawn area', (tester) async {
+    await openResults(tester, '/rent?poly=-1.20,36.88~-1.20,36.92~-1.24,36.92~-1.24,36.88');
+    await tester.tap(find.byTooltip('Map'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Clear area'));
     await tester.pumpAndSettle();
     expect(path(tester), isNot(contains('poly=')));

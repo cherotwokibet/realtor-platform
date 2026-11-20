@@ -86,15 +86,26 @@ Map<String, Object?> alertFilters(ListingFilters f) => {
       if (f.areas.isNotEmpty) 'areas': f.areas.take(20).toList(),
       if (f.minBeds != null) 'minBeds': f.minBeds,
       if (f.maxPriceKES != null) 'maxPriceKES': f.maxPriceKES,
+      // A drawn area as the search link writes it ("lat,lng~lat,lng~..."), to 6 places at most.
+      if (f.polygon.length >= 3) 'poly': f.polygon.take(20).map((p) => '${_place(p.lat)},${_place(p.lng)}').join('~'),
     };
 
-ListingFilters filtersFromAlert(Map<Object?, Object?> m) => ListingFilters(
-      purpose: Purpose.values.firstWhere((p) => p.value == m['purpose'], orElse: () => Purpose.rent),
-      types: [for (final t in (m['types'] as List?) ?? const []) '$t'],
-      areas: [for (final a in (m['areas'] as List?) ?? const []) '$a'],
-      minBeds: (m['minBeds'] as num?)?.toInt(),
-      maxPriceKES: (m['maxPriceKES'] as num?)?.toInt(),
-    );
+String _place(double v) => v.toStringAsFixed(6).replaceFirst(RegExp(r'\.?0+$'), '');
+
+ListingFilters filtersFromAlert(Map<Object?, Object?> m) {
+  final area = [
+    for (final c in '${m['poly'] ?? ''}'.split('~'))
+      if (c.split(',').map(double.tryParse).toList() case [final double lat, final double lng] when lat.abs() <= 90 && lng.abs() <= 180) GeoPoint(lat, lng),
+  ];
+  return ListingFilters(
+    purpose: Purpose.values.firstWhere((p) => p.value == m['purpose'], orElse: () => Purpose.rent),
+    types: [for (final t in (m['types'] as List?) ?? const []) '$t'],
+    areas: [for (final a in (m['areas'] as List?) ?? const []) '$a'],
+    minBeds: (m['minBeds'] as num?)?.toInt(),
+    maxPriceKES: (m['maxPriceKES'] as num?)?.toInt(),
+    polygon: area.length >= 3 && area.length <= maxPolygonPoints ? area : const [],
+  );
+}
 
 /// Demo: one pretend account, everything in memory.
 class DemoAccount implements CustomerAccount, AlertsRepository, ProfileRepository {

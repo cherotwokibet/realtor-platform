@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matches, pushFor } from './alerts';
+import { matches, parseArea, pushFor } from './alerts';
 
 const flat = { id: 'l1', slug: 's', title: 't', purpose: 'rent', type: 'apartment', area: 'kilimani', beds: 2, priceKES: 60000 };
 
@@ -25,4 +25,16 @@ test('one push per person: one home opens it, several open the inbox', () => {
   assert.equal(many.body, 't, KES 60,000 a month, and 2 more');
   assert.equal(many.path, '/account');
   assert.equal(pushFor([{ ...flat, purpose: 'sale', priceKES: 9_500_000 }]).body, 't, KES 9,500,000');
+});
+
+test('a drawn area matches only the homes inside it', () => {
+  // A square around Kilimani; the home sits in it, a Westlands one does not.
+  const square = '-1.28,36.77~-1.28,36.8~-1.3,36.8~-1.3,36.77';
+  const inKili = { ...flat, lat: -1.29, lng: 36.785 };
+  assert.ok(matches({ purpose: 'rent', poly: square }, inKili));
+  assert.ok(!matches({ purpose: 'rent', poly: square }, { ...flat, lat: -1.265, lng: 36.8 }));
+  assert.ok(!matches({ purpose: 'rent', poly: square }, flat), 'a home with no position cannot be in an area');
+  assert.ok(!matches({ purpose: 'rent', poly: '-1.28,36.77~-1.28,36.8' }, inKili), 'too few corners matches nothing');
+  assert.ok(!matches({ purpose: 'rent', poly: `${square}~x,y` }, inKili), 'junk corners match nothing');
+  assert.equal(parseArea('-1.28,36.77~-1.28,36.8~-1.3,36.8')?.length, 3);
 });
