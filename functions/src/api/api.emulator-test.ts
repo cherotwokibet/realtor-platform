@@ -8,7 +8,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { seedDocs } from '../seed/data';
 import type { Caller } from './auth';
-import { createLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
+import { createLead, followUpLead, logContactTap, updateLeadStage, LEAD_RETENTION_DAYS } from './leads';
 import { clearLapsedFeatures, confirmListing, expireListings, featureListing, importListings, moderateEdit, moderateListing, setHotListing, setPlacement, submitListing } from './listings';
 import { bookViewing, openSlots, rescheduleViewing, updateViewingStatus } from './viewings';
 import { addAgentBlock, removeAgentBlock } from './availability';
@@ -155,6 +155,28 @@ describe('createLead', () => {
     await rejectsWith(createLead(db, { listingId: 'nope', channel: 'call', contact: { phone: '+254700000301' }, consent: true }), 'not-found');
     await db.collection('listings').doc('listing-002').update({ status: 'draft' });
     await rejectsWith(createLead(db, { listingId: 'listing-002', channel: 'call', contact: { phone: '+254700000301' }, consent: true }), 'not-found');
+  });
+});
+
+describe('followUpLead', () => {
+  test('an agent notes a call and sets when to follow up; managers any lead; audited without the note', async () => {
+    const at = '2026-10-26T10:00:00+03:00';
+    assert.deepEqual(await followUpLead(db, wanjiku, { leadId: 'lead-001', note: 'Called; wants a 2 bed under 70K', followUpAt: at }, now), {
+      followUpAt: new Date(at).toISOString(),
+    });
+    let l = (await db.collection('leads').doc('lead-001').get()).data()!;
+    assert.equal(l.followUpAt.toDate().toISOString(), new Date(at).toISOString());
+    assert.deepEqual([l.notes.length, l.notes[0].text], [1, 'Called; wants a 2 bed under 70K']);
+    await rejectsWith(followUpLead(db, otieno, { leadId: 'lead-001', note: 'Not mine' }, now), 'permission-denied');
+    await rejectsWith(followUpLead(db, wanjiku, { leadId: 'lead-001' }, now), 'invalid-argument');
+    await rejectsWith(followUpLead(db, wanjiku, { leadId: 'lead-001', followUpAt: 'tomorrow' }, now), 'invalid-argument');
+    // A manager clears the follow-up; the note stays.
+    await followUpLead(db, manager, { leadId: 'lead-001', followUpAt: null }, now);
+    l = (await db.collection('leads').doc('lead-001').get()).data()!;
+    assert.deepEqual([l.followUpAt, l.notes.length], [null, 1]);
+    const log = (await db.collection('audit').where('action', '==', 'lead.followup').get()).docs.map((d) => d.data());
+    assert.equal(log.length, 2);
+    assert.ok(!JSON.stringify(log).includes('70K'));
   });
 });
 

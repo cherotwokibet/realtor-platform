@@ -21,6 +21,13 @@ class CallableAdminActions implements AdminActions {
   Future<void> moveLead(StaffUser who, {required String leadId, required String stage}) => _run('updateLeadStage', {'leadId': leadId, 'stage': stage});
 
   @override
+  Future<void> followUpLead(StaffUser who, {required String leadId, String? note, DateTime? followUpAt, bool clearFollowUp = false}) => _run('followUpLead', {
+        'leadId': leadId,
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        if (clearFollowUp) 'followUpAt': null else if (followUpAt != null) 'followUpAt': followUpAt.toUtc().toIso8601String(),
+      });
+
+  @override
   Future<void> moderateListing(StaffUser who, {required String listingId, required String action, String? reason}) =>
       _run('moderateListing', {'listingId': listingId, 'action': action, if (reason != null) 'reason': reason});
 

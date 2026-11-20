@@ -105,3 +105,44 @@ export async function updateLeadStage(db: Firestore, caller: Caller, input: unkn
   });
   return { stage: req.stage };
 }
+
+export const followUpLeadInput = z
+  .object({
+    leadId: docId,
+    /** What was done or said; added to the lead's notes. */
+    note: z.string().trim().min(1).max(1000).optional(),
+    /** When to get in touch next; null clears it. */
+    followUpAt: z.iso.datetime({ offset: true }).nullable().optional(),
+  })
+  .refine((r) => r.note !== undefined || r.followUpAt !== undefined, { message: 'a note or a follow-up time', path: ['note'] });
+
+/**
+ * Following up a lead: a note on what was done, and when to get in touch
+ * next. Agents their own leads, managers any. The audit keeps the date, not
+ * the note.
+ */
+export async function followUpLead(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ followUpAt: string | null }> {
+  requireStaff(caller);
+  const req = parseInput(followUpLeadInput, input);
+  const ref = db.collection('leads').doc(req.leadId);
+  let next: Date | null = null;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'no such lead');
+    if (!isManager(caller) && snap.get('agentId') !== caller.agentId) throw new HttpsError('permission-denied', 'not your lead');
+    const before = (snap.get('followUpAt')?.toDate?.() as Date | undefined) ?? null;
+    next = req.followUpAt === undefined ? before : req.followUpAt === null ? null : new Date(req.followUpAt);
+    tx.update(ref, {
+      ...(req.followUpAt !== undefined ? { followUpAt: next } : {}),
+      ...(req.note ? { notes: FieldValue.arrayUnion({ text: req.note, by: caller.name ?? null, at: now }) } : {}),
+    });
+    audit(tx, db, caller, {
+      action: 'lead.followup',
+      target: { collection: 'leads', id: ref.id },
+      from: before ? before.toISOString().slice(0, 16) : 'none',
+      to: next ? (next as Date).toISOString().slice(0, 16) : 'none',
+      ...(req.note ? { reason: 'note added' } : {}),
+    }, now);
+  });
+  return { followUpAt: next ? (next as Date).toISOString() : null };
+}

@@ -16,11 +16,15 @@ class FirestoreAdminRepository implements AdminRepository {
   Map<String, String?> _agentPhones = const {};
 
   @override
-  Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, String? after, int limit = 25}) async {
+  Future<RowPage<LeadRow>> leads(StaffUser who, {String? stage, DateTime? dueBy, String? after, int limit = 25}) async {
     Query<Map<String, Object?>> q = _db.collection('leads');
     if (who.agentScope != null) q = q.where('agentId', isEqualTo: who.agentScope);
     if (stage != null) q = q.where('stage', isEqualTo: stage);
-    return _page('leads', q.orderBy('createdAt', descending: true), after, limit, (docs) async {
+    // Follow-ups due: soonest first (leads: agentId + followUpAt index); won and lost drop out below.
+    q = dueBy != null
+        ? q.where('followUpAt', isLessThanOrEqualTo: Timestamp.fromDate(dueBy)).orderBy('followUpAt')
+        : q.orderBy('createdAt', descending: true);
+    return _page('leads', q, after, limit, (docs) async {
       final names = await _agents();
       final titles = await _listingTitles({for (final d in docs) _str(d, 'listingId')});
       return [
@@ -36,8 +40,13 @@ class FirestoreAdminRepository implements AdminRepository {
             createdAt: _date(d.data()['createdAt']),
             contactName: _map(d, 'contact')['name'] as String?,
             contactPhone: _map(d, 'contact')['phone'] as String?,
+            followUpAt: d.data()['followUpAt'] == null ? null : _date(d.data()['followUpAt']),
+            notes: [
+              for (final n in (d.data()['notes'] as List?) ?? const [])
+                if (n is Map) (text: '${n['text'] ?? ''}', by: n['by'] as String?, at: _date(n['at'])),
+            ],
           ),
-      ];
+      ].where((l) => dueBy == null || (l.stage != 'won' && l.stage != 'lost')).toList();
     });
   }
 
@@ -116,9 +125,11 @@ class FirestoreAdminRepository implements AdminRepository {
       );
 
   @override
-  Future<RowPage<AuditRow>> audit(StaffUser who, {String? after, int limit = 25}) async {
+  Future<RowPage<AuditRow>> audit(StaffUser who, {List<String>? actions, String? after, int limit = 25}) async {
     if (!who.canOpen(AdminSection.audit)) throw StaffAccessException('the audit log is for owners and managers');
-    final q = _db.collection('audit').orderBy('at', descending: true);
+    Query<Map<String, Object?>> q = _db.collection('audit');
+    if (actions != null) q = q.where('action', whereIn: actions.take(30).toList());
+    q = q.orderBy('at', descending: true);
     return _page('audit', q, after, limit, (docs) async {
       return [
         for (final d in docs)
@@ -258,7 +269,7 @@ class FirestoreAdminRepository implements AdminRepository {
     Future<int> count(Query<Map<String, Object?>> q) async => (await q.count().get()).count ?? 0;
     final today = DateTime(now.year, now.month, now.day);
     final since = today.subtract(const Duration(days: dashboardDays - 1));
-    final (newLeads, recent, open, live, pending, latest, activity) = await (
+    final (newLeads, recent, open, live, pending, latest, activity, due) = await (
       count(scoped('leads').where('stage', isEqualTo: 'new')),
       scoped('leads').where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since)).orderBy('createdAt', descending: true).limit(1000).get(),
       viewings(who, from: today, limit: 100),
@@ -266,6 +277,7 @@ class FirestoreAdminRepository implements AdminRepository {
       count(scoped('listings').where('status', isEqualTo: 'pending')),
       leads(who, stage: 'new', limit: 5),
       who.canOpen(AdminSection.audit) ? audit(who, limit: 6) : Future.value(const RowPage<AuditRow>([])),
+      leads(who, dueBy: now, limit: 100),
     ).wait;
     final tomorrow = today.add(const Duration(days: 1)), week = today.add(const Duration(days: 7));
     final upcoming = open.rows.where((v) => !v.slot.isBefore(now.subtract(const Duration(hours: 1)))).toList();
@@ -279,6 +291,7 @@ class FirestoreAdminRepository implements AdminRepository {
       upcoming: upcoming.take(5).toList(),
       latestLeads: latest.rows,
       activity: activity.rows,
+      followUpsDue: due.rows.length,
     );
   }
 

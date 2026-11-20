@@ -109,6 +109,7 @@ export const rescheduleViewing = onCall((req) => viewings.rescheduleViewing(getF
 export const addAgentBlock = onCall((req) => availability.addAgentBlock(getFirestore(), callerFrom(req.auth), req.data));
 export const removeAgentBlock = onCall((req) => availability.removeAgentBlock(getFirestore(), callerFrom(req.auth), req.data));
 export const updateLeadStage = onCall((req) => leads.updateLeadStage(getFirestore(), callerFrom(req.auth), req.data));
+export const followUpLead = onCall((req) => leads.followUpLead(getFirestore(), callerFrom(req.auth), req.data));
 export const submitListing = onCall((req) => listings.submitListing(getFirestore(), callerFrom(req.auth), req.data));
 export const moderateListing = onCall((req) => listings.moderateListing(getFirestore(), callerFrom(req.auth), req.data));
 export const confirmListing = onCall((req) => listings.confirmListing(getFirestore(), callerFrom(req.auth), req.data));

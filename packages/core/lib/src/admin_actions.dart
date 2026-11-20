@@ -98,6 +98,10 @@ abstract interface class AdminActions {
   /// `updateLeadStage`. Agents move their own leads; managers move any.
   Future<void> moveLead(StaffUser who, {required String leadId, required String stage});
 
+  /// `followUpLead`: a note on what was done and/or when to get in touch
+  /// next ([clearFollowUp] removes it). Agents their own leads, managers any.
+  Future<void> followUpLead(StaffUser who, {required String leadId, String? note, DateTime? followUpAt, bool clearFollowUp = false});
+
   /// `moderateListing`: approve, reject (needs [reason]), expire, let or sold. Managers only.
   Future<void> moderateListing(StaffUser who, {required String listingId, required String action, String? reason});
 

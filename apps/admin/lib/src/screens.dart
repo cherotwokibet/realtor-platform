@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:realtor_core/realtor_core.dart';
 
 import 'agent_profiles.dart';
 import 'projects.dart';
 import 'format.dart';
+import 'lead_detail.dart';
 import 'links.dart';
 import 'listing_editor.dart';
 import 'reviews_dialog.dart';
@@ -177,6 +179,14 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
   String? _stage;
   var _reload = 0;
 
+  /// Only open leads whose follow-up has come (Dashboard links here with ?due=1).
+  late bool _due = GoRouterState.of(context).uri.queryParameters['due'] == '1';
+
+  Future<void> _open(LeadRow r) async {
+    final saved = await showDialog<bool>(context: context, builder: (_) => LeadDialog(lead: r));
+    if (saved == true && mounted) setState(() => _reload++);
+  }
+
   /// Lead id -> stage being saved, and stages saved but not yet reloaded.
   final _saving = <String, String>{}, _saved = <String, String>{};
 
@@ -204,16 +214,39 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
     final repo = ref.watch(adminRepositoryProvider);
     return _TablePage(
       title: 'Leads',
-      subtitle: who.isManager ? 'Every agent\'s leads, newest first.' : 'Your leads, newest first.',
-      filters: FilterChips(values: leadStages, selected: _stage, labelOf: label, onSelected: (s) => setState(() => _stage = s)),
+      subtitle: who.isManager
+          ? 'Every agent\'s leads, newest first. Open one to note a call and plan the next.'
+          : 'Your leads, newest first. Open one to note a call and plan the next.',
+      filters: Wrap(spacing: 8, runSpacing: 8, children: [
+        ChoiceChip(
+          key: const Key('leads-due'),
+          avatar: const Icon(Icons.alarm, size: 18),
+          label: const Text('Follow-ups due'),
+          selected: _due,
+          showCheckmark: false,
+          onSelected: (on) => setState(() {
+            _due = on;
+            if (on) _stage = null;
+          }),
+        ),
+        FilterChips(
+          values: leadStages,
+          selected: _due ? '' : _stage,
+          labelOf: label,
+          onSelected: (s) => setState(() {
+            _stage = s;
+            _due = false;
+          }),
+        ),
+      ]),
       table: PagedTable<LeadRow>(
-        key: ValueKey(('leads', who.uid, _stage)),
-        empty: 'No leads at this stage.',
+        key: ValueKey(('leads', who.uid, _stage, _due)),
+        empty: _due ? 'No follow-ups due. Well done.' : 'No leads at this stage.',
         reload: _reload,
         onLoaded: () {
           if (_saved.isNotEmpty && mounted) setState(_saved.clear);
         },
-        load: (after) => repo.leads(who, stage: _stage, after: after, limit: pageSize),
+        load: (after) => repo.leads(who, stage: _stage, dueBy: _due ? DateTime.now() : null, after: after, limit: pageSize),
         columns: [
           TableColumn('Received', (r) {
             final received = Text(shortDateTime(r.createdAt));
@@ -232,7 +265,24 @@ class _LeadsScreenState extends ConsumerState<LeadsScreen> {
               ),
             ]);
           }),
-          TableColumn('Name', (r) => Text(r.contactName ?? '—')),
+          TableColumn(
+            'Name',
+            (r) => InkWell(
+              key: Key('lead-${r.id}'),
+              onTap: () => _open(r),
+              child: Text(r.contactName ?? r.contactPhone ?? 'Lead', style: const TextStyle(decoration: TextDecoration.underline)),
+            ),
+          ),
+          TableColumn('Follow-up', (r) {
+            if (r.followUpAt == null) return Text(r.notes.isEmpty ? '—' : '${r.notes.length} notes');
+            final due = r.dueAt(DateTime.now());
+            return Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(due ? Icons.alarm : Icons.event_outlined, size: 16, color: due ? Theme.of(context).colorScheme.error : null),
+              const SizedBox(width: 4),
+              Text(shortDateTime(r.followUpAt!),
+                  style: TextStyle(color: due ? Theme.of(context).colorScheme.error : null, fontWeight: due ? FontWeight.w600 : null)),
+            ]);
+          }),
           TableColumn('Phone', (r) => Text(r.contactPhone ?? '—')),
           TableColumn('Listing', (r) => Text(r.listingTitle)),
           TableColumn('Channel', (r) => Text(label(r.channel))),
@@ -586,19 +636,28 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
   }
 }
 
-class AuditScreen extends ConsumerWidget {
+class AuditScreen extends ConsumerStatefulWidget {
   const AuditScreen({super.key});
+  @override
+  ConsumerState<AuditScreen> createState() => _AuditScreenState();
+}
+
+class _AuditScreenState extends ConsumerState<AuditScreen> {
+  /// One of [auditGroups], by name; null: everything.
+  String? _group;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final who = ref.watch(staffProvider)!;
     final repo = ref.watch(adminRepositoryProvider);
+    final actions = auditGroups.where((g) => g.$1 == _group).firstOrNull?.$2;
     return _TablePage(
       title: 'Audit log',
       subtitle: 'Every staff action, written by the server with the change itself.',
+      filters: FilterChips(values: [for (final g in auditGroups) g.$1], selected: _group, labelOf: (g) => g, onSelected: (g) => setState(() => _group = g)),
       table: PagedTable<AuditRow>(
-        key: ValueKey(('audit', who.uid)),
-        load: (after) => repo.audit(who, after: after, limit: pageSize),
+        key: ValueKey(('audit', who.uid, _group)),
+        load: (after) => repo.audit(who, actions: actions, after: after, limit: pageSize),
         columns: [
           TableColumn('When', (r) => Text(shortDateTime(r.at))),
           TableColumn('Who', (r) => Text('${r.actorName} (${label(r.actorRole?.name ?? 'script')})')),

@@ -5,6 +5,7 @@ import type { Caller } from './auth';
 export interface AuditEvent {
   action:
     | 'lead.stage'
+    | 'lead.followup'
     | 'listing.submit'
     | 'listing.approve'
     | 'listing.reject'

@@ -132,6 +132,9 @@ export const lead = z
     /** When the agent first moved it on from new, and how many minutes that took (P5-s03). */
     firstResponseAt: timestamp.optional(),
     responseMins: z.number().int().min(0).optional(),
+    /** Following up (followUpLead): when to next get in touch, and what was done. */
+    followUpAt: timestamp.nullable().optional(),
+    notes: z.array(z.object({ text: z.string().max(1000), by: z.string().nullable(), at: timestamp })).max(200).optional(),
   })
   .refine((l) => l.contact.phone || l.contact.email, { message: 'a lead needs a phone or an email', path: ['contact'] })
   .refine((l) => l.retainUntil > l.consentAt, { message: 'retainUntil must be after consentAt', path: ['retainUntil'] });

@@ -52,6 +52,10 @@ class SlowActions implements AdminActions {
   }
 
   @override
+  Future<void> followUpLead(StaffUser who, {required String leadId, String? note, DateTime? followUpAt, bool clearFollowUp = false}) =>
+      inner.followUpLead(who, leadId: leadId, note: note, followUpAt: followUpAt, clearFollowUp: clearFollowUp);
+
+  @override
   Future<void> moderateListing(StaffUser who, {required String listingId, required String action, String? reason}) async {
     calls++;
     await gate.future;
@@ -350,7 +354,7 @@ void main() {
   testWidgets("an agent sees only their own leads, and no audit log", (tester) async {
     await open(tester, as: wanjiku);
     expect(location(), '/leads');
-    expect(find.text('Your leads, newest first.'), findsOneWidget);
+    expect(find.textContaining('Your leads, newest first.'), findsOneWidget);
     expect(find.text('Audit log'), findsNothing);
     expect(find.descendant(of: find.byType(DataTable), matching: find.text('Agent')), findsNothing, reason: 'no Agent column');
     final own = (await DemoAdminRepository().leads(wanjiku, limit: pageSize)).rows;
@@ -1418,6 +1422,53 @@ void main() {
     for (final s in ['payments', 'ads', 'support', 'content']) {
       expect(find.byKey(Key('nav-$s')), findsNothing, reason: s);
     }
+  });
+
+  testWidgets('following up a lead: a note and a next time; Follow-ups due lists those that have come', (tester) async {
+    await open(tester, as: wanjiku);
+    final repo = container.read(adminRepositoryProvider);
+    final now = DateTime.now();
+    final due = (await repo.leads(wanjiku, dueBy: now, limit: 50)).rows;
+    expect(due, isNotEmpty, reason: 'the demo has follow-ups due');
+    expect(due.every((l) => l.agentId == 'agent-wanjiku' && l.dueAt(now)), isTrue);
+    await tester.tap(find.byKey(const Key('leads-due')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(Key('lead-${due.first.id}')), findsOneWidget);
+
+    // Open a lead from the full list, note the call and plan tomorrow.
+    await tester.tap(find.byKey(const Key('leads-due')));
+    await tester.pumpAndSettle();
+    final lead = (await repo.leads(wanjiku, limit: 15)).rows.firstWhere((l) => l.followUpAt == null && l.stage != 'won' && l.stage != 'lost');
+    await tapVisible(tester, find.byKey(Key('lead-${lead.id}')));
+    expect(find.text('Nothing planned'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('lead-note')), 'Called; viewing on Saturday');
+    await tester.tap(find.byKey(const Key('lead-pick-Tomorrow 9:00')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('lead-save')));
+    await tester.pumpAndSettle();
+    final after = (await repo.leads(wanjiku, limit: 50)).rows.firstWhere((l) => l.id == lead.id);
+    expect(after.notes.last.text, 'Called; viewing on Saturday');
+    final t = DateTime.now().add(const Duration(days: 1));
+    expect((after.followUpAt!.day, after.followUpAt!.hour), (t.day, 9));
+    expect(after.dueAt(DateTime.now()), isFalse);
+  });
+
+  testWidgets("the Dashboard counts follow-ups due in New leads' line", (tester) async {
+    await open(tester, as: manager, at: null);
+    final d = await container.read(adminRepositoryProvider).dashboard(manager, DateTime.now());
+    expect(d.followUpsDue, greaterThan(0));
+    expect(find.textContaining('${d.followUpsDue} follow-ups due'), findsOneWidget);
+  });
+
+  testWidgets('the audit log filters by kind of action', (tester) async {
+    await open(tester, as: manager, at: '/audit');
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Leads and viewings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Listing approve'), findsNothing);
+    expect(find.text('Lead stage'), findsWidgets);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Listings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lead stage'), findsNothing);
   });
 
   testWidgets('signing out returns to sign in', (tester) async {
