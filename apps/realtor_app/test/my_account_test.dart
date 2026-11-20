@@ -242,6 +242,23 @@ void main() {
     expect(c.read(favouritesProvider).value, isEmpty);
   });
 
+  testWidgets('Search alerts on a computer: compact cards, three across', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    for (final area in ['kilimani', 'ruaka', 'kasarani', 'westlands']) {
+      await account.saveSearch('demo-customer', ListingFilters(purpose: Purpose.rent, areas: [area], maxPriceKES: 60000));
+    }
+    await open(tester, '/saved?tab=searches');
+    tester.view.physicalSize = const Size(1400, 1000);
+    await tester.pumpAndSettle();
+    final cards = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('saved-search-'));
+    expect(cards, findsNWidgets(4));
+    final first = tester.getRect(cards.at(0));
+    expect(tester.getRect(cards.at(2)).top, first.top, reason: 'three across');
+    expect(tester.getRect(cards.at(3)).top, greaterThan(first.top));
+    expect(first.height, lessThan(140), reason: 'compact');
+    expect(find.text('Up to KES 60,000 / month'), findsNWidgets(4));
+  });
+
   testWidgets('back on Saved returns to the page the visitor came from, not Home', (tester) async {
     final c = await open(tester, '/rent');
     c.read(routerProvider).go('/saved');
