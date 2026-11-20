@@ -194,6 +194,10 @@ void main() {
     final download = tester.widget<Text>(find.byKey(const Key('drawer-download')));
     expect(['Download the Realtime Estates Ltd app:', 'Download the Realtime Estates app:'], contains(download.data));
     expect(download.maxLines, 1);
+    // Both stores, side by side on one line, the same size.
+    final play = tester.getRect(find.byKey(const Key('badge-google-play'))), apple = tester.getRect(find.byKey(const Key('badge-app-store')));
+    expect(apple.top, play.top);
+    expect(apple.size, play.size);
     // Both stores; one the app is not on yet says so.
     await tester.ensureVisible(find.byKey(const Key('badge-app-store')));
     await tester.tap(find.byKey(const Key('badge-app-store')));
