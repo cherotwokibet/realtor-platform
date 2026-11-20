@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:realtor_core/realtor_core.dart';
 
 import 'agent_profiles.dart';
-import 'area_guides.dart';
 import 'projects.dart';
 import 'format.dart';
 import 'links.dart';
@@ -477,12 +476,6 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
           icon: const Icon(Icons.add),
           label: const Text('New listing'),
         ),
-        if (who.isManager)
-          OutlinedButton.icon(
-            onPressed: () => showDialog<void>(context: context, builder: (_) => const AreaGuidesDialog()),
-            icon: const Icon(Icons.map_outlined),
-            label: const Text('Areas…'),
-          ),
         if (who.isManager && ref.watch(tenantProvider).features.isOn(Feature.offPlan))
           OutlinedButton.icon(
             onPressed: () => showDialog<void>(context: context, builder: (_) => const ProjectsDialog()),

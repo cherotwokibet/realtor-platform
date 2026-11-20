@@ -39,6 +39,16 @@ export const mediaItem = z.object({
   phash: z.string().regex(/^[0-9a-f]{16}$/).optional(),
 });
 
+/** One payment on top of the price, as the listing page lists it. */
+export const extraCharge = z.object({
+  name: z.string().trim().min(2).max(40),
+  amountKES: kes,
+  per: z.enum(['once', 'month', 'night']),
+});
+
+/** An area's outline (its geofence): 3 to 60 corners, implicitly closed. */
+export const boundary = z.array(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })).min(3).max(60);
+
 export const listing = z
   .object({
     title: z.string().min(5).max(120),
@@ -61,6 +71,8 @@ export const listing = z
     /** The listing's text (P7-s02): the agent's own words, or a suggestion they edited. */
     description: z.string().max(3000).optional(),
     amenities: z.array(z.string().max(40)).max(40),
+    /** What else is paid besides the price (agency fee, water, garbage...). */
+    extraCharges: z.array(extraCharge).max(10).optional(),
     utilities: z.object({ water: z.boolean(), electricity: z.boolean(), wifi: z.boolean() }).partial(),
     media: z.array(mediaItem).max(60),
     agentId: docId,
@@ -180,6 +192,8 @@ export const area = z.object({
   centre: geoPoint,
   guide: z.string().max(5000),
   amenities: z.array(z.string().max(60)),
+  /** Where the realtor counts as being in this area; listings' pins must fall inside it. */
+  boundary: boundary.nullable().optional(),
   stats: z.object({ medianRentKES: kes.nullable(), listings: z.number().int().min(0) }),
 });
 

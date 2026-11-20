@@ -1,8 +1,8 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
-import { geohash, slugify } from '../model/geo';
-import { slug } from '../model/schema';
+import { geohash, insidePolygon, selfIntersects, slugify } from '../model/geo';
+import { boundary, slug } from '../model/schema';
 import { audit } from './audit';
 import { median } from './response';
 import { type Caller, parseInput, requireManager } from './auth';
@@ -22,11 +22,17 @@ export const saveAreaInput = z.object({
   lng: z.number().min(33).max(42),
   guide: z.string().trim().max(5000),
   amenities: z.array(z.string().trim().min(1).max(60)).max(30),
+  /** The area's outline (geofence); null or absent: none yet. */
+  boundary: boundary.nullable().optional(),
 });
 
 export async function saveArea(db: Firestore, caller: Caller, input: unknown, now = new Date()): Promise<{ slug: string }> {
   requireManager(caller);
   const req = parseInput(saveAreaInput, input);
+  if (req.boundary) {
+    if (selfIntersects(req.boundary)) throw new HttpsError('invalid-argument', 'boundary: its edges cross');
+    if (!insidePolygon(req.lat, req.lng, req.boundary)) throw new HttpsError('invalid-argument', 'boundary: the centre must be inside it');
+  }
   const id = req.slug ?? slugify(req.name);
   if (!id) throw new HttpsError('invalid-argument', 'name: needs letters or numbers');
   const ref = db.collection('areas').doc(id);
@@ -40,6 +46,7 @@ export async function saveArea(db: Firestore, caller: Caller, input: unknown, no
       centre: { lat: req.lat, lng: req.lng, geohash: geohash(req.lat, req.lng) },
       guide: req.guide,
       amenities: req.amenities,
+      ...(req.boundary !== undefined ? { boundary: req.boundary } : {}),
       updatedAt: now,
     };
     if (snap.exists) tx.update(ref, fields);

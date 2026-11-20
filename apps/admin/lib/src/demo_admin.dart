@@ -537,12 +537,16 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
         lng: e.value.$2,
         guide: 'A demo guide for ${_areaName(e.key)}.',
         listings: _listings.where((l) => l.area == e.key && l.status == 'live').length,
+        // Kilimani has an outline drawn, to show the geofence; the others not yet.
+        boundary: e.key == 'kilimani' ? _kilimaniOutline : const [],
       ),
   };
 
+  static const _kilimaniOutline = [GeoPoint(-1.2800, 36.7720), GeoPoint(-1.2800, 36.8000), GeoPoint(-1.3050, 36.8000), GeoPoint(-1.3050, 36.7720)];
+
   @override
   Future<List<AreaOption>> areas() async => [
-        for (final g in _guides.values) (slug: g.slug!, name: g.name, lat: g.lat, lng: g.lng),
+        for (final g in _guides.values) (slug: g.slug!, name: g.name, lat: g.lat, lng: g.lng, boundary: g.boundary),
       ]..sort((a, b) => a.name.compareTo(b.name));
 
   final _pages = <String, SitePageRow>{
@@ -684,6 +688,7 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
       amenities: [for (final a in input['amenities']! as List) '$a'],
       medianRentKES: before?.medianRentKES,
       listings: before?.listings ?? 0,
+      boundary: area.boundary.length < 3 ? const [] : area.boundary,
     );
     _log(who, 'area.save', area.name.trim(), before == null ? 'none' : 'saved', 'saved');
     return slug;
@@ -718,6 +723,11 @@ class DemoAdminRepository implements AdminRepository, AdminActions {
     if (agentId == null || !_agents.containsKey(agentId)) throw AdminActionException('invalid-argument', 'agentId: pick an agent');
     final problems = draft.problems();
     if (problems.isNotEmpty) throw AdminActionException('invalid-argument', problems.entries.map((e) => '${e.key}: ${e.value}').join('; '));
+    // Geofence, as the Function checks it.
+    final outline = _guides[draft.area]?.boundary ?? const [];
+    if (outline.length >= 3 && !insideOutline(GeoPoint(draft.lat, draft.lng), outline)) {
+      throw AdminActionException('invalid-argument', 'location: the pin is outside ${_guides[draft.area]!.name}. Move it, or pick the area it is in');
+    }
     final at = _clock();
     final i = draft.listingId == null ? -1 : _listings.indexWhere((l) => l.id == draft.listingId);
     if (draft.listingId != null && i < 0) throw AdminActionException('not-found', 'no such listing');

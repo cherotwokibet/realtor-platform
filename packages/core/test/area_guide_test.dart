@@ -22,6 +22,7 @@ void main() {
       'lng': 36.78,
       'guide': 'Leafy.',
       'amenities': ['Yaya Centre'],
+      'boundary': null,
     });
   });
 }

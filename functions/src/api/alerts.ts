@@ -1,5 +1,6 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import type { Messaging } from 'firebase-admin/messaging';
+import { insidePolygon } from '../model/geo';
 
 /**
  * Saved-search alerts (D18, P4-s03). Every 5 minutes: the listings that went
@@ -35,15 +36,7 @@ export interface LiveRow {
   lng?: number;
 }
 
-/** True when the point is inside the closed outline (ray casting). */
-export function insidePolygon(lat: number, lng: number, poly: Array<{ lat: number; lng: number }>): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if (a.lat > lat !== b.lat > lat && lng < ((b.lng - a.lng) * (lat - a.lat)) / (b.lat - a.lat) + a.lng) inside = !inside;
-  }
-  return inside;
-}
+export { insidePolygon };
 
 /** The corners of a saved drawn area, or null when it is not 3 to 20 real corners. */
 export function parseArea(poly: string): Array<{ lat: number; lng: number }> | null {

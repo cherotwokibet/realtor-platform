@@ -1,3 +1,4 @@
+import 'listing_draft.dart';
 import 'agent_profile.dart';
 import 'area_guide.dart';
 import 'listing_search.dart';
@@ -25,6 +26,7 @@ class ListingDetail {
     this.serviceChargeKES,
     this.listedAt,
     this.utilities = const {},
+    this.extraCharges = const [],
   });
   final ListingSummary summary;
   final String? estate;
@@ -54,6 +56,9 @@ class ListingDetail {
   /// Which of water, electricity and Wi-Fi the price includes (true) or
   /// leaves to the tenant (false); a missing key means not stated.
   final Map<String, bool> utilities;
+
+  /// Other payments besides the price (agency fee, water, garbage...).
+  final List<ExtraCharge> extraCharges;
 }
 
 /// A listing video: the HLS playlist (phones), a progressive MP4 for

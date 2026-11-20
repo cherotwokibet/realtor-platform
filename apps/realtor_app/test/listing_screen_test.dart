@@ -86,6 +86,8 @@ void main() {
     await tester.scrollUntilVisible(find.byKey(const Key('extra-payments')), 300, scrollable: page);
     expect(find.text('2 months · KES 130,000'), findsOneWidget, reason: 'the deposit, among the extra payments');
     expect(find.text('KES 3,000 a month'), findsOneWidget, reason: 'the service charge');
+    expect(find.descendant(of: find.byKey(const Key('extra-payments')), matching: find.text('Water')), findsOneWidget, reason: 'an extra charge the agent added');
+    expect(find.text('KES 500 a month'), findsOneWidget);
     expect(find.textContaining('A 2-bedroom, 2-bathroom apartment to let in Kilimani.'), findsOneWidget, reason: 'the description (P7-s02)');
     expect(find.text('Listed by Wanjiku Mwangi'), findsOneWidget);
     for (final action in ['WhatsApp', 'Call']) {

@@ -335,7 +335,13 @@ class FirestoreAdminRepository implements AdminRepository {
     return [
       for (final d in snap.docs)
         if (d.data()['centre'] case {'lat': final num lat, 'lng': final num lng})
-          (slug: d.id, name: d.data()['name'] as String? ?? d.id, lat: lat.toDouble(), lng: lng.toDouble()),
+          (
+            slug: d.id,
+            name: d.data()['name'] as String? ?? d.id,
+            lat: lat.toDouble(),
+            lng: lng.toDouble(),
+            boundary: AreaGuide.fromDoc(d.id, d.data()).boundary,
+          ),
     ]..sort((a, b) => a.name.compareTo(b.name));
   }
 

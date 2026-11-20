@@ -26,6 +26,7 @@ class DemoListingRepository implements ListingRepository {
           ).description,
           agent: _agents[i % _agents.length],
           serviceChargeKES: l.purpose == Purpose.rent && l.beds >= 2 ? 3000 : null,
+          extraCharges: l.purpose == Purpose.rent && l.beds >= 2 ? const [ExtraCharge(name: 'Water', amountKES: 500, per: 'month')] : const [],
           utilities: l.purpose == Purpose.rent ? const {'water': false, 'electricity': false, 'wifi': false} : const {},
         );
       }

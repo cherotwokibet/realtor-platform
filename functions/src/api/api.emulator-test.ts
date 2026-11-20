@@ -788,6 +788,33 @@ describe('area guides (P3-s05)', () => {
     await rejectsWith(saveArea(db, manager, { ...guide, lat: 51.5, lng: -0.1 }, now), 'invalid-argument');
   });
 
+  test('an area can have an outline (geofence); listings must be pinned inside it', async () => {
+    // A box around Kilimani's centre (-1.2921, 36.7856) that the seed listing's pin (-1.2905, 36.786) sits in.
+    const box = [
+      { lat: -1.28, lng: 36.77 },
+      { lat: -1.28, lng: 36.8 },
+      { lat: -1.305, lng: 36.8 },
+      { lat: -1.305, lng: 36.77 },
+    ];
+    const kili = (await db.collection('areas').doc('kilimani').get()).data()!;
+    const base = { slug: 'kilimani', name: kili.name, county: kili.county, lat: kili.centre.lat, lng: kili.centre.lng, guide: kili.guide ?? '', amenities: kili.amenities ?? [] };
+    await rejectsWith(saveArea(db, manager, { ...base, boundary: [box[0], box[2], box[1], box[3]] }, now), 'invalid-argument'); // crossed
+    await rejectsWith(saveArea(db, manager, { ...base, boundary: box.map((p) => ({ lat: p.lat + 1, lng: p.lng })) }, now), 'invalid-argument'); // centre outside
+    await saveArea(db, manager, { ...base, boundary: box }, now);
+    assert.deepEqual((await db.collection('areas').doc('kilimani').get()).get('boundary'), box);
+
+    await submitListing(db, wanjiku, newListing, now);
+    await rejectsWith(submitListing(db, wanjiku, { ...newListing, lat: -1.2676, lng: 36.8108 }, now), 'invalid-argument'); // Westlands
+    // Extra charges ride along.
+    const { listingId } = await submitListing(db, wanjiku, { ...newListing, extraCharges: [{ name: 'Water', amountKES: 500, per: 'month' }] }, now);
+    assert.deepEqual((await db.collection('listings').doc(listingId).get()).get('extraCharges'), [{ name: 'Water', amountKES: 500, per: 'month' }]);
+    await rejectsWith(submitListing(db, wanjiku, { ...newListing, extraCharges: [{ name: 'X', amountKES: 5, per: 'year' }] }, now), 'invalid-argument');
+
+    // Taking the outline away lifts the check.
+    await saveArea(db, manager, { ...base, boundary: null }, now);
+    await submitListing(db, wanjiku, { ...newListing, lat: -1.2676, lng: 36.8108 }, now);
+  });
+
   test('nightly stats: live listings per area, median rent once there are enough rentals', async () => {
     await refreshAreaStats(db);
     const areas = await db.collection('areas').get();
