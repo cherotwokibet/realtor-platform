@@ -137,32 +137,79 @@ class ResultsScreen extends ConsumerWidget {
                   ),
                 ),
               )
-            // The map fills the screen under the bar.
-            : Column(children: [
-                if (wide) menu,
-                bar,
-                Expanded(
-                  child: page(result.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text('Search is not available right now.', style: text.bodyMedium)),
-                    data: (r) => Column(children: [
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.md, b.spacing.gutter, 0),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                          if (wide) ListHeading(filters: filters, found: r.found, onChange: change),
-                          _ActiveFilters(filters: filters, onChange: change),
-                        ]),
+            // Wide: the map as a page too, with the window's scrollbar. At the
+            // top the heading and the map just fit the browser window; the
+            // footer is below, a scroll away, as on the big portals.
+            : wide
+                ? LayoutBuilder(builder: (context, box) {
+                    final fit = (box.maxHeight - TopNav.height - barHeight).clamp(_minMapPage, double.infinity);
+                    return WindowScroll(
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                        child: CustomScrollView(
+                          key: const Key('results-map-page'),
+                          primary: true,
+                          slivers: [
+                            SliverToBoxAdapter(child: menu),
+                            SliverPersistentHeader(pinned: true, delegate: _PinnedBar(height: barHeight, child: bar)),
+                            SliverToBoxAdapter(
+                              child: SizedBox(
+                                key: const Key('results-map-fit'),
+                                height: fit,
+                                child: page(result.when(
+                                  loading: () => const Center(child: CircularProgressIndicator()),
+                                  error: (e, _) => Center(child: Text('Search is not available right now.', style: text.bodyMedium)),
+                                  data: (r) => Padding(
+                                    padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.md, b.spacing.gutter, b.spacing.md),
+                                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                                      ListHeading(filters: filters, found: r.found, onChange: change),
+                                      _ActiveFilters(filters: filters, onChange: change),
+                                      SizedBox(height: b.spacing.sm),
+                                      Expanded(
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(b.radiusMd),
+                                          child: ResultsMap(hits: r.hits, filters: filters, onChange: change, inPage: true),
+                                        ),
+                                      ),
+                                    ]),
+                                  ),
+                                )),
+                              ),
+                            ),
+                            const SliverToBoxAdapter(child: SiteFooter(width: resultsContentWidth)),
+                          ],
+                        ),
                       ),
-                      SizedBox(height: context.brand.spacing.sm),
-                      Expanded(child: ResultsMap(hits: r.hits, filters: filters, onChange: change)),
-                    ]),
-                  )),
-                ),
-              ]),
+                    );
+                  })
+                // Phones: the map fills the screen under the bar.
+                : Column(children: [
+                    bar,
+                    Expanded(
+                      child: page(result.when(
+                        loading: () => const Center(child: CircularProgressIndicator()),
+                        error: (e, _) => Center(child: Text('Search is not available right now.', style: text.bodyMedium)),
+                        data: (r) => Column(children: [
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(b.spacing.gutter, b.spacing.md, b.spacing.gutter, 0),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                              _ActiveFilters(filters: filters, onChange: change),
+                            ]),
+                          ),
+                          SizedBox(height: context.brand.spacing.sm),
+                          Expanded(child: ResultsMap(hits: r.hits, filters: filters, onChange: change)),
+                        ]),
+                      )),
+                    ),
+                  ]),
       ),
     );
   }
 }
+
+/// The least height of the wide map's part of the page (heading and map),
+/// for short windows.
+const _minMapPage = 360.0;
 
 /// Keeps the search bar at the top of a page that scrolls under it.
 class _PinnedBar extends SliverPersistentHeaderDelegate {
