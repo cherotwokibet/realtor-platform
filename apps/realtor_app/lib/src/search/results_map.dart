@@ -233,7 +233,7 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
           icon: Icon(icon),
           style: IconButton.styleFrom(shape: const RoundedRectangleBorder()),
         );
-    return Stack(children: [
+    final stack = Stack(children: [
       if (widget.inPage) Listener(onPointerSignal: _wheel, child: map) else map,
       if (widget.inPage) ...[
         Positioned(
@@ -268,84 +268,99 @@ class _ResultsMapState extends ConsumerState<ResultsMap> {
           ),
         ),
       ],
-      Positioned(
-        top: b.spacing.sm,
-        left: b.spacing.sm,
-        right: b.spacing.sm,
-        child: !_drawing
-            ? Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                FilledButton.tonalIcon(
-                  onPressed: () => setState(() {
-                    _drawing = true;
-                    _selected = null;
-                  }),
-                  icon: const Icon(Icons.draw_outlined),
-                  label: Text(widget.filters.polygon.isEmpty ? 'Draw area' : 'Redraw area'),
-                ),
-                if (widget.filters.polygon.isNotEmpty) ...[
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(backgroundColor: scheme.surface),
-                    onPressed: () => widget.onChange(widget.filters.copyWith(polygon: const [])),
-                    child: const Text('Clear area'),
-                  ),
-                  // The homes in a drawn area can be saved like any search, for alerts.
-                  AlertButton(
-                    filters: widget.filters,
-                    builder: (save) => FilledButton.icon(
-                      key: const Key('map-save-search'),
-                      onPressed: save,
-                      icon: const Icon(Icons.notifications_active_outlined, size: 18),
-                      label: const Text('Save search'),
-                    ),
-                  ),
-                ],
-              ])
-            // Drawing: one panel that says what to do, with Cancel, Undo and Search.
-            : Material(
-                key: const Key('draw-panel'),
-                color: scheme.surface,
-                elevation: 3,
-                shadowColor: scheme.scrim.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(b.radiusMd),
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(b.spacing.md, b.spacing.md, b.spacing.md, b.spacing.sm),
-                  child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Icon(Icons.touch_app_outlined, size: 20, color: scheme.primary),
-                      SizedBox(width: b.spacing.sm),
-                      Expanded(
-                        child: Text(
-                          _corners.length < minDrawCorners
-                              ? 'Tap the map to place at least $minDrawCorners corners (${_corners.length} of $minDrawCorners). Drag a corner to move it.'
-                              : '${_corners.length} corners. Tap to add more, drag to move.',
-                          key: const Key('draw-hint'),
-                          style: text.bodyMedium,
-                        ),
-                      ),
-                    ]),
-                    SizedBox(height: b.spacing.sm),
-                    Row(children: [
-                      TextButton(onPressed: _stopDrawing, child: const Text('Cancel')),
-                      TextButton.icon(
-                        onPressed: _history.isEmpty ? null : () => setState(() => _corners = _history.removeLast()),
-                        icon: const Icon(Icons.undo, size: 18),
-                        label: const Text('Undo'),
-                      ),
-                      const Spacer(),
-                      Flexible(
-                        flex: 4,
-                        child: FilledButton(
-                          onPressed: _corners.length >= minDrawCorners ? _search : null,
-                          child: const Text('Search this area', maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                    ]),
-                  ]),
+      if (!_drawing)
+        Positioned(
+          top: b.spacing.sm,
+          left: b.spacing.sm,
+          right: b.spacing.sm,
+          child: Wrap(spacing: b.spacing.sm, runSpacing: b.spacing.sm, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            FilledButton.tonalIcon(
+              onPressed: () => setState(() {
+                _drawing = true;
+                _selected = null;
+              }),
+              icon: const Icon(Icons.draw_outlined),
+              label: Text(widget.filters.polygon.isEmpty ? 'Draw area' : 'Redraw area'),
+            ),
+            if (widget.filters.polygon.isNotEmpty) ...[
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(backgroundColor: scheme.surface),
+                onPressed: () => widget.onChange(widget.filters.copyWith(polygon: const [])),
+                child: const Text('Clear area'),
+              ),
+              // The homes in a drawn area can be saved like any search, for alerts.
+              AlertButton(
+                filters: widget.filters,
+                builder: (save) => FilledButton.icon(
+                  key: const Key('map-save-search'),
+                  onPressed: save,
+                  icon: const Icon(Icons.notifications_active_outlined, size: 18),
+                  label: const Text('Save search'),
                 ),
               ),
-      ),
+            ],
+          ]),
+        ),
       if (_selected != null)
         Positioned(left: b.spacing.sm, right: b.spacing.sm, bottom: b.spacing.xl, child: ListingCard(listing: _selected!, layout: CardLayout.compact)),
+    ]);
+    if (!_drawing) return stack;
+    // Drawing: the panel sits above the map, so it never hides the shape.
+    final hint = Text(
+      _corners.length < minDrawCorners
+          ? 'Tap the map to place at least $minDrawCorners corners (${_corners.length} of $minDrawCorners). Drag a corner to move it.'
+          : '${_corners.length} corners. Tap to add more, drag to move.',
+      key: const Key('draw-hint'),
+      style: text.bodyMedium,
+    );
+    final cancel = TextButton(onPressed: _stopDrawing, child: const Text('Cancel'));
+    final undo = TextButton.icon(
+      onPressed: _history.isEmpty ? null : () => setState(() => _corners = _history.removeLast()),
+      icon: const Icon(Icons.undo, size: 18),
+      label: const Text('Undo'),
+    );
+    final search = FilledButton(
+      onPressed: _corners.length >= minDrawCorners ? _search : null,
+      child: const Text('Search this area', maxLines: 1, overflow: TextOverflow.ellipsis),
+    );
+    final icon = Icon(Icons.touch_app_outlined, size: 20, color: scheme.primary);
+    final panel = DecoratedBox(
+      key: const Key('draw-panel'),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(b.radiusMd),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: b.spacing.md, vertical: b.spacing.sm),
+        child: LayoutBuilder(
+          builder: (context, box) => box.maxWidth >= 640
+              // Wide: one row, the hint on the left and the buttons on the right.
+              ? Row(children: [
+                  icon,
+                  SizedBox(width: b.spacing.sm),
+                  Expanded(child: hint),
+                  SizedBox(width: b.spacing.md),
+                  cancel,
+                  undo,
+                  SizedBox(width: b.spacing.sm),
+                  search,
+                ])
+              // Narrow: the hint, then the buttons under it.
+              : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Padding(
+                    padding: EdgeInsets.only(top: b.spacing.xs),
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [icon, SizedBox(width: b.spacing.sm), Expanded(child: hint)]),
+                  ),
+                  SizedBox(height: b.spacing.xs),
+                  Row(children: [cancel, undo, const Spacer(), Flexible(flex: 4, child: search)]),
+                ]),
+        ),
+      ),
+    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(padding: EdgeInsets.only(bottom: b.spacing.sm), child: panel),
+      Expanded(child: stack),
     ]);
   }
 }
