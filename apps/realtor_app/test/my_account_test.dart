@@ -168,6 +168,20 @@ void main() {
     expect(initialsOf('amina@example.com'), 'A');
   });
 
+  testWidgets('a saved search shows as Saved and is not saved twice', (tester) async {
+    await open(tester, '/rent?areas=kilimani');
+    tester.view.physicalSize = const Size(1366, 900);
+    await tester.pumpAndSettle();
+    final before = (await account.searches('demo-customer').first).length;
+    await tester.tap(find.byKey(const Key('save-search')));
+    await tester.pumpAndSettle();
+    expect((await account.searches('demo-customer').first).length, before + 1);
+    expect(find.byKey(const Key('save-search')), findsNothing, reason: 'no second save');
+    expect(find.byKey(const Key('search-saved')), findsWidgets);
+    expect(await account.saveSearch('demo-customer', const ListingFilters(purpose: Purpose.rent, areas: ['kilimani'])), isFalse);
+    expect((await account.searches('demo-customer').first).length, before + 1);
+  });
+
   testWidgets('Saved: Favourites first by default, Searches second; a plain bar with "Saved"', (tester) async {
     await account.saveSearch('demo-customer', const ListingFilters(purpose: Purpose.rent, areas: ['kilimani']));
     await open(tester, '/saved');

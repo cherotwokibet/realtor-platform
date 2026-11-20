@@ -283,8 +283,12 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 label: Text('Get alerts for ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}'),
                 onPressed: () async {
                   final messenger = ScaffoldMessenger.of(context);
-                  await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, pendingAlert);
+                  final fresh = await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, pendingAlert);
                   ref.read(pendingAlertProvider.notifier).set(null);
+                  if (!fresh) {
+                    messenger.showSnackBar(const SnackBar(content: Text('You have already saved this search. Its new matches show here.')));
+                    return;
+                  }
                   messenger.showSnackBar(
                       SnackBar(content: Text('Saved: ${describeSearch(filtersFromAlert(alertFilters(pendingAlert)))}. New matches will show here.')));
                   await offerPush(ref, customer.uid);
@@ -684,11 +688,36 @@ class AlertButton extends ConsumerWidget {
         context.go('/account');
         return;
       }
-      await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, filters);
+      if (!await ref.read(alertsRepositoryProvider).saveSearch(customer.uid, filters)) {
+        messenger.showSnackBar(const SnackBar(content: Text('You have already saved this search. Its new matches show in Account.')));
+        return;
+      }
       messenger.showSnackBar(SnackBar(content: Text('Saved: ${describeSearch(filters)}. New matches will show in Account.')));
       await offerPush(ref, customer.uid);
     }
 
+    // Already saved: say so, and saving again does nothing.
+    final saved = customer != null && (ref.watch(savedSearchesProvider(customer.uid)).value ?? const []).any((s) => searchKey(s.filters) == searchKey(filters));
+
+    if (saved && builder != null) {
+      // On the map: a solid chip, so it reads over the tiles.
+      final scheme = Theme.of(context).colorScheme;
+      return FilledButton.tonalIcon(
+        key: const Key('search-saved'),
+        style: FilledButton.styleFrom(disabledBackgroundColor: scheme.surface, disabledForegroundColor: scheme.primary),
+        onPressed: null,
+        icon: const Icon(Icons.check_circle, size: 18),
+        label: const Text('Search saved'),
+      );
+    }
+    if (saved) {
+      return TextButton.icon(
+        key: const Key('search-saved'),
+        onPressed: null,
+        icon: const Icon(Icons.check_circle, size: 18),
+        label: Text(compact ? 'Saved' : 'Search saved'),
+      );
+    }
     if (builder != null) return builder!(save);
     if (compact) {
       return TextButton(

@@ -12,15 +12,21 @@ void main() {
     await alerts.saveSearch('alice', const ListingFilters(purpose: Purpose.rent, areas: ['kilimani'], maxPriceKES: 60000, q: 'ignored'));
     final doc = (await db.collection('savedSearches').get()).docs.single.data();
     expect(doc['userId'], 'alice');
-    expect(doc['filters'], {'purpose': 'rent', 'areas': ['kilimani'], 'maxPriceKES': 60000});
+    expect(doc['filters'], {
+      'purpose': 'rent',
+      'areas': ['kilimani'],
+      'maxPriceKES': 60000
+    });
     expect(doc['channels'], ['inbox']);
     expect(doc['lastNotifiedAt'], isNull);
     final rows = await alerts.searches('alice').first;
     expect(rows.single.filters.areas, ['kilimani']);
 
     final a = db.collection('users').doc('alice').collection('alerts');
-    await a.doc('old').set({'slug': 's1', 'title': 'Old', 'priceKES': 1, 'purpose': 'rent', 'area': 'x', 'createdAt': Timestamp.fromDate(DateTime(2026, 10, 1)), 'readAt': null});
-    await a.doc('new').set({'slug': 's2', 'title': 'New', 'priceKES': 2, 'purpose': 'sale', 'area': 'y', 'createdAt': Timestamp.fromDate(DateTime(2026, 10, 29)), 'readAt': null});
+    await a.doc('old').set(
+        {'slug': 's1', 'title': 'Old', 'priceKES': 1, 'purpose': 'rent', 'area': 'x', 'createdAt': Timestamp.fromDate(DateTime(2026, 10, 1)), 'readAt': null});
+    await a.doc('new').set(
+        {'slug': 's2', 'title': 'New', 'priceKES': 2, 'purpose': 'sale', 'area': 'y', 'createdAt': Timestamp.fromDate(DateTime(2026, 10, 29)), 'readAt': null});
     expect((await alerts.alerts('alice').first).map((x) => x.title), ['New', 'Old']);
     await alerts.markRead('alice', 'new');
     expect((await alerts.alerts('alice').first).first.read, isTrue);
@@ -28,6 +34,36 @@ void main() {
     expect((await alerts.alerts('alice').first).map((x) => x.id), ['new']);
     await alerts.deleteSearch(rows.single.id);
     expect(await alerts.searches('alice').first, isEmpty);
+  });
+
+  test('the same search is saved once: again, in another order, or on a double tap', () async {
+    final db = FakeFirebaseFirestore();
+    final alerts = FirestoreAlerts(db);
+    const f = ListingFilters(purpose: Purpose.rent, areas: ['kilimani', 'westlands'], maxPriceKES: 60000);
+    expect(await alerts.saveSearch('alice', f), isTrue);
+    expect(await alerts.saveSearch('alice', f), isFalse);
+    expect(await alerts.saveSearch('alice', const ListingFilters(purpose: Purpose.rent, areas: ['westlands', 'kilimani'], maxPriceKES: 60000)), isFalse);
+    expect((await db.collection('savedSearches').get()).docs.single.id, savedSearchId('alice', f));
+    // Different searches, or someone else's same search, are their own.
+    expect(await alerts.saveSearch('alice', f.copyWith(maxPriceKES: 70000)), isTrue);
+    expect(await alerts.saveSearch('bob', f), isTrue);
+    expect((await db.collection('savedSearches').get()).docs, hasLength(3));
+    // One saved before ids came from the search still counts.
+    await db.collection('savedSearches').add({
+      'userId': 'carol',
+      'filters': alertFilters(f),
+      'channels': ['inbox']
+    });
+    expect(await alerts.saveSearch('carol', f), isFalse);
+  });
+
+  test('searchKey: same filters alike, different ones apart', () {
+    const a = ListingFilters(purpose: Purpose.rent, types: ['studio', 'apartment'], areas: ['kilimani']);
+    expect(searchKey(a), searchKey(const ListingFilters(purpose: Purpose.rent, types: ['apartment', 'studio'], areas: ['kilimani'], q: 'words do not count')));
+    expect(searchKey(a), isNot(searchKey(a.copyWith(minBeds: 2))));
+    expect(searchKey(a), isNot(searchKey(a.copyWith(purpose: Purpose.sale))));
+    expect(savedSearchId('alice', a), savedSearchId('alice', a));
+    expect(savedSearchId('alice', a), isNot(savedSearchId('alice', a.copyWith(minBeds: 2))));
   });
 
   test('phones get the link through the app site, with the app ids; the web returns to its own page', () {

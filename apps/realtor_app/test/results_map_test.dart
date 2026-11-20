@@ -155,5 +155,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(spread(), moreOrLessEquals(wide, epsilon: 2));
     expect(find.byTooltip('Zoom in'), findsOneWidget);
+
+    // Drawing: the bar goes above the map and the page grows; the map keeps its size.
+    final mapHeight = tester.getRect(find.byType(FlutterMap)).height, fitHeight = tester.getRect(find.byKey(const Key('results-map-fit'))).height;
+    await tester.tap(find.text('Draw area'));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byType(FlutterMap)).height, mapHeight);
+    expect(tester.getRect(find.byKey(const Key('results-map-fit'))).height, fitHeight + drawBarExtent);
+    expect(tester.getRect(find.byKey(const Key('draw-panel'))).bottom, lessThanOrEqualTo(tester.getRect(find.byType(FlutterMap)).top));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byKey(const Key('results-map-fit'))).height, fitHeight);
   });
 }
